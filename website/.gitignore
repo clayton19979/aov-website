@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# brainstorm / session files
+.superpowers/
+
+# dev server logs
+dev.log
+dev_test.log
+devserver_err.log
+devserver_out.log
+test-output.txt
