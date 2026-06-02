@@ -29,6 +29,7 @@ export function LoginButton() {
   const [state, setState] = useState<AuthState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [tribeName, setTribeName] = useState('')
+  const [characterName, setCharacterName] = useState('')
 
   async function handleLogin() {
     try {
@@ -64,6 +65,7 @@ export function LoginButton() {
       }
       if (result.status === 'wrong-tribe') {
         setTribeName(result.tribeName)
+        setCharacterName(result.characterName)
         setState('wrong-tribe')
         return
       }
@@ -73,8 +75,9 @@ export function LoginButton() {
         return
       }
 
-      // Capture tribe name before signing
+      // Capture character info before signing
       setTribeName(result.tribeName)
+      setCharacterName(result.characterName)
 
       // Step 3: Sign a message to prove wallet ownership
       setState('signing')
@@ -114,12 +117,17 @@ export function LoginButton() {
         <span className="font-mono text-xs tracking-widest uppercase text-void-teal">
           ◈ IDENTITY CONFIRMED
         </span>
+        {characterName && (
+          <span className="font-mono text-lg tracking-widest uppercase text-white/80">
+            {characterName}
+          </span>
+        )}
         {tribeName && (
-          <span className="font-mono text-base tracking-widest uppercase text-white/70">
+          <span className="font-mono text-xs tracking-widest uppercase text-void-teal/60">
             {tribeName}
           </span>
         )}
-        <span className="font-mono text-xs text-white/30">Entering the order...</span>
+        <span className="font-mono text-xs text-white/30 mt-1">Entering the order...</span>
       </div>
     )
   }
@@ -130,8 +138,13 @@ export function LoginButton() {
         <span className="font-mono text-xs tracking-widest uppercase text-white/40">
           ACCESS DENIED
         </span>
+        {characterName && (
+          <span className="font-mono text-sm tracking-widest uppercase text-white/40">
+            {characterName}
+          </span>
+        )}
         {tribeName && (
-          <span className="font-mono text-xs tracking-widest uppercase text-white/25">
+          <span className="font-mono text-xs tracking-widest uppercase text-white/20">
             {tribeName}
           </span>
         )}
