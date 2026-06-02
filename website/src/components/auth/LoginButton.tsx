@@ -28,6 +28,7 @@ export function LoginButton() {
   const router = useRouter()
   const [state, setState] = useState<AuthState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [tribeName, setTribeName] = useState('')
 
   async function handleLogin() {
     try {
@@ -62,6 +63,7 @@ export function LoginButton() {
         return
       }
       if (result.status === 'wrong-tribe') {
+        setTribeName(result.tribeName)
         setState('wrong-tribe')
         return
       }
@@ -70,6 +72,9 @@ export function LoginButton() {
         setErrorMessage(result.message)
         return
       }
+
+      // Capture tribe name before signing
+      setTribeName(result.tribeName)
 
       // Step 3: Sign a message to prove wallet ownership
       setState('signing')
@@ -109,6 +114,11 @@ export function LoginButton() {
         <span className="font-mono text-xs tracking-widest uppercase text-void-teal">
           ◈ IDENTITY CONFIRMED
         </span>
+        {tribeName && (
+          <span className="font-mono text-base tracking-widest uppercase text-white/70">
+            {tribeName}
+          </span>
+        )}
         <span className="font-mono text-xs text-white/30">Entering the order...</span>
       </div>
     )
@@ -120,8 +130,13 @@ export function LoginButton() {
         <span className="font-mono text-xs tracking-widest uppercase text-white/40">
           ACCESS DENIED
         </span>
+        {tribeName && (
+          <span className="font-mono text-xs tracking-widest uppercase text-white/25">
+            {tribeName}
+          </span>
+        )}
         <p className="font-mono text-xs text-white/25 max-w-xs leading-relaxed">
-          This wallet&apos;s character does not belong to the Architects of the Void.
+          This character does not belong to the Architects of the Void.
           The Void does not receive you here.
         </p>
         <button

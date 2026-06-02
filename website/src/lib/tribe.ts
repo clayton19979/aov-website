@@ -3,9 +3,17 @@ import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from '@mysten/sui/jsonRpc'
 const REQUIRED_TRIBE_ID = Number(process.env.NEXT_PUBLIC_REQUIRED_TRIBE_ID ?? '1000167')
 const PACKAGE_ID = process.env.NEXT_PUBLIC_EVE_PACKAGE_ID ?? ''
 
+const TRIBE_NAMES: Record<number, string> = {
+  1000167: 'Architects of the Void',
+}
+
+export function getTribeName(tribeId: number): string {
+  return TRIBE_NAMES[tribeId] ?? `Tribe ${tribeId}`
+}
+
 export type TribeCheckResult =
-  | { status: 'verified'; tribeId: number; characterId: string }
-  | { status: 'wrong-tribe'; tribeId: number }
+  | { status: 'verified'; tribeId: number; characterId: string; tribeName: string }
+  | { status: 'wrong-tribe'; tribeId: number; tribeName: string }
   | { status: 'no-character' }
   | { status: 'error'; message: string }
 
@@ -36,9 +44,9 @@ export async function checkTribeMembership(walletAddress: string): Promise<Tribe
       const characterId = String(fields.character_id ?? '')
 
       if (tribeId === REQUIRED_TRIBE_ID) {
-        return { status: 'verified', tribeId, characterId }
+        return { status: 'verified', tribeId, characterId, tribeName: getTribeName(tribeId) }
       }
-      return { status: 'wrong-tribe', tribeId }
+      return { status: 'wrong-tribe', tribeId, tribeName: getTribeName(tribeId) }
     }
 
     // With known package ID: query PlayerProfile specifically
@@ -64,9 +72,9 @@ export async function checkTribeMembership(walletAddress: string): Promise<Tribe
     const characterId = String(fields.character_id ?? '')
 
     if (tribeId === REQUIRED_TRIBE_ID) {
-      return { status: 'verified', tribeId, characterId }
+      return { status: 'verified', tribeId, characterId, tribeName: getTribeName(tribeId) }
     }
-    return { status: 'wrong-tribe', tribeId }
+    return { status: 'wrong-tribe', tribeId, tribeName: getTribeName(tribeId) }
   } catch (err) {
     return { status: 'error', message: String(err) }
   }

@@ -54,9 +54,9 @@ export default function LandingPage() {
         {/* Member access */}
         <a
           href="/login"
-          className="font-mono text-xs tracking-widest uppercase text-white/20 hover:text-void-teal/60 transition-colors duration-200"
+          className="inline-flex items-center gap-2 border border-void-teal/20 hover:border-void-teal/50 px-6 py-2 font-mono text-xs tracking-widest uppercase text-void-teal/50 hover:text-void-teal transition-all duration-300"
         >
-          Member Access →
+          ◈ Member Access
         </a>
       </div>
 
