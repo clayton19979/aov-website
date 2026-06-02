@@ -13,8 +13,11 @@ export function useGlitchText(text: string): GlitchTextResult {
   const [displayed, setDisplayed] = useState(text)
   const [isGlitching, setIsGlitching] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
+    mountedRef.current = true
+
     function corrupt(original: string): string {
       return original
         .split('')
@@ -28,12 +31,15 @@ export function useGlitchText(text: string): GlitchTextResult {
     }
 
     function scheduleGlitch() {
+      if (!mountedRef.current) return
       const delay = 4000 + Math.random() * 4000
       timerRef.current = setTimeout(() => {
+        if (!mountedRef.current) return
         setIsGlitching(true)
         setDisplayed(corrupt(text))
 
         timerRef.current = setTimeout(() => {
+          if (!mountedRef.current) return
           setDisplayed(text)
           setIsGlitching(false)
           scheduleGlitch()
@@ -44,6 +50,7 @@ export function useGlitchText(text: string): GlitchTextResult {
     scheduleGlitch()
 
     return () => {
+      mountedRef.current = false
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [text])

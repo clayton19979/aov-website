@@ -102,3 +102,13 @@ textarea {
 @keyframes noise-out {
   to { opacity: 0; }
 }
+
+@keyframes star-twinkle {
+  from { opacity: 0.1; }
+  to   { opacity: 0.8; }
+}
+
+@keyframes eclipse-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50%       { opacity: 0.8; transform: scale(1.02); }
+}

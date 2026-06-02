@@ -57,12 +57,6 @@ export function VoidEclipse() {
         className="absolute inset-[-4px] rounded-full border border-void-teal/15"
         style={{ animation: 'eclipse-pulse 4s ease-in-out infinite' }}
       />
-      <style>{`
-        @keyframes eclipse-pulse {
-          0%, 100% { opacity: 0.3; transform: scale(1); }
-          50%       { opacity: 0.8; transform: scale(1.02); }
-        }
-      `}</style>
     </motion.div>
   )
 }

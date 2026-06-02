@@ -41,18 +41,10 @@ export function StarField() {
   }, [])
 
   return (
-    <>
-      <style>{`
-        @keyframes star-twinkle {
-          from { opacity: 0.1; }
-          to   { opacity: 0.8; }
-        }
-      `}</style>
-      <div
-        ref={containerRef}
-        className="absolute inset-0 overflow-hidden pointer-events-none"
-        aria-hidden="true"
-      />
-    </>
+    <div
+      ref={containerRef}
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      aria-hidden="true"
+    />
   )
 }

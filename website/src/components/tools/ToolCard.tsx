@@ -45,7 +45,7 @@ export function ToolCard({ tool }: Props) {
     </div>
   )
 
-  if (!isLive) return <div>{inner}</div>
+  if (!isLive) return inner
 
   return (
     <Link href={`/tools/${tool.slug}`} className="block focus:outline-none focus:ring-1 focus:ring-void-teal/40">

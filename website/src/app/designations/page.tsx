@@ -15,6 +15,7 @@ function DesignationNodeCard({ node }: { node: DesignationNode }) {
       onClick={() => setExpanded(e => !e)}
       className="w-full text-left border border-void-teal/10 hover:border-void-teal/30 bg-void-teal/5 p-4 transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-void-teal/30"
       aria-expanded={expanded}
+      aria-controls={`node-detail-${node.name.replace(/\s+/g, '-').toLowerCase()}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -30,7 +31,10 @@ function DesignationNodeCard({ node }: { node: DesignationNode }) {
         </span>
       </div>
       {expanded && (
-        <p className="mt-4 font-mono text-xs text-white/40 leading-relaxed tracking-wide border-t border-void-teal/10 pt-4">
+        <p
+          id={`node-detail-${node.name.replace(/\s+/g, '-').toLowerCase()}`}
+          className="mt-4 font-mono text-xs text-white/40 leading-relaxed tracking-wide border-t border-void-teal/10 pt-4"
+        >
           {node.detail}
         </p>
       )}
