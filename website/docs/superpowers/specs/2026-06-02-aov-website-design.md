@@ -86,7 +86,17 @@ All routes under `/hub`, `/tools`, `/doctrine`, `/designations`, `/operations` a
 - Bottom bar: thin border-top, canonical phrase cycling every 6–8s (`"The Void wastes nothing."`, `"Only the useful endure."`, `"Entropy must be corrected."`)
 - No navigation. No links to internal routes.
 
-**Atmosphere goal:** A visitor lands and feels they've intercepted something they weren't supposed to find. The order is not selling itself. It simply exists.
+**Glitch effects (ominous, not decorative):**
+- **Title glitch:** `ARCHITECTS OF THE VOID` periodically corrupts — random characters swap to symbols or noise for ~80ms, then snap back. Fires every 4–8s on a random timer. Implemented via a `useGlitchText` hook that replaces characters mid-string briefly.
+- **Chromatic aberration:** CSS `text-shadow` on the title creates a subtle RGB split (red offset left, blue offset right) that intensifies during glitch frames.
+- **Eclipse flicker:** The void eclipse periodically dims to near-black and recovers — a 120ms blackout, as if the signal was briefly lost. Framer Motion keyframe animation on a random interval.
+- **Scanline overlay:** Full-viewport pseudo-element with repeating horizontal lines at 2px intervals, ~4% opacity — always present, gives a corrupted-screen feel without overwhelming.
+- **Static noise pulse:** On glitch fire, a grain/noise texture flashes over the whole page at ~15% opacity for one frame (~60ms). CSS animation or a canvas overlay.
+- **Cursor:** Custom CSS cursor — crosshair or a small teal reticle.
+
+All glitch effects are CSS-first where possible. JavaScript only for the randomized timing and character-swap logic. Effects are subtle at rest, more aggressive during glitch windows — the page should feel like it's barely holding together.
+
+**Atmosphere goal:** A visitor lands and feels they've intercepted something they weren't supposed to find. The page is unstable. The order is not selling itself. It simply exists — and it noticed you.
 
 ---
 
