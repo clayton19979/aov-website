@@ -39,8 +39,29 @@ body::after {
 }
 
 /* ── Custom cursor ──────────────────────────────────────────── */
-* {
+html,
+body {
   cursor: crosshair;
+}
+
+a,
+button,
+[role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+label[for],
+select {
+  cursor: pointer;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="number"],
+textarea {
+  cursor: text;
 }
 
 /* ── Chromatic aberration on glitch title ───────────────────── */
