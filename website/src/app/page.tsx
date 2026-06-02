@@ -1,6 +1,5 @@
 'use client'
 
-import { useRef } from 'react'
 import { StarField } from '@/components/landing/StarField'
 import { VoidEclipse } from '@/components/landing/VoidEclipse'
 import { DiscordCTA } from '@/components/landing/DiscordCTA'
@@ -9,11 +8,9 @@ import { useGlitchText } from '@/hooks/useGlitchText'
 
 export default function LandingPage() {
   const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
-  const pageRef = useRef<HTMLDivElement>(null)
 
   return (
     <main
-      ref={pageRef}
       className={`relative flex flex-col items-center justify-center min-h-screen bg-void-black overflow-hidden ${isGlitching ? 'noise-flash' : ''}`}
     >
       {/* Background star field */}
