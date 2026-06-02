@@ -50,6 +50,14 @@ export default function LandingPage() {
 
         {/* Discord CTA */}
         <DiscordCTA />
+
+        {/* Member access */}
+        <a
+          href="/login"
+          className="font-mono text-xs tracking-widest uppercase text-white/20 hover:text-void-teal/60 transition-colors duration-200"
+        >
+          Member Access →
+        </a>
       </div>
 
       {/* Bottom bar */}

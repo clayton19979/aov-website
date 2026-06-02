@@ -1,20 +1,33 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { jwtVerify } from 'jose'
 
 const INTERNAL_PREFIXES = ['/hub', '/tools', '/doctrine', '/designations', '/operations']
+const AUTH_SECRET = new TextEncoder().encode(
+  process.env.AUTH_SECRET ?? 'aov-dev-secret-change-in-production'
+)
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isInternal = INTERNAL_PREFIXES.some(prefix => pathname.startsWith(prefix))
 
-  if (isInternal) {
-    // TODO: replace with wallet auth check
-    // const token = request.cookies.get('aov-auth')
-    // if (!token) return NextResponse.redirect(new URL('/', request.url))
-    return NextResponse.next()
+  if (!isInternal) return NextResponse.next()
+
+  const sessionToken = request.cookies.get('aov-session')?.value
+
+  if (!sessionToken) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  return NextResponse.next()
+  try {
+    await jwtVerify(sessionToken, AUTH_SECRET)
+    return NextResponse.next()
+  } catch {
+    // Token invalid or expired
+    const response = NextResponse.redirect(new URL('/login', request.url))
+    response.cookies.delete('aov-session')
+    return response
+  }
 }
 
 export const config = {
