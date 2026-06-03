@@ -36,6 +36,7 @@ import {
   parseSnapshotPayload,
   serializeSnapshot,
   shortAddress,
+  summarizeInventory,
 } from "./data/baseOps";
 import { loadStoredSnapshot, normalizeOwnerAddress, storeSnapshot } from "./data/snapshotStore";
 
@@ -94,6 +95,7 @@ function App() {
   const kpis = snapshot ? getKpis(snapshot) : null;
   const warnings = snapshot ? buildRealWarnings(snapshot) : [];
   const objects = snapshot?.objects ?? [];
+  const inventorySummary = snapshot ? summarizeInventory(snapshot) : [];
   const networkNodes = objects.filter((object) => object.kind === "Network Node");
   const storageUnits = objects.filter((object) => object.kind === "Storage Unit");
   const gates = objects.filter((object) => object.kind === "Smart Gate");
@@ -315,6 +317,10 @@ function App() {
               <Panel title="Storage Inventory" icon={<Boxes size={18} aria-hidden="true" />}>
                 {storageUnits.length ? <StorageView storageUnits={storageUnits} /> : <EmptyState text="No owned Storage Units returned for this wallet." />}
               </Panel>
+
+              <Panel title="Inventory Totals" icon={<Database size={18} aria-hidden="true" />}>
+                {inventorySummary.length ? <InventorySummaryTable items={inventorySummary} /> : <EmptyState text="No storage inventory rows returned for this wallet." />}
+              </Panel>
             </div>
 
             <div className="dashboard-column">
@@ -478,6 +484,44 @@ function InventoryBlock({ inventory }: { inventory: InventorySnapshot }) {
       ) : (
         <p className="empty-inline">No item rows in this inventory.</p>
       )}
+    </div>
+  );
+}
+
+function InventorySummaryTable({
+  items,
+}: {
+  items: Array<ReturnType<typeof summarizeInventory>[number]>;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Total qty</th>
+            <th>Total volume</th>
+            <th>Storage units</th>
+            <th>Inventories</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={`${item.typeId}-${item.itemId || item.name}`}>
+              <td>
+                <div className="summary-name">
+                  <strong>{item.name}</strong>
+                  <span>{item.typeId}</span>
+                </div>
+              </td>
+              <td>{formatNumber(item.totalQuantity)}</td>
+              <td>{formatNumber(item.totalVolume)}</td>
+              <td>{formatNumber(item.storageUnits)}</td>
+              <td>{formatNumber(item.inventories)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

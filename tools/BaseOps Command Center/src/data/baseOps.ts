@@ -95,6 +95,17 @@ export type InventorySnapshot = {
   items: InventoryItem[];
 };
 
+export type InventorySummary = {
+  typeId: string;
+  itemId: string;
+  name: string;
+  tenant: string;
+  totalQuantity: number;
+  totalVolume: number;
+  storageUnits: number;
+  inventories: number;
+};
+
 export type CharacterSnapshot = {
   id: string;
   itemId: string;
@@ -483,6 +494,51 @@ export function buildRealWarnings(snapshot: BaseSnapshot): RealWarning[] {
   });
 
   return warnings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+}
+
+export function summarizeInventory(snapshot: BaseSnapshot): InventorySummary[] {
+  const totals = new Map<string, InventorySummary>();
+
+  snapshot.objects
+    .filter((object) => object.kind === "Storage Unit")
+    .forEach((object) => {
+      const touchedItemKeys = new Set<string>();
+
+      object.inventories.forEach((inventory) => {
+        inventory.items.forEach((item) => {
+          const key = `${item.typeId}::${item.itemId || item.key}`;
+          const existing = totals.get(key);
+
+          if (existing) {
+            existing.totalQuantity += item.quantity;
+            existing.totalVolume += item.volume;
+            existing.inventories += 1;
+            if (!touchedItemKeys.has(key)) {
+              existing.storageUnits += 1;
+            }
+          } else {
+            totals.set(key, {
+              typeId: item.typeId,
+              itemId: item.itemId,
+              name: item.name || `Unknown type ${item.typeId}`,
+              tenant: item.tenant,
+              totalQuantity: item.quantity,
+              totalVolume: item.volume,
+              storageUnits: 1,
+              inventories: 1,
+            });
+          }
+
+          touchedItemKeys.add(key);
+        });
+      });
+    });
+
+  return Array.from(totals.values()).sort((a, b) => {
+    if (b.totalVolume !== a.totalVolume) return b.totalVolume - a.totalVolume;
+    if (b.totalQuantity !== a.totalQuantity) return b.totalQuantity - a.totalQuantity;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export function getFuelEta(object: ChainObject): string {

@@ -697,6 +697,22 @@ td {
   font-weight: 400;
 }
 
+.summary-name {
+  display: grid;
+  gap: 3px;
+}
+
+.summary-name strong {
+  color: var(--text);
+  font-weight: 400;
+}
+
+.summary-name span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+}
+
 .empty-inline {
   margin-top: 9px;
   color: var(--muted);

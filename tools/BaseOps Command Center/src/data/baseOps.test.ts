@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { BaseSnapshot, ChainObject, buildRealWarnings, getKpis, getStatus, parseSnapshotPayload, serializeSnapshot } from "./baseOps";
+import {
+  BaseSnapshot,
+  ChainObject,
+  buildRealWarnings,
+  getKpis,
+  getStatus,
+  parseSnapshotPayload,
+  serializeSnapshot,
+  summarizeInventory,
+} from "./baseOps";
 import { loadStoredSnapshot, normalizeOwnerAddress, snapshotCacheKey, storeSnapshot } from "./snapshotStore";
 
 const node: ChainObject = {
@@ -62,13 +71,37 @@ const storage: ChainObject = {
   ],
 };
 
+const storageTwo: ChainObject = {
+  id: "0xstorage2",
+  typeRepr: "0xpkg::storage_unit::StorageUnit",
+  kind: "Storage Unit",
+  json: {
+    id: "0xstorage2",
+    type_id: "88082",
+    status: { status: { "@variant": "ONLINE" } },
+    metadata: { name: "Real Storage 2" },
+  },
+  inventories: [
+    {
+      id: "0xinventory2",
+      key: "0xkey2",
+      maxCapacity: 120,
+      usedCapacity: 40,
+      items: [
+        { key: "77800", tenant: "stillness", typeId: "77800", itemId: "0", name: "Common Ore", volume: 25, quantity: 4 },
+        { key: "88001", tenant: "stillness", typeId: "88001", itemId: "7", name: "Fuel Block", volume: 15, quantity: 2 },
+      ],
+    },
+  ],
+};
+
 const snapshot: BaseSnapshot = {
   ownerAddress: "0xabc123",
   generatedAt: new Date(0).toISOString(),
   network: "testnet",
   tenant: "stillness",
   character: null,
-  objects: [node, assembly, storage],
+  objects: [node, assembly, storage, storageTwo],
   errors: [],
 };
 
@@ -80,12 +113,12 @@ describe("real chain snapshot helpers", () => {
 
   it("builds KPIs only from provided chain objects", () => {
     expect(getKpis(snapshot)).toMatchObject({
-      smartObjects: 3,
-      onlineObjects: 1,
+      smartObjects: 4,
+      onlineObjects: 2,
       offlineObjects: 2,
       totalFuel: 0,
-      totalUsedCapacity: 95,
-      totalMaxCapacity: 100,
+      totalUsedCapacity: 135,
+      totalMaxCapacity: 220,
     });
   });
 
@@ -114,8 +147,35 @@ describe("real chain snapshot helpers", () => {
     const parsed = parseSnapshotPayload(snapshot);
 
     expect(parsed.character).toBeNull();
-    expect(parsed.objects).toHaveLength(3);
+    expect(parsed.objects).toHaveLength(4);
     expect(parsed.objects[2].inventories[0].items[0].name).toBe("Common Ore");
+  });
+
+  it("summarizes inventory totals across storage units", () => {
+    const summary = summarizeInventory(snapshot);
+
+    expect(summary).toEqual([
+      {
+        typeId: "77800",
+        itemId: "0",
+        name: "Common Ore",
+        tenant: "stillness",
+        totalQuantity: 5,
+        totalVolume: 125,
+        storageUnits: 2,
+        inventories: 2,
+      },
+      {
+        typeId: "88001",
+        itemId: "7",
+        name: "Fuel Block",
+        tenant: "stillness",
+        totalQuantity: 2,
+        totalVolume: 15,
+        storageUnits: 1,
+        inventories: 1,
+      },
+    ]);
   });
 
   it("rejects malformed snapshot payloads", () => {
