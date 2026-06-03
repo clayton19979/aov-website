@@ -7,7 +7,7 @@ const AUTH_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? 'aov-dev-secret-change-in-production'
 )
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Allow static tool assets (public/ directory) without auth
