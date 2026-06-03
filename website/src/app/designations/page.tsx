@@ -18,7 +18,7 @@ export default async function DesignationsPage() {
         <div className="mb-6">
           <BackLink href="/hub" label="Hub" />
         </div>
-        <SectionTitle glyph="⬡" title="DESIGNATIONS" subtitle="AUREX does not promote. AUREX recognizes." />
+        <SectionTitle glyph="△" title="DESIGNATIONS" subtitle="AUREX does not promote. AUREX recognizes." />
 
         <div className="flex flex-col gap-8">
           {tiers.map(tier => (

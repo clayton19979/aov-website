@@ -19,7 +19,7 @@ export default async function DoctrinePage() {
         <div className="mb-6">
           <BackLink href="/hub" label="Hub" />
         </div>
-        <SectionTitle glyph="⬡" title="DOCTRINE" subtitle="Canonical texts of the order" />
+        <SectionTitle glyph="◈" title="DOCTRINE" subtitle="Canonical texts of the order" />
 
         {/* Core Beliefs */}
         <section className="mb-14">
