@@ -1,16 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { doctrine } from '@/data/doctrine'
 
-const PHRASES = [
-  'The Void wastes nothing.',
-  'Only the useful endure.',
-  'Entropy must be corrected.',
-  'Purification is mercy.',
-  'AUREX observes.',
-  'Shape the Void before it shapes you.',
-  'Existence must be designed.',
-]
+const PHRASES = doctrine.commonPhrases
 
 export function PhraseCycler() {
   const [index, setIndex] = useState(0)
