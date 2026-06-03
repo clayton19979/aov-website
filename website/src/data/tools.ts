@@ -21,14 +21,14 @@ export const tools: Tool[] = [
     name: 'Fuel Calculator',
     description: 'Optimize jump routes and calculate fuel cost across void corridors.',
     category: 'LOGISTICS',
-    status: 'live',
+    status: 'coming-soon',
   },
   {
     slug: 'ssu-trade-hub',
     name: 'SSU Trade Hub',
     description: 'Analyze market data and identify high-value trade routes.',
     category: 'TRADE & ECONOMY',
-    status: 'live',
+    status: 'coming-soon',
   },
   {
     slug: 'void-map',
