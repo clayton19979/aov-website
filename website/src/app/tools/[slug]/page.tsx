@@ -27,10 +27,12 @@ export default async function ToolPage({ params }: Props) {
 
   const ToolComponent = toolComponents[slug]
 
+  const fullBleed = slug === 'void-map' || slug === 'baseops-command-center'
+
   return (
-    <ToolShell tool={tool}>
+    <ToolShell tool={tool} fullBleed={fullBleed}>
       {ToolComponent ? <ToolComponent /> : (
-        <div className="font-mono text-xs text-white/20 tracking-widest uppercase">
+        <div className="font-mono text-xs text-white/20 tracking-widest uppercase px-6 py-8">
           Interface not yet registered.
         </div>
       )}

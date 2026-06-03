@@ -1,0 +1,37 @@
+# Frontier GPS
+
+A local EVE Frontier map and route planner. It loads the live Stillness solar-system catalog from:
+
+`https://world-api-stillness.live.tech.evefrontier.com/v2/solarsystems`
+
+## Run
+
+From this folder:
+
+```powershell
+python -m http.server 5173 --bind 127.0.0.1
+```
+
+Open:
+
+`http://127.0.0.1:5173`
+
+Route links support the same core shape as common Frontier planners:
+
+`?system1=30001573&system2=30013956&jumpDistance=120&optimize=fuel`
+
+## Online Gates
+
+The official docs describe Gates as paired travel structures that may be open or controlled by extension logic. Frontier GPS automatically reads `data/gates.json` when a route is calculated. Users do not need to paste gate data.
+
+```json
+[
+  { "fromSystemId": 30001573, "destinationSystemId": 30013956, "status": "online", "name": "Home pipe" }
+]
+```
+
+Only online links are used; rows marked `online: false`, `active: false`, `enabled: false`, or with a non-online status are ignored. Supported aliases include `from`, `to`, `sourceSystemId`, `destinationSystemId`, `system1`, and `system2`. Gates are treated as bidirectional links.
+
+## Public Smart Gates
+
+Frontier GPS also checks live Stillness Smart Gate assemblies on Sui when gate routing is enabled. A Smart Gate is used only when both paired gates are online, linked, have no extension access logic, and have public Location Registry entries that reveal their solar systems. Extension-restricted gates and gates without public locations are reported in the gate status text but are not used for routing.

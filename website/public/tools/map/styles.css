@@ -1,0 +1,605 @@
+:root {
+  color-scheme: dark;
+  --bg: #020b0e;
+  --panel: #040f12;
+  --panel-2: #061115;
+  --line: rgba(0, 180, 216, 0.12);
+  --text: rgba(255, 255, 255, 0.85);
+  --muted: rgba(255, 255, 255, 0.30);
+  --accent: #00b4d8;
+  --accent-dim: rgba(0, 180, 216, 0.60);
+  --accent-2: rgba(0, 180, 216, 0.45);
+  --danger: rgba(255, 109, 122, 0.85);
+  --font: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+button, input, textarea { font: inherit; }
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: 100vh;
+}
+
+/* ── Map stage ─────────────────────────────────── */
+
+.map-stage {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #020b0e;
+}
+
+#stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+#stars:active { cursor: grabbing; }
+
+/* ── Top bar (status only) ─────────────────────── */
+
+.topbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.status-pill {
+  pointer-events: auto;
+  border: 1px solid var(--line);
+  background: rgba(2, 11, 14, 0.80);
+  backdrop-filter: blur(12px);
+  padding: 6px 12px;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Map controls ──────────────────────────────── */
+
+.map-tools {
+  position: absolute;
+  left: 16px;
+  bottom: 48px;
+  display: flex;
+  gap: 4px;
+}
+
+.map-tools button,
+.section-title button,
+.system-actions button,
+.range-presets button {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: rgba(2, 11, 14, 0.85);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 0.70rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.map-tools button:hover,
+.section-title button:hover,
+.system-actions button:hover,
+.range-presets button:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── Map legend ────────────────────────────────── */
+
+.map-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-legend i {
+  display: block;
+  width: 16px;
+  height: 2px;
+}
+
+.legend-jump  { background: var(--accent); }
+.legend-smart { background: rgba(0, 180, 216, 0.50); }
+.legend-game  { background: var(--danger); }
+
+/* ── System card ───────────────────────────────── */
+
+.system-card {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(320px, calc(100% - 32px));
+  border: 1px solid var(--line);
+  background: rgba(2, 11, 14, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.system-card span,
+.metrics span,
+.route-list small {
+  color: var(--muted);
+  font-size: 0.70rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.system-card strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.80);
+  letter-spacing: 0.04em;
+}
+
+.system-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+}
+
+.system-actions button {
+  min-width: 0;
+  height: 32px;
+  font-size: 0.68rem;
+}
+
+/* ── Control panel ─────────────────────────────── */
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  padding: 20px;
+}
+
+.panel-head { padding-bottom: 4px; }
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--font);
+}
+
+h2 {
+  font-size: 1.0rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.75);
+}
+
+h3 {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Form ──────────────────────────────────────── */
+
+.route-form {
+  display: grid;
+  gap: 12px;
+}
+
+label {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+input, textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.35);
+  color: var(--text);
+  outline: none;
+  font-family: var(--font);
+}
+
+input {
+  height: 38px;
+  padding: 0 10px;
+  font-size: 0.80rem;
+}
+
+input:focus, textarea:focus {
+  border-color: var(--accent-dim);
+}
+
+/* ── Autocomplete ──────────────────────────────── */
+
+.suggestions {
+  display: none;
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: rgba(2, 8, 12, 0.96);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.suggestions.open { display: grid; }
+
+.suggestions button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 36px;
+  border: 0;
+  border-bottom: 1px solid rgba(0,180,216,0.06);
+  background: transparent;
+  color: var(--text);
+  padding: 7px 10px;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  text-transform: none;
+  height: auto;
+  min-width: 0;
+}
+
+.suggestions button:hover,
+.suggestions button:focus,
+.suggestions button.active {
+  background: rgba(0,180,216,0.06);
+  border-color: transparent;
+}
+
+.suggestions strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,0.85);
+}
+
+.suggestions span {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+/* ── Range presets ─────────────────────────────── */
+
+.range-presets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: -4px;
+}
+
+.range-presets button {
+  min-width: 0;
+  height: 30px;
+  font-size: 0.70rem;
+}
+
+.range-presets button.active {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── Segmented control ─────────────────────────── */
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.30);
+}
+
+.segmented label {
+  display: grid;
+  place-items: center;
+  min-height: 32px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented label:has(input:checked) {
+  background: rgba(0,180,216,0.18);
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── Toggles ───────────────────────────────────── */
+
+.toggles { display: grid; gap: 6px; }
+
+.toggles label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.20);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toggles input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+/* ── Calculate button ──────────────────────────── */
+
+.primary {
+  min-height: 40px;
+  border: 1px solid var(--accent-dim);
+  background: rgba(0,180,216,0.12);
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.primary:hover {
+  background: rgba(0,180,216,0.20);
+  border-color: var(--accent);
+}
+
+.primary.is-busy {
+  background: rgba(0,180,216,0.08);
+  color: var(--muted);
+}
+
+/* ── Gate status note ──────────────────────────── */
+
+.gate-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
+
+/* ── Metrics ───────────────────────────────────── */
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.metrics div {
+  min-height: 60px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  padding: 10px;
+}
+
+.metrics strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.80);
+}
+
+/* ── Route list ────────────────────────────────── */
+
+.route-list { display: grid; gap: 8px; }
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.route-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.section-title .copy-route {
+  padding: 0 10px;
+  background: rgba(0,180,216,0.15);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  font-size: 0.68rem;
+}
+
+#shareRoute { font-size: 0.68rem; }
+
+#routeSteps {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#routeSteps li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+#routeSteps li:hover,
+#routeSteps li.active {
+  border-color: var(--accent-dim);
+  background: rgba(0,180,216,0.06);
+}
+
+#routeSteps strong,
+#routeSteps small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+#routeSteps strong {
+  font-size: 0.80rem;
+  color: rgba(255,255,255,0.80);
+  font-weight: 600;
+}
+
+#routeSteps small { font-size: 0.68rem; }
+
+.step-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  background: rgba(0,180,216,0.06);
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.route-chip {
+  min-width: 52px;
+  padding: 4px 6px;
+  border: 1px solid rgba(0,180,216,0.15);
+  background: rgba(0,180,216,0.05);
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.route-chip.jump  { color: var(--accent); border-color: rgba(0,180,216,0.25); }
+.route-chip.smart { color: rgba(0,180,216,0.55); }
+.route-chip.game,
+.danger { color: var(--danger); }
+
+/* ── Responsive ────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .map-stage { min-height: 55vh; }
+  .control-panel {
+    min-height: auto;
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-bottom: 80px;
+  }
+  .primary {
+    position: sticky;
+    bottom: 10px;
+    z-index: 5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar { left: 10px; right: 10px; top: 10px; }
+  .control-panel { padding: 14px; }
+  .metrics,
+  .toggles,
+  .system-actions { grid-template-columns: 1fr; }
+  .map-tools { left: 10px; bottom: 56px; }
+  .map-legend { left: 10px; right: 10px; bottom: 14px; flex-wrap: wrap; gap: 6px 12px; }
+  .system-card { right: 10px; bottom: 96px; width: min(300px, calc(100% - 20px)); }
+  .section-title { align-items: flex-start; flex-direction: column; }
+  .route-actions { width: 100%; }
+  .route-actions button { flex: 1; }
+}

@@ -11,14 +11,18 @@ export function VoidEclipse() {
 
     async function scheduleFlicker() {
       if (!mounted) return
-      const delay = 6000 + Math.random() * 10000
-
+      const delay = 7000 + Math.random() * 12000
       await new Promise(resolve => setTimeout(resolve, delay))
       if (!mounted) return
 
-      await controls.start({ opacity: 0.05, transition: { duration: 0.05 } })
+      // Multi-beat flicker like a black hole consuming matter
+      await controls.start({ opacity: 0.04, scale: 0.99, transition: { duration: 0.05 } })
       if (!mounted) return
-      await controls.start({ opacity: 1, transition: { duration: 0.07 } })
+      await controls.start({ opacity: 1.1, scale: 1.01, transition: { duration: 0.04 } })
+      if (!mounted) return
+      await controls.start({ opacity: 0.08, transition: { duration: 0.06 } })
+      if (!mounted) return
+      await controls.start({ opacity: 1, scale: 1, transition: { duration: 0.12 } })
       if (!mounted) return
 
       scheduleFlicker()
@@ -34,29 +38,72 @@ export function VoidEclipse() {
       className="relative w-36 h-36 md:w-52 md:h-52"
       aria-hidden="true"
     >
-      {/* outer glow ring */}
-      <div className="absolute inset-[-16px] rounded-full border border-void-teal/10" />
-      {/* mid glow ring */}
-      <div className="absolute inset-[-8px] rounded-full border border-void-teal/20" />
-      {/* eclipse body */}
+      {/* Far gravitational lensing halos */}
+      <div className="absolute rounded-full border border-void-teal/[0.03]" style={{ inset: '-40px' }} />
+      <div className="absolute rounded-full border border-void-teal/[0.05]" style={{ inset: '-24px' }} />
+
+      {/* Accretion disk — rotating conic ring, clipped by the event horizon above */}
       <div
-        className="absolute inset-0 rounded-full bg-void-black border border-void-teal/30"
+        className="absolute rounded-full"
         style={{
-          boxShadow: '0 0 40px rgba(0,180,216,0.12), 0 0 80px rgba(0,180,216,0.06), inset 0 0 30px rgba(0,180,216,0.04)',
+          inset: '-14px',
+          background: `conic-gradient(
+            from 0deg,
+            transparent 0deg,
+            rgba(0,180,216,0.06) 40deg,
+            rgba(0,180,216,0.22) 80deg,
+            rgba(0,180,216,0.42) 105deg,
+            rgba(0,180,216,0.22) 130deg,
+            rgba(0,180,216,0.05) 170deg,
+            transparent 210deg,
+            rgba(0,180,216,0.03) 270deg,
+            rgba(0,180,216,0.07) 310deg,
+            rgba(0,180,216,0.03) 340deg,
+            transparent 360deg
+          )`,
+          filter: 'blur(3px)',
+          animation: 'disk-rotate 28s linear infinite',
         }}
       />
-      {/* inner gradient — gives depth */}
+
+      {/* Event horizon — pure void, covers disk center */}
       <div
         className="absolute inset-0 rounded-full"
         style={{
-          background: 'radial-gradient(circle at 70% 30%, rgba(0,180,216,0.06) 0%, transparent 60%)',
+          background: '#000000',
+          boxShadow: [
+            '0 0 0 1.5px rgba(0,180,216,0.70)',
+            '0 0 6px 1px rgba(0,180,216,0.35)',
+            '0 0 24px 4px rgba(0,180,216,0.12)',
+            '0 0 60px 8px rgba(0,180,216,0.05)',
+          ].join(', '),
         }}
       />
-      {/* pulse animation ring */}
+
+      {/* Doppler beaming — top of ring brighter (near side of disk) */}
       <div
-        className="absolute inset-[-4px] rounded-full border border-void-teal/15"
-        style={{ animation: 'eclipse-pulse 4s ease-in-out infinite' }}
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          inset: '-18px',
+          background: 'radial-gradient(ellipse at 50% 8%, rgba(0,180,216,0.18) 0%, transparent 55%)',
+        }}
       />
+
+      {/* Distant pulse ring */}
+      <div
+        className="absolute rounded-full border border-void-teal/10"
+        style={{ inset: '-8px', animation: 'eclipse-pulse 5s ease-in-out infinite' }}
+      />
+
+      {/* Mount sweep — scan line crosses once on load */}
+      <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
+        <motion.div
+          className="absolute left-0 right-0 h-px bg-void-teal/30"
+          initial={{ top: '-2px' }}
+          animate={{ top: '102%' }}
+          transition={{ duration: 1.6, ease: 'easeIn', delay: 0.3 }}
+        />
+      </div>
     </motion.div>
   )
 }

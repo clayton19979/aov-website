@@ -33,8 +33,8 @@ export const tools: Tool[] = [
   {
     slug: 'void-map',
     name: 'Void Map',
-    description: 'Territory control visualization and spatial intelligence.',
-    category: 'INTELLIGENCE',
+    description: 'Live star chart with jump-route planning, smart gate network, and fuel optimization across EVE Frontier space.',
+    category: 'LOGISTICS',
     status: 'live',
   },
   {

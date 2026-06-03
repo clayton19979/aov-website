@@ -1,6 +1,7 @@
 import { TopBar } from '@/components/shared/TopBar'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { BackLink } from '@/components/shared/BackLink'
+import { getSession } from '@/lib/session'
 
 const COMING_SOON = [
   { title: 'Fleet Tracker', description: 'Active fleet composition, readiness, and doctrine compliance.' },
@@ -15,10 +16,11 @@ export const metadata = {
   title: 'Operations — AoV',
 }
 
-export default function OperationsPage() {
+export default async function OperationsPage() {
+  const session = await getSession()
   return (
     <div className="min-h-screen bg-void-black flex flex-col">
-      <TopBar />
+      <TopBar characterName={session?.characterName} />
       <main className="flex-1 px-6 py-8 max-w-5xl mx-auto w-full">
         <div className="mb-6">
           <BackLink href="/hub" label="Hub" />

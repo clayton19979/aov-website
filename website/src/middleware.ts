@@ -9,6 +9,10 @@ const AUTH_SECRET = new TextEncoder().encode(
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // Allow static tool assets (public/ directory) without auth
+  if (pathname.startsWith('/tools/map/') || pathname.startsWith('/tools/baseops/')) return NextResponse.next()
+
   const isInternal = INTERNAL_PREFIXES.some(prefix => pathname.startsWith(prefix))
 
   if (!isInternal) return NextResponse.next()

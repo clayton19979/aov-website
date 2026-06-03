@@ -1,16 +1,12 @@
-'use client'
-
 import Link from 'next/link'
+import { LogoutButton } from './LogoutButton'
 
 type Props = {
-  memberStatus?: string
+  characterName?: string
 }
 
-export function TopBar({ memberStatus = 'MEMBER' }: Props) {
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    window.location.href = '/'
-  }
+export function TopBar({ characterName }: Props) {
+  const displayName = characterName ?? 'MEMBER'
 
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-void-teal/10 bg-void-black/80 backdrop-blur-sm">
@@ -22,14 +18,9 @@ export function TopBar({ memberStatus = 'MEMBER' }: Props) {
       </Link>
       <div className="flex items-center gap-4">
         <span className="font-mono text-xs tracking-widest text-white/20 uppercase">
-          {memberStatus} · ONLINE
+          {displayName} · ONLINE
         </span>
-        <button
-          onClick={handleLogout}
-          className="font-mono text-xs tracking-widest uppercase text-white/15 hover:text-white/40 transition-colors"
-        >
-          EXIT
-        </button>
+        <LogoutButton />
       </div>
     </header>
   )

@@ -1,16 +1,20 @@
 import { TopBar } from '@/components/shared/TopBar'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { BackLink } from '@/components/shared/BackLink'
+import { ScrollProgress } from '@/components/shared/ScrollProgress'
+import { getSession } from '@/lib/session'
 import { doctrine } from '@/data/doctrine'
 
 export const metadata = {
   title: 'Doctrine — AoV',
 }
 
-export default function DoctrinePage() {
+export default async function DoctrinePage() {
+  const session = await getSession()
   return (
     <div className="min-h-screen bg-void-black flex flex-col">
-      <TopBar />
+      <ScrollProgress />
+      <TopBar characterName={session?.characterName} />
       <main className="flex-1 px-6 py-8 max-w-3xl mx-auto w-full">
         <div className="mb-6">
           <BackLink href="/hub" label="Hub" />
