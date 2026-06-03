@@ -1,26 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
+import { checkTribeMembership } from '@/lib/tribe'
 
 const AUTH_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? 'aov-dev-secret-change-in-production'
 )
 
-const REQUIRED_TRIBE_ID = Number(process.env.NEXT_PUBLIC_REQUIRED_TRIBE_ID ?? '1000167')
 const SESSION_DURATION_HOURS = 24
 
 export async function POST(req: NextRequest) {
   try {
-    const { address, tribeId, characterName, characterId } = await req.json()
+    const { address } = await req.json()
 
-    if (!address) {
+    if (!address || typeof address !== 'string') {
       return NextResponse.json({ error: 'Missing wallet address' }, { status: 400 })
     }
 
-    // Tribe membership is verified client-side against the EVE Frontier blockchain.
-    // Server re-checks the tribeId to ensure the client isn't bypassing the check.
-    if (Number(tribeId) !== REQUIRED_TRIBE_ID) {
+    // Independently verify tribe membership server-side — never trust client-supplied tribeId.
+    const result = await checkTribeMembership(address)
+
+    if (result.status === 'no-character') {
+      return NextResponse.json({ error: 'No character found for this wallet' }, { status: 403 })
+    }
+    if (result.status === 'wrong-tribe') {
       return NextResponse.json({ error: 'Tribe verification failed' }, { status: 403 })
     }
+    if (result.status === 'error') {
+      console.error('Auth verify tribe check error:', result.message)
+      return NextResponse.json({ error: 'Tribe verification error' }, { status: 502 })
+    }
+
+    const { tribeId, characterName, characterId } = result
 
     const token = await new SignJWT({ address, tribeId, characterName, characterId })
       .setProtectedHeader({ alg: 'HS256' })

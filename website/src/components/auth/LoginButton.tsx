@@ -59,7 +59,7 @@ export function LoginButton() {
         return
       }
 
-      // Tribe confirmed — create server session
+      // Tribe confirmed client-side — server re-verifies independently before issuing session.
       setCharacterName(result.characterName)
       setTribeName(result.tribeName)
       setState('creating-session')
@@ -67,12 +67,7 @@ export function LoginButton() {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address,
-          tribeId: result.tribeId,
-          characterName: result.characterName,
-          characterId: result.characterId,
-        }),
+        body: JSON.stringify({ address }),
       })
 
       if (!res.ok) {
