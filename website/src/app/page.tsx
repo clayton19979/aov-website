@@ -39,7 +39,7 @@ export default function LandingPage() {
             {displayed}
           </h1>
           <p className="font-mono text-sm tracking-widest text-void-teal/60 italic">
-            "We were not chosen. We survived."
+            &ldquo;We were not chosen. We survived.&rdquo;
           </p>
         </div>
 

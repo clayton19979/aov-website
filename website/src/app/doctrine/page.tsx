@@ -87,7 +87,7 @@ export default async function DoctrinePage() {
                 </p>
                 <blockquote className="border-l-2 border-void-teal/30 pl-6">
                   <p className="font-mono text-sm text-white/50 leading-loose tracking-wide italic">
-                    "{fragment.text}"
+                    &ldquo;{fragment.text}&rdquo;
                   </p>
                 </blockquote>
               </article>
