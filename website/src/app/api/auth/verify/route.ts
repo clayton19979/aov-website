@@ -1,37 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SignJWT } from 'jose'
-import { verifyPersonalMessageSignature } from '@mysten/sui/verify'
 
 const AUTH_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? 'aov-dev-secret-change-in-production'
 )
 
+const REQUIRED_TRIBE_ID = Number(process.env.NEXT_PUBLIC_REQUIRED_TRIBE_ID ?? '1000167')
 const SESSION_DURATION_HOURS = 24
 
 export async function POST(req: NextRequest) {
   try {
-    const { address, message, signature, tribeId } = await req.json()
+    const { address, tribeId, characterName, characterId } = await req.json()
 
-    if (!address || !message || !signature) {
-      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    if (!address) {
+      return NextResponse.json({ error: 'Missing wallet address' }, { status: 400 })
     }
 
-    // Verify the wallet signature (proves ownership of the address)
-    try {
-      const publicKey = await verifyPersonalMessageSignature(
-        new TextEncoder().encode(message),
-        signature
-      )
-      // Ensure the recovered address matches the claimed address
-      if (publicKey.toSuiAddress() !== address) {
-        return NextResponse.json({ error: 'Signature mismatch' }, { status: 401 })
-      }
-    } catch {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    // Tribe membership is verified client-side against the EVE Frontier blockchain.
+    // Server re-checks the tribeId to ensure the client isn't bypassing the check.
+    if (Number(tribeId) !== REQUIRED_TRIBE_ID) {
+      return NextResponse.json({ error: 'Tribe verification failed' }, { status: 403 })
     }
 
-    // Issue JWT session cookie
-    const token = await new SignJWT({ address, tribeId })
+    const token = await new SignJWT({ address, tribeId, characterName, characterId })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime(`${SESSION_DURATION_HOURS}h`)

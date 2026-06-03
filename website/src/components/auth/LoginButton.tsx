@@ -1,61 +1,43 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  useCurrentAccount,
-  useSignPersonalMessage,
-  useConnectWallet,
+  useDAppKit,
   useWallets,
-} from '@mysten/dapp-kit'
+  useCurrentAccount,
+} from '@mysten/dapp-kit-react'
 import { checkTribeMembership } from '@/lib/tribe'
 import { useRouter } from 'next/navigation'
 
 type AuthState =
-  | 'idle'
-  | 'connecting'
-  | 'checking-tribe'
-  | 'signing'
-  | 'verified'
+  | 'idle'           // not connected
+  | 'connecting'     // waiting for wallet modal
+  | 'checking-tribe' // querying on-chain
+  | 'creating-session' // calling /api/auth/verify
+  | 'verified'       // done
   | 'wrong-tribe'
   | 'no-character'
   | 'error'
 
 export function LoginButton() {
-  const account = useCurrentAccount()
+  const dAppKit = useDAppKit()
   const wallets = useWallets()
-  const { mutateAsync: connectWallet } = useConnectWallet()
-  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage()
+  const account = useCurrentAccount()
   const router = useRouter()
+
   const [state, setState] = useState<AuthState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [tribeName, setTribeName] = useState('')
   const [characterName, setCharacterName] = useState('')
 
-  async function handleLogin() {
+  // Phase 2: once account appears (after wallet connection), auto-proceed
+  useEffect(() => {
+    if (state !== 'connecting' || !account?.address) return
+    verifyTribe(account.address)
+  }, [account?.address, state]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function verifyTribe(address: string) {
     try {
-      // Step 1: Connect wallet if not connected
-      if (!account) {
-        setState('connecting')
-        const eveVault = wallets.find(w =>
-          w.name.toLowerCase().includes('eve') || w.name.toLowerCase().includes('vault')
-        ) ?? wallets[0]
-
-        if (!eveVault) {
-          setErrorMessage('EVE Vault not found. Install the EVE Vault browser extension.')
-          setState('error')
-          return
-        }
-        await connectWallet({ wallet: eveVault })
-      }
-
-      const address = account?.address
-      if (!address) {
-        setState('error')
-        setErrorMessage('Could not get wallet address.')
-        return
-      }
-
-      // Step 2: Check tribe on-chain
       setState('checking-tribe')
       const result = await checkTribeMembership(address)
 
@@ -64,56 +46,87 @@ export function LoginButton() {
         return
       }
       if (result.status === 'wrong-tribe') {
-        setTribeName(result.tribeName)
         setCharacterName(result.characterName)
+        setTribeName(result.tribeName)
         setState('wrong-tribe')
         return
       }
       if (result.status === 'error') {
-        setState('error')
         setErrorMessage(result.message)
+        setState('error')
         return
       }
 
-      // Capture character info before signing
-      setTribeName(result.tribeName)
+      // Tribe confirmed — create server session
       setCharacterName(result.characterName)
+      setTribeName(result.tribeName)
+      setState('creating-session')
 
-      // Step 3: Sign a message to prove wallet ownership
-      setState('signing')
-      const message = `AoV access request — ${address} — ${Date.now()}`
-      const { signature } = await signPersonalMessage({
-        message: new TextEncoder().encode(message),
-      })
-
-      // Step 4: Create server session
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           address,
-          message,
-          signature,
           tribeId: result.tribeId,
+          characterName: result.characterName,
+          characterId: result.characterId,
         }),
       })
 
       if (!res.ok) {
-        const { error } = await res.json()
-        throw new Error(error ?? 'Session creation failed')
+        const json = await res.json()
+        throw new Error(json.error ?? 'Session creation failed')
       }
 
       setState('verified')
-      setTimeout(() => router.push('/hub'), 800)
+      setTimeout(() => router.push('/hub'), 1200)
     } catch (err) {
-      setState('error')
       setErrorMessage(String(err))
+      setState('error')
     }
   }
 
+  async function handleConnect() {
+    try {
+      setState('connecting')
+
+      // If already connected, go straight to tribe check
+      if (account?.address) {
+        verifyTribe(account.address)
+        return
+      }
+
+      const eveVault =
+        wallets.find(
+          w => w.name.toLowerCase().includes('eve') || w.name.toLowerCase().includes('vault')
+        ) ?? wallets[0]
+
+      if (!eveVault) {
+        setErrorMessage('EVE Vault not found. Install the EVE Vault browser extension.')
+        setState('error')
+        return
+      }
+
+      // connectWallet is async in v2 and throws on failure
+      await dAppKit.connectWallet({ wallet: eveVault })
+    } catch (err) {
+      setErrorMessage(String(err))
+      setState('error')
+    }
+  }
+
+  function reset() {
+    setState('idle')
+    setErrorMessage('')
+    setCharacterName('')
+    setTribeName('')
+  }
+
+  // ─── Outcome states ───────────────────────────────────────────────────────
+
   if (state === 'verified') {
     return (
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-3 text-center">
         <span className="font-mono text-xs tracking-widest uppercase text-void-teal">
           ◈ IDENTITY CONFIRMED
         </span>
@@ -139,7 +152,7 @@ export function LoginButton() {
           ACCESS DENIED
         </span>
         {characterName && (
-          <span className="font-mono text-sm tracking-widest uppercase text-white/40">
+          <span className="font-mono text-sm tracking-widest uppercase text-white/50">
             {characterName}
           </span>
         )}
@@ -153,7 +166,7 @@ export function LoginButton() {
           The Void does not receive you here.
         </p>
         <button
-          onClick={() => setState('idle')}
+          onClick={reset}
           className="font-mono text-xs tracking-widest uppercase text-void-teal/50 hover:text-void-teal transition-colors"
         >
           Try another wallet
@@ -169,10 +182,10 @@ export function LoginButton() {
           NO CHARACTER FOUND
         </span>
         <p className="font-mono text-xs text-white/25 max-w-xs leading-relaxed">
-          No EVE Frontier character was found in this wallet.
+          No EVE Frontier character was found linked to this wallet.
         </p>
         <button
-          onClick={() => setState('idle')}
+          onClick={reset}
           className="font-mono text-xs tracking-widest uppercase text-void-teal/50 hover:text-void-teal transition-colors"
         >
           Try another wallet
@@ -187,11 +200,11 @@ export function LoginButton() {
         <span className="font-mono text-xs tracking-widest uppercase text-white/40">
           SIGNAL LOST
         </span>
-        <p className="font-mono text-xs text-white/20 max-w-xs leading-relaxed">
+        <p className="font-mono text-xs text-white/20 max-w-xs leading-relaxed break-all">
           {errorMessage || 'An error occurred during verification.'}
         </p>
         <button
-          onClick={() => setState('idle')}
+          onClick={reset}
           className="font-mono text-xs tracking-widest uppercase text-void-teal/50 hover:text-void-teal transition-colors"
         >
           Retry
@@ -200,22 +213,24 @@ export function LoginButton() {
     )
   }
 
-  const stateLabels: Record<AuthState, string> = {
+  // ─── Button states ────────────────────────────────────────────────────────
+
+  const isLoading = ['connecting', 'checking-tribe', 'creating-session'].includes(state)
+
+  const label: Record<AuthState, string> = {
     idle: 'Connect EVE Vault',
     connecting: 'Connecting...',
     'checking-tribe': 'Verifying membership...',
-    signing: 'Sign to confirm identity...',
-    verified: 'Verified',
+    'creating-session': 'Confirmed — entering...',
+    verified: '',
     'wrong-tribe': '',
     'no-character': '',
     error: '',
   }
 
-  const isLoading = ['connecting', 'checking-tribe', 'signing'].includes(state)
-
   return (
     <button
-      onClick={handleLogin}
+      onClick={handleConnect}
       disabled={isLoading}
       className={`
         group inline-flex items-center gap-3
@@ -229,9 +244,9 @@ export function LoginButton() {
       `}
     >
       {isLoading && (
-        <span className="w-2 h-2 rounded-full bg-void-teal/60 animate-pulse" />
+        <span className="w-2 h-2 rounded-full bg-void-teal/60 animate-pulse shrink-0" />
       )}
-      {stateLabels[state]}
+      {label[state]}
     </button>
   )
 }
