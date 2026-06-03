@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { LogoutButton } from './LogoutButton'
+import { TopBarNav } from './TopBarNav'
 
 type Props = {
   characterName?: string
@@ -16,6 +17,7 @@ export function TopBar({ characterName }: Props) {
       >
         ◈ AoV
       </Link>
+      <TopBarNav />
       <div className="flex items-center gap-4">
         <span className="font-mono text-xs tracking-widest text-white/20 uppercase">
           {displayName} · ONLINE
