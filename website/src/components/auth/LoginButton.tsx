@@ -25,7 +25,9 @@ export function LoginButton() {
   const account = useCurrentAccount()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const nextPath = searchParams.get('next') ?? '/hub'
+  const rawNext = searchParams.get('next') ?? '/hub'
+  // Guard against open redirects — only follow internal paths
+  const nextPath = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/hub'
 
   const [state, setState] = useState<AuthState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
