@@ -32,6 +32,7 @@ import {
   getDisplayName,
   getFuelEta,
   getKpis,
+  getSnapshotFreshness,
   getStatus,
   parseSnapshotPayload,
   serializeSnapshot,
@@ -96,6 +97,7 @@ function App() {
   const warnings = snapshot ? buildRealWarnings(snapshot) : [];
   const objects = snapshot?.objects ?? [];
   const inventorySummary = snapshot ? summarizeInventory(snapshot) : [];
+  const snapshotFreshness = snapshot ? getSnapshotFreshness(snapshot) : null;
   const networkNodes = objects.filter((object) => object.kind === "Network Node");
   const storageUnits = objects.filter((object) => object.kind === "Storage Unit");
   const gates = objects.filter((object) => object.kind === "Smart Gate");
@@ -225,10 +227,11 @@ function App() {
         <StatusPill severity="info" label="Live Sui testnet / Stillness" />
         {snapshotSource ? (
           <StatusPill
-            severity={snapshotSource === "live" ? "stable" : snapshotSource === "imported" ? "warning" : "info"}
+            severity={snapshotSource === "live" ? "stable" : snapshotFreshness?.severity ?? "info"}
             label={snapshotSource === "live" ? "Viewing live snapshot" : snapshotSource === "imported" ? "Viewing imported snapshot" : "Viewing cached snapshot"}
           />
         ) : null}
+        {snapshotFreshness ? <StatusPill severity={snapshotFreshness.severity} label={snapshotFreshness.label} /> : null}
         <span className="timestamp">
           {snapshot?.generatedAt
             ? `Updated ${new Date(snapshot.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
@@ -259,6 +262,14 @@ function App() {
           title="Showing imported snapshot"
           detail="This view is pinned to the imported JSON until you return to the live chain stream."
           severity="warning"
+        />
+      ) : null}
+
+      {snapshotFreshness && snapshotFreshness.severity !== "stable" ? (
+        <Notice
+          title="Snapshot freshness"
+          detail={snapshotFreshness.label}
+          severity={snapshotFreshness.severity}
         />
       ) : null}
 

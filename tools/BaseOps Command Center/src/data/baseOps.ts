@@ -139,6 +139,12 @@ export type SnapshotExport = {
   snapshot: BaseSnapshot;
 };
 
+export type SnapshotFreshness = {
+  hours: number | null;
+  severity: Severity;
+  label: string;
+};
+
 const GET_CHARACTER_AND_OWNED_OBJECTS = `
 query GetCharacterAndOwnedObjects($owner: SuiAddress!, $characterPlayerProfileType: String!) {
   address(address: $owner) {
@@ -440,11 +446,22 @@ export function buildRealWarnings(snapshot: BaseSnapshot): RealWarning[] {
   const warnings: RealWarning[] = [];
   const objectsById = new Map(snapshot.objects.map((object) => [object.id, object]));
 
+  snapshot.errors.forEach((error, index) => {
+    warnings.push({
+      id: `snapshot-error-${index}`,
+      severity: "warning",
+      title: "Snapshot returned GraphQL warnings",
+      source: "Sui GraphQL",
+      detail: error,
+    });
+  });
+
   snapshot.objects.forEach((object) => {
     const status = getStatus(object);
     if (object.kind === "Network Node") {
       const fuelQuantity = toNumber(object.json.fuel?.quantity);
       const maxFuel = toNumber(object.json.fuel?.max_capacity);
+      const fuelHoursRemaining = getFuelHoursRemaining(object);
 
       if (fuelQuantity === 0) {
         warnings.push({
@@ -454,6 +471,26 @@ export function buildRealWarnings(snapshot: BaseSnapshot): RealWarning[] {
           source: getDisplayName(object),
           detail: `Fuel quantity is 0 of ${formatNumber(maxFuel)} on-chain.`,
         });
+      }
+
+      if (fuelQuantity > 0 && fuelHoursRemaining !== null) {
+        if (fuelHoursRemaining <= 24) {
+          warnings.push({
+            id: `${object.id}-fuel-critical`,
+            severity: "critical",
+            title: "Network node fuel is critically low",
+            source: getDisplayName(object),
+            detail: `${formatDuration(fuelHoursRemaining)} of burn time remains at the current on-chain rate.`,
+          });
+        } else if (fuelHoursRemaining <= 72) {
+          warnings.push({
+            id: `${object.id}-fuel-low`,
+            severity: "warning",
+            title: "Network node fuel is running low",
+            source: getDisplayName(object),
+            detail: `${formatDuration(fuelHoursRemaining)} of burn time remains at the current on-chain rate.`,
+          });
+        }
       }
 
       if (status === "OFFLINE") {
@@ -542,24 +579,62 @@ export function summarizeInventory(snapshot: BaseSnapshot): InventorySummary[] {
 }
 
 export function getFuelEta(object: ChainObject): string {
+  const fuelHoursRemaining = getFuelHoursRemaining(object);
+  if (fuelHoursRemaining === null) {
+    const fuel = object.json.fuel;
+    if (!fuel) return "Unavailable";
+    if (!fuel.is_burning) return "Not burning";
+    return "Unavailable";
+  }
+
+  return formatDuration(fuelHoursRemaining);
+}
+
+export function getFuelHoursRemaining(object: ChainObject): number | null {
   const fuel = object.json.fuel;
-  if (!fuel) return "Unavailable";
-  if (!fuel.is_burning) return "Not burning";
+  if (!fuel) return null;
+  if (!fuel.is_burning) return null;
   const quantity = toNumber(fuel.quantity);
   const burnMs = toNumber(fuel.burn_rate_in_ms);
-  if (quantity <= 0) return "Now";
-  if (burnMs <= 0) return "Unavailable";
-  return formatDuration((quantity * burnMs) / 3_600_000);
+  if (quantity <= 0) return 0;
+  if (burnMs <= 0) return null;
+  return (quantity * burnMs) / 3_600_000;
+}
+
+export function getSnapshotFreshness(snapshot: BaseSnapshot, now = Date.now()): SnapshotFreshness {
+  const generatedAt = Date.parse(snapshot.generatedAt);
+  if (!Number.isFinite(generatedAt)) {
+    return {
+      hours: null,
+      severity: "critical",
+      label: "Snapshot timestamp invalid",
+    };
+  }
+
+  const hours = Math.max(0, (now - generatedAt) / 3_600_000);
+  if (hours < 1) {
+    return { hours, severity: "stable", label: "Fresh snapshot" };
+  }
+  if (hours < 6) {
+    return { hours, severity: "info", label: `Snapshot is ${formatDuration(hours)} old` };
+  }
+  if (hours < 24) {
+    return { hours, severity: "warning", label: `Snapshot is ${formatDuration(hours)} old` };
+  }
+  return { hours, severity: "critical", label: `Snapshot is ${formatDuration(hours)} old` };
 }
 
 export function formatDuration(hours: number): string {
   if (!Number.isFinite(hours)) return "Unavailable";
   if (hours <= 0) return "Now";
   const wholeHours = Math.floor(hours);
-  const minutes = Math.round((hours - wholeHours) * 60);
-  if (wholeHours === 0) return `${minutes}m`;
-  if (minutes === 0) return `${wholeHours}h`;
-  return `${wholeHours}h ${minutes}m`;
+  const roundedMinutes = Math.round((hours - wholeHours) * 60);
+  const carryHours = roundedMinutes === 60 ? 1 : 0;
+  const minutes = roundedMinutes === 60 ? 0 : roundedMinutes;
+  const normalizedHours = wholeHours + carryHours;
+  if (normalizedHours === 0) return `${Math.max(minutes, 1)}m`;
+  if (minutes === 0) return `${normalizedHours}h`;
+  return `${normalizedHours}h ${minutes}m`;
 }
 
 export function formatNumber(value: number): string {

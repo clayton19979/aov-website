@@ -3,7 +3,10 @@ import {
   BaseSnapshot,
   ChainObject,
   buildRealWarnings,
+  formatDuration,
+  getFuelEta,
   getKpis,
+  getSnapshotFreshness,
   getStatus,
   parseSnapshotPayload,
   serializeSnapshot,
@@ -102,7 +105,7 @@ const snapshot: BaseSnapshot = {
   tenant: "stillness",
   character: null,
   objects: [node, assembly, storage, storageTwo],
-  errors: [],
+  errors: ["GraphQL partial data warning"],
 };
 
 describe("real chain snapshot helpers", () => {
@@ -134,6 +137,12 @@ describe("real chain snapshot helpers", () => {
 
     expect(warnings.some((warning) => warning.id === "0xassembly-offline")).toBe(true);
     expect(warnings.some((warning) => warning.id === "0xstorage-0xkey-capacity")).toBe(true);
+  });
+
+  it("includes GraphQL warnings in the operational warning list", () => {
+    const warnings = buildRealWarnings(snapshot);
+
+    expect(warnings.some((warning) => warning.id === "snapshot-error-0")).toBe(true);
   });
 
   it("serializes and parses exported snapshots", () => {
@@ -180,6 +189,56 @@ describe("real chain snapshot helpers", () => {
 
   it("rejects malformed snapshot payloads", () => {
     expect(() => parseSnapshotPayload({ hello: "world" })).toThrow("missing required top-level fields");
+  });
+
+  it("warns when a burning network node is nearing fuel exhaustion", () => {
+    const lowFuelNode: ChainObject = {
+      ...node,
+      id: "0xnode-low-fuel",
+      json: {
+        ...node.json,
+        id: "0xnode-low-fuel",
+        fuel: {
+          quantity: "12",
+          max_capacity: "100000",
+          burn_rate_in_ms: "3600000",
+          is_burning: true,
+        },
+        status: { status: { "@variant": "ONLINE" } },
+      },
+    };
+    const lowFuelSnapshot: BaseSnapshot = {
+      ...snapshot,
+      objects: [lowFuelNode],
+      errors: [],
+    };
+
+    const warnings = buildRealWarnings(lowFuelSnapshot);
+
+    expect(warnings.some((warning) => warning.id === "0xnode-low-fuel-fuel-critical")).toBe(true);
+    expect(getFuelEta(lowFuelNode)).toBe("12h");
+  });
+
+  it("classifies snapshot freshness by age", () => {
+    const freshSnapshot = {
+      ...snapshot,
+      generatedAt: new Date("2026-06-03T10:30:00.000Z").toISOString(),
+    };
+
+    expect(getSnapshotFreshness(freshSnapshot, Date.parse("2026-06-03T11:00:00.000Z"))).toMatchObject({
+      severity: "stable",
+      label: "Fresh snapshot",
+    });
+
+    const stale = getSnapshotFreshness(snapshot, Date.parse("2026-06-03T12:00:00.000Z"));
+    expect(stale.severity).toBe("critical");
+    expect(stale.label).toContain("Snapshot is");
+    expect(stale.label).toContain("old");
+  });
+
+  it("normalizes duration formatting when minutes round up to an hour", () => {
+    expect(formatDuration(1.999)).toBe("2h");
+    expect(formatDuration(1 / 120)).toBe("1m");
   });
 });
 
