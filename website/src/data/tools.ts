@@ -13,6 +13,7 @@ export type Tool = {
   description: string
   category: ToolCategory
   status: 'live' | 'coming-soon'
+  fullBleed?: true
 }
 
 export const tools: Tool[] = [
@@ -36,6 +37,7 @@ export const tools: Tool[] = [
     description: 'Live star chart with jump-route planning, smart gate network, and fuel optimization across EVE Frontier space.',
     category: 'LOGISTICS',
     status: 'live',
+    fullBleed: true,
   },
   {
     slug: 'baseops-command-center',
@@ -43,6 +45,7 @@ export const tools: Tool[] = [
     description: 'Corporation management, asset tracking, and operational oversight.',
     category: 'OPERATIONS',
     status: 'live',
+    fullBleed: true,
   },
   {
     slug: 'route-optimizer',

@@ -31,7 +31,7 @@ export default async function ToolPage({ params }: Props) {
     Promise.resolve(toolComponents[slug]),
   ])
 
-  const fullBleed = slug === 'void-map' || slug === 'baseops-command-center'
+  const fullBleed = tool.fullBleed ?? false
 
   return (
     <ToolShell tool={tool} fullBleed={fullBleed} characterName={session?.characterName}>
