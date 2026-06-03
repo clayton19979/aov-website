@@ -2,12 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-
-const NAV_LINKS = [
-  { href: '/tools', label: 'TOOLS' },
-  { href: '/doctrine', label: 'DOCTRINE' },
-  { href: '/designations', label: 'DESIGNATIONS' },
-]
+import { NAV_LINKS } from '@/lib/nav'
 
 export function MobileNavStrip() {
   const pathname = usePathname()
