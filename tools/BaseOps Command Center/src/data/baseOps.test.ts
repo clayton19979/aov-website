@@ -3,6 +3,9 @@ import {
   BaseSnapshot,
   ChainObject,
   buildRealWarnings,
+  filterInventorySummary,
+  filterObjects,
+  filterWarnings,
   formatDuration,
   getFuelEta,
   getKpis,
@@ -185,6 +188,30 @@ describe("real chain snapshot helpers", () => {
         inventories: 1,
       },
     ]);
+  });
+
+  it("filters warnings by severity and query text", () => {
+    const warnings = buildRealWarnings(snapshot);
+    const filtered = filterWarnings(warnings, { severity: "critical", query: "fuel" });
+
+    expect(filtered.map((warning) => warning.id)).toEqual(["0xnode-fuel-empty"]);
+  });
+
+  it("filters objects by status, kind, and related inventory text", () => {
+    expect(
+      filterObjects(snapshot.objects, {
+        status: "ONLINE",
+        kind: "Storage Unit",
+        query: "fuel block",
+      }).map((object) => object.id),
+    ).toEqual(["0xstorage2"]);
+  });
+
+  it("filters inventory summary rows by item metadata", () => {
+    const summary = summarizeInventory(snapshot);
+
+    expect(filterInventorySummary(summary, "fuel block").map((item) => item.typeId)).toEqual(["88001"]);
+    expect(filterInventorySummary(summary, "").length).toBe(summary.length);
   });
 
   it("rejects malformed snapshot payloads", () => {

@@ -23,10 +23,14 @@ import {
   BaseSnapshot,
   ChainObject,
   DEFAULT_OWNER,
+  ChainStatus,
   InventorySnapshot,
   RealWarning,
   Severity,
   buildRealWarnings,
+  filterInventorySummary,
+  filterObjects,
+  filterWarnings,
   fetchBaseSnapshot,
   formatNumber,
   getDisplayName,
@@ -49,6 +53,9 @@ const severityLabel: Record<Severity, string> = {
 };
 
 type SnapshotSource = "live" | "cached" | "imported";
+type WarningScope = Severity | "all";
+type ObjectScope = ChainStatus | "all";
+type KindScope = ChainObject["kind"] | "all";
 
 function App() {
   const { isConnected, walletAddress, hasEveVault, handleConnect, handleDisconnect } = useConnection();
@@ -57,6 +64,10 @@ function App() {
   const [importedSnapshot, setImportedSnapshot] = useState<BaseSnapshot | null>(null);
   const [cachedSnapshot, setCachedSnapshot] = useState<BaseSnapshot | null>(() => loadStoredSnapshotForOwner(DEFAULT_OWNER));
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
+  const [opsQuery, setOpsQuery] = useState("");
+  const [warningScope, setWarningScope] = useState<WarningScope>("all");
+  const [statusScope, setStatusScope] = useState<ObjectScope>("all");
+  const [kindScope, setKindScope] = useState<KindScope>("all");
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const activeOwner = walletAddress || committedOwner || DEFAULT_OWNER;
   const normalizedOwnerInput = normalizeOwnerAddress(ownerInput);
@@ -96,12 +107,20 @@ function App() {
   const kpis = snapshot ? getKpis(snapshot) : null;
   const warnings = snapshot ? buildRealWarnings(snapshot) : [];
   const objects = snapshot?.objects ?? [];
+  const filteredWarnings = filterWarnings(warnings, { severity: warningScope, query: opsQuery });
+  const filteredObjects = filterObjects(objects, {
+    query: opsQuery,
+    status: statusScope,
+    kind: kindScope,
+  });
   const inventorySummary = snapshot ? summarizeInventory(snapshot) : [];
+  const filteredInventorySummary = filterInventorySummary(inventorySummary, opsQuery);
   const snapshotFreshness = snapshot ? getSnapshotFreshness(snapshot) : null;
-  const networkNodes = objects.filter((object) => object.kind === "Network Node");
-  const storageUnits = objects.filter((object) => object.kind === "Storage Unit");
-  const gates = objects.filter((object) => object.kind === "Smart Gate");
-  const assemblies = objects.filter((object) => object.kind === "Assembly");
+  const networkNodes = filteredObjects.filter((object) => object.kind === "Network Node");
+  const storageUnits = filteredObjects.filter((object) => object.kind === "Storage Unit");
+  const gates = filteredObjects.filter((object) => object.kind === "Smart Gate");
+  const assemblies = filteredObjects.filter((object) => object.kind === "Assembly");
+  const hasActiveFilters = Boolean(opsQuery.trim()) || warningScope !== "all" || statusScope !== "all" || kindScope !== "all";
   const storageUsedPercent =
     kpis && kpis.totalMaxCapacity > 0 ? `${Math.round((kpis.totalUsedCapacity / kpis.totalMaxCapacity) * 100)}%` : "Unavailable";
 
@@ -146,6 +165,13 @@ function App() {
   function handleReturnToLive() {
     setImportedSnapshot(null);
     setSnapshotMessage(liveSnapshot ? "Returned to live chain view." : "Showing the last cached live snapshot.");
+  }
+
+  function clearOpsFilters() {
+    setOpsQuery("");
+    setWarningScope("all");
+    setStatusScope("all");
+    setKindScope("all");
   }
 
   return (
@@ -239,6 +265,58 @@ function App() {
         </span>
       </section>
 
+      <section className="filter-band" aria-label="Operational filters">
+        <label className="filter-control filter-search">
+          <span>Ops search</span>
+          <input
+            value={opsQuery}
+            onChange={(event) => setOpsQuery(event.target.value)}
+            placeholder="Search names, IDs, item types, warnings"
+            spellCheck={false}
+          />
+        </label>
+        <label className="filter-control">
+          <span>Warning severity</span>
+          <select value={warningScope} onChange={(event) => setWarningScope(event.target.value as WarningScope)}>
+            <option value="all">All severities</option>
+            <option value="critical">Critical only</option>
+            <option value="warning">Warnings only</option>
+            <option value="info">Info only</option>
+            <option value="stable">Stable only</option>
+          </select>
+        </label>
+        <label className="filter-control">
+          <span>Object status</span>
+          <select value={statusScope} onChange={(event) => setStatusScope(event.target.value as ObjectScope)}>
+            <option value="all">All statuses</option>
+            <option value="ONLINE">Online</option>
+            <option value="OFFLINE">Offline</option>
+            <option value="UNKNOWN">Unknown</option>
+          </select>
+        </label>
+        <label className="filter-control">
+          <span>Object kind</span>
+          <select value={kindScope} onChange={(event) => setKindScope(event.target.value as KindScope)}>
+            <option value="all">All kinds</option>
+            <option value="Network Node">Network Nodes</option>
+            <option value="Storage Unit">Storage Units</option>
+            <option value="Smart Gate">Smart Gates</option>
+            <option value="Assembly">Assemblies</option>
+            <option value="Unknown">Unknown</option>
+          </select>
+        </label>
+        <button className="action-button" type="button" onClick={clearOpsFilters} disabled={!hasActiveFilters}>
+          Clear Filters
+        </button>
+      </section>
+
+      <section className="status-band filter-summary" aria-label="Filter results">
+        <StatusPill severity={hasActiveFilters ? "info" : "stable"} label={hasActiveFilters ? "Filtered operational view" : "Showing full snapshot"} />
+        <StatusPill severity="info" label={`${filteredObjects.length}/${objects.length} objects`} />
+        <StatusPill severity={filteredWarnings.length ? "warning" : "stable"} label={`${filteredWarnings.length}/${warnings.length} warnings`} />
+        <StatusPill severity="info" label={`${filteredInventorySummary.length}/${inventorySummary.length} inventory totals`} />
+      </section>
+
       {snapshotMessage ? <Notice title="Snapshot status" detail={snapshotMessage} severity="info" /> : null}
 
       {!manualOwnerDisabled && ownerInput.trim() && !normalizedOwnerInput ? (
@@ -330,13 +408,13 @@ function App() {
               </Panel>
 
               <Panel title="Inventory Totals" icon={<Database size={18} aria-hidden="true" />}>
-                {inventorySummary.length ? <InventorySummaryTable items={inventorySummary} /> : <EmptyState text="No storage inventory rows returned for this wallet." />}
+                {filteredInventorySummary.length ? <InventorySummaryTable items={filteredInventorySummary} /> : <EmptyState text="No storage inventory rows match the current filters." />}
               </Panel>
             </div>
 
             <div className="dashboard-column">
               <Panel title="Real Warnings" icon={<ShieldAlert size={18} aria-hidden="true" />}>
-                <WarningsList warnings={warnings} />
+                <WarningsList warnings={filteredWarnings} emptyText="No live warnings match the current filters." />
               </Panel>
 
               <Panel title="Gate Control" icon={<DoorOpen size={18} aria-hidden="true" />}>
@@ -537,9 +615,9 @@ function InventorySummaryTable({
   );
 }
 
-function WarningsList({ warnings }: { warnings: RealWarning[] }) {
+function WarningsList({ warnings, emptyText = "No live warnings from the returned chain state." }: { warnings: RealWarning[]; emptyText?: string }) {
   if (warnings.length === 0) {
-    return <EmptyState text="No live warnings from the returned chain state." />;
+    return <EmptyState text={emptyText} />;
   }
 
   return (

@@ -145,6 +145,17 @@ export type SnapshotFreshness = {
   label: string;
 };
 
+export type WarningFilter = {
+  severity?: Severity | "all";
+  query?: string;
+};
+
+export type ObjectFilter = {
+  query?: string;
+  status?: ChainStatus | "all";
+  kind?: ObjectKind | "all";
+};
+
 const GET_CHARACTER_AND_OWNED_OBJECTS = `
 query GetCharacterAndOwnedObjects($owner: SuiAddress!, $characterPlayerProfileType: String!) {
   address(address: $owner) {
@@ -578,6 +589,65 @@ export function summarizeInventory(snapshot: BaseSnapshot): InventorySummary[] {
   });
 }
 
+export function filterWarnings(warnings: RealWarning[], filter: WarningFilter = {}): RealWarning[] {
+  const normalizedQuery = normalizeSearch(filter.query);
+
+  return warnings.filter((warning) => {
+    if (filter.severity && filter.severity !== "all" && warning.severity !== filter.severity) {
+      return false;
+    }
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    return [warning.title, warning.source, warning.detail].some((value) => normalizeSearch(value).includes(normalizedQuery));
+  });
+}
+
+export function filterObjects(objects: ChainObject[], filter: ObjectFilter = {}): ChainObject[] {
+  const normalizedQuery = normalizeSearch(filter.query);
+
+  return objects.filter((object) => {
+    if (filter.status && filter.status !== "all" && getStatus(object) !== filter.status) {
+      return false;
+    }
+
+    if (filter.kind && filter.kind !== "all" && object.kind !== filter.kind) {
+      return false;
+    }
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    const inventoryMatches = object.inventories.some((inventory) =>
+      inventory.items.some((item) =>
+        [item.name, item.typeId, item.itemId, item.tenant, item.key].some((value) => normalizeSearch(value).includes(normalizedQuery)),
+      ),
+    );
+
+    return [
+      object.id,
+      object.kind,
+      object.typeRepr,
+      object.json.type_id,
+      object.json.key?.item_id,
+      object.json.metadata?.name,
+      object.json.metadata?.description,
+    ].some((value) => normalizeSearch(value).includes(normalizedQuery)) || inventoryMatches;
+  });
+}
+
+export function filterInventorySummary(items: InventorySummary[], query: string): InventorySummary[] {
+  const normalizedQuery = normalizeSearch(query);
+  if (!normalizedQuery) return items;
+
+  return items.filter((item) =>
+    [item.name, item.typeId, item.itemId, item.tenant].some((value) => normalizeSearch(value).includes(normalizedQuery)),
+  );
+}
+
 export function getFuelEta(object: ChainObject): string {
   const fuelHoursRemaining = getFuelHoursRemaining(object);
   if (fuelHoursRemaining === null) {
@@ -870,4 +940,8 @@ function severityRank(severity: Severity): number {
     stable: 3,
   };
   return ranks[severity];
+}
+
+function normalizeSearch(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
