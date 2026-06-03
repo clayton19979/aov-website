@@ -37,6 +37,7 @@ import {
   serializeSnapshot,
   shortAddress,
 } from "./data/baseOps";
+import { loadStoredSnapshot, normalizeOwnerAddress, storeSnapshot } from "./data/snapshotStore";
 
 const severityLabel: Record<Severity, string> = {
   critical: "Critical",
@@ -45,17 +46,19 @@ const severityLabel: Record<Severity, string> = {
   stable: "Stable",
 };
 
-const SNAPSHOT_CACHE_KEY = "baseops-command-center:last-snapshot";
 type SnapshotSource = "live" | "cached" | "imported";
 
 function App() {
   const { isConnected, walletAddress, hasEveVault, handleConnect, handleDisconnect } = useConnection();
   const [ownerInput, setOwnerInput] = useState(DEFAULT_OWNER);
+  const [committedOwner, setCommittedOwner] = useState(DEFAULT_OWNER);
   const [importedSnapshot, setImportedSnapshot] = useState<BaseSnapshot | null>(null);
-  const [cachedSnapshot, setCachedSnapshot] = useState<BaseSnapshot | null>(() => loadStoredSnapshot());
+  const [cachedSnapshot, setCachedSnapshot] = useState<BaseSnapshot | null>(() => loadStoredSnapshotForOwner(DEFAULT_OWNER));
   const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const activeOwner = walletAddress || ownerInput || DEFAULT_OWNER;
+  const activeOwner = walletAddress || committedOwner || DEFAULT_OWNER;
+  const normalizedOwnerInput = normalizeOwnerAddress(ownerInput);
+  const manualOwnerDisabled = Boolean(walletAddress);
 
   const snapshotQuery = useQuery({
     queryKey: ["baseops", activeOwner],
@@ -65,9 +68,19 @@ function App() {
 
   const liveSnapshot = snapshotQuery.data;
   useEffect(() => {
+    if (walletAddress) {
+      setOwnerInput(walletAddress);
+    }
+  }, [walletAddress]);
+
+  useEffect(() => {
+    setCachedSnapshot(loadStoredSnapshotForOwner(activeOwner));
+  }, [activeOwner]);
+
+  useEffect(() => {
     if (!liveSnapshot) return;
     setCachedSnapshot(liveSnapshot);
-    storeSnapshot(liveSnapshot);
+    storeSnapshotForOwner(liveSnapshot);
   }, [liveSnapshot]);
 
   const snapshot = importedSnapshot ?? liveSnapshot ?? cachedSnapshot;
@@ -87,6 +100,17 @@ function App() {
   const assemblies = objects.filter((object) => object.kind === "Assembly");
   const storageUsedPercent =
     kpis && kpis.totalMaxCapacity > 0 ? `${Math.round((kpis.totalUsedCapacity / kpis.totalMaxCapacity) * 100)}%` : "Unavailable";
+
+  function handleApplyOwner() {
+    if (manualOwnerDisabled) return;
+    if (!normalizedOwnerInput) {
+      setSnapshotMessage("Enter a valid 0x-prefixed owner address before applying it.");
+      return;
+    }
+    setCommittedOwner(normalizedOwnerInput);
+    setOwnerInput(normalizedOwnerInput);
+    setSnapshotMessage(`Tracking owner ${shortAddress(normalizedOwnerInput)}.`);
+  }
 
   function handleExportSnapshot() {
     if (!snapshot) return;
@@ -137,16 +161,26 @@ function App() {
             <input
               value={ownerInput}
               onChange={(event) => setOwnerInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleApplyOwner();
+                }
+              }}
               placeholder="Owner wallet address"
               spellCheck={false}
+              disabled={manualOwnerDisabled}
             />
           </label>
+          <button className="action-button" type="button" onClick={handleApplyOwner} disabled={manualOwnerDisabled}>
+            Apply Owner
+          </button>
           <button
             className="icon-button"
             type="button"
             onClick={() => snapshotQuery.refetch()}
-            title="Refresh live chain data"
-            aria-label="Refresh live chain data"
+            title="Refresh the current live snapshot"
+            aria-label="Refresh the current live snapshot"
           >
             <RefreshCw size={18} aria-hidden="true" />
           </button>
@@ -201,6 +235,14 @@ function App() {
       </section>
 
       {snapshotMessage ? <Notice title="Snapshot status" detail={snapshotMessage} severity="info" /> : null}
+
+      {!manualOwnerDisabled && ownerInput.trim() && !normalizedOwnerInput ? (
+        <Notice
+          title="Owner address is not valid yet"
+          detail="Manual owner lookups require a 0x-prefixed hexadecimal wallet address."
+          severity="warning"
+        />
+      ) : null}
 
       {snapshotSource === "cached" && !snapshotQuery.isLoading ? (
         <Notice
@@ -568,11 +610,21 @@ function StatusPill({ severity, label }: { severity: Severity; label: string }) 
 
 export default App;
 
-function loadStoredSnapshot(): BaseSnapshot | null {
+function loadStoredSnapshotForOwner(ownerAddress: string): BaseSnapshot | null {
   if (typeof window === "undefined") return null;
 
+  return loadStoredSnapshot((key) => readSnapshotFromStorage(window.localStorage, key), ownerAddress);
+}
+
+function storeSnapshotForOwner(snapshot: BaseSnapshot) {
+  if (typeof window === "undefined") return;
+
+  storeSnapshot((key, nextSnapshot) => writeSnapshotToStorage(window.localStorage, key, nextSnapshot), snapshot);
+}
+
+function readSnapshotFromStorage(storage: Storage, key: string): BaseSnapshot | null {
   try {
-    const raw = window.localStorage.getItem(SNAPSHOT_CACHE_KEY);
+    const raw = storage.getItem(key);
     if (!raw) return null;
     return parseSnapshotPayload(JSON.parse(raw));
   } catch {
@@ -580,11 +632,9 @@ function loadStoredSnapshot(): BaseSnapshot | null {
   }
 }
 
-function storeSnapshot(snapshot: BaseSnapshot) {
-  if (typeof window === "undefined") return;
-
+function writeSnapshotToStorage(storage: Storage, key: string, snapshot: BaseSnapshot) {
   try {
-    window.localStorage.setItem(SNAPSHOT_CACHE_KEY, serializeSnapshot(snapshot));
+    storage.setItem(key, serializeSnapshot(snapshot));
   } catch {
     // Ignore storage failures and keep the live snapshot in memory only.
   }

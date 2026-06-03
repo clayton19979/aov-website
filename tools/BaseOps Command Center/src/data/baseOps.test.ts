@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BaseSnapshot, ChainObject, buildRealWarnings, getKpis, getStatus, parseSnapshotPayload, serializeSnapshot } from "./baseOps";
+import { loadStoredSnapshot, normalizeOwnerAddress, snapshotCacheKey, storeSnapshot } from "./snapshotStore";
 
 const node: ChainObject = {
   id: "0xnode",
@@ -62,7 +63,7 @@ const storage: ChainObject = {
 };
 
 const snapshot: BaseSnapshot = {
-  ownerAddress: "0xwallet",
+  ownerAddress: "0xabc123",
   generatedAt: new Date(0).toISOString(),
   network: "testnet",
   tenant: "stillness",
@@ -119,5 +120,48 @@ describe("real chain snapshot helpers", () => {
 
   it("rejects malformed snapshot payloads", () => {
     expect(() => parseSnapshotPayload({ hello: "world" })).toThrow("missing required top-level fields");
+  });
+});
+
+describe("snapshot owner and cache helpers", () => {
+  it("normalizes valid owner addresses and rejects invalid ones", () => {
+    expect(normalizeOwnerAddress(" 0xABC123 ")).toBe("0xabc123");
+    expect(normalizeOwnerAddress("wallet")).toBeNull();
+    expect(normalizeOwnerAddress("0x-not-hex")).toBeNull();
+  });
+
+  it("stores snapshots under an owner-specific cache key", () => {
+    const writes: Array<{ key: string; owner: string }> = [];
+
+    storeSnapshot((key, nextSnapshot) => {
+      writes.push({ key, owner: nextSnapshot.ownerAddress });
+    }, snapshot);
+
+    expect(writes).toEqual([{ key: snapshotCacheKey(snapshot.ownerAddress), owner: snapshot.ownerAddress }]);
+  });
+
+  it("loads only the cached snapshot for the requested owner", () => {
+    const storage = new Map<string, BaseSnapshot>([
+      [snapshotCacheKey(snapshot.ownerAddress), snapshot],
+      [
+        snapshotCacheKey("0xdef456"),
+        {
+          ...snapshot,
+          ownerAddress: "0xdef456",
+        },
+      ],
+    ]);
+
+    const loaded = loadStoredSnapshot((key) => storage.get(key) ?? null, snapshot.ownerAddress);
+
+    expect(loaded?.ownerAddress).toBe(snapshot.ownerAddress);
+  });
+
+  it("falls back to the legacy cache entry only when the owner matches", () => {
+    const legacyKey = "baseops-command-center:last-snapshot";
+    const storage = new Map<string, BaseSnapshot>([[legacyKey, snapshot]]);
+
+    expect(loadStoredSnapshot((key) => storage.get(key) ?? null, snapshot.ownerAddress)?.ownerAddress).toBe(snapshot.ownerAddress);
+    expect(loadStoredSnapshot((key) => storage.get(key) ?? null, "0x789abc")).toBeNull();
   });
 });
