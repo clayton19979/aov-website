@@ -117,3 +117,11 @@ textarea {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Solar theme overrides ──────────────────────────────────── */
+[data-theme="solar"] {
+  --color-void-teal: #ff9500;
+  --color-void-teal-10: color-mix(in srgb, #ff9500 10%, transparent);
+  --color-void-teal-20: color-mix(in srgb, #ff9500 20%, transparent);
+  --color-void-teal-40: color-mix(in srgb, #ff9500 40%, transparent);
+}

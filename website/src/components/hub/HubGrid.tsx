@@ -1,5 +1,6 @@
 import { HubQuadrant } from './HubQuadrant'
 import { tools } from '@/data/tools'
+import { kills } from '@/data/killboard'
 
 export function HubGrid() {
   const liveCount = tools.filter(t => t.status === 'live').length
@@ -34,6 +35,13 @@ export function HubGrid() {
       meta: 'Coming online',
       href: '/operations',
       comingSoon: true,
+    },
+    {
+      glyph: '⊗',
+      title: 'KILL BOARD',
+      description: 'Confirmed engagements, target assessments, and purification records.',
+      meta: `${kills.length} confirmed`,
+      href: '/killboard',
     },
   ]
 

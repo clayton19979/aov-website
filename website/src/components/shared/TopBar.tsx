@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { LogoutButton } from './LogoutButton'
+import { ThemeToggle } from './ThemeToggle'
 
 type Props = {
   characterName?: string
@@ -17,6 +18,7 @@ export function TopBar({ characterName }: Props) {
         ◈ AoV
       </Link>
       <div className="flex items-center gap-4">
+        <ThemeToggle />
         <span className="font-mono text-xs tracking-widest text-white/20 uppercase">
           {displayName} · ONLINE
         </span>

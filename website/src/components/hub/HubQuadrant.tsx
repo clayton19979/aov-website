@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 
-const NUMERALS = ['I', 'II', 'III', 'IV']
+const NUMERALS = ['I', 'II', 'III', 'IV', 'V']
 
 type Props = {
   glyph: string
