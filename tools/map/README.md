@@ -18,7 +18,11 @@ Open:
 
 Route links support the same core shape as common Frontier planners:
 
-`?system1=30001573&system2=30013956&jumpDistance=120&optimize=fuel`
+`?system1=30001573&system2=30013956&jumpDistance=120&optimize=fuel&avoid=30001844,30002270`
+
+## Avoid Systems
+
+Use the `Avoid systems` field to exclude hostile or undesirable stops by name or system ID. Separate entries with commas or new lines. The planner ignores duplicates, keeps the selected origin and destination routable even if they appear in the avoid list, and includes the normalized `avoid` IDs in share links.
 
 ## Online Gates
 

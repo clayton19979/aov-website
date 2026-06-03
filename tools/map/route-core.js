@@ -188,8 +188,27 @@
     };
   }
 
-  function findRoute({ systems, systemsById, gateAdjacency, origin, destination, range, mode = "fuel", useGates = true, spatialIndex }) {
+  function toBlockedSet(blockedSystemIds, originId, destinationId) {
+    const blocked = new Set(Array.isArray(blockedSystemIds) ? blockedSystemIds : []);
+    blocked.delete(originId);
+    blocked.delete(destinationId);
+    return blocked;
+  }
+
+  function findRoute({
+    systems,
+    systemsById,
+    gateAdjacency,
+    origin,
+    destination,
+    range,
+    mode = "fuel",
+    useGates = true,
+    spatialIndex,
+    blockedSystemIds = [],
+  }) {
     const index = spatialIndex || makeSpatialIndex(systems, range);
+    const blocked = toBlockedSet(blockedSystemIds, origin.id, destination.id);
     const open = createPriorityQueue();
     open.push({ id: origin.id, score: 0 });
     const cameFrom = new Map();
@@ -209,6 +228,7 @@
       for (const edge of neighbors) {
         const next = edge.system;
         if (visited.has(next.id)) continue;
+        if (blocked.has(next.id)) continue;
         const nextCost = cost.get(current.id) + edgeCost(edge, mode, range);
         if (nextCost < (cost.get(next.id) ?? Infinity)) {
           cost.set(next.id, nextCost);

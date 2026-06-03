@@ -47,6 +47,7 @@ self.addEventListener("message", (event) => {
     const mode = message.mode || "fuel";
     const origin = systemsById.get(message.originId);
     const destination = systemsById.get(message.destinationId);
+    const blockedSystemIds = Array.isArray(message.blockedSystemIds) ? message.blockedSystemIds : [];
     if (!origin || !destination) {
       self.postMessage({ type: "route", requestId: message.requestId, result: null });
       return;
@@ -56,7 +57,17 @@ self.addEventListener("message", (event) => {
       spatialIndexes.set(range, RouteCore.makeSpatialIndex(systems, range));
     }
     const spatialIndex = spatialIndexes.get(range);
-    const base = { systems, systemsById, gateAdjacency, origin, destination, range, useGates: message.useGates, spatialIndex };
+    const base = {
+      systems,
+      systemsById,
+      gateAdjacency,
+      origin,
+      destination,
+      range,
+      useGates: message.useGates,
+      spatialIndex,
+      blockedSystemIds,
+    };
     const result = RouteCore.findRoute({ ...base, mode });
     const fuelBest = mode === "fuel" ? result : RouteCore.findRoute({ ...base, mode: "fuel" });
     self.postMessage({ type: "route", requestId: message.requestId, result: resultForMessage(result, fuelBest) });

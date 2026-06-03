@@ -54,6 +54,7 @@ const els = {
   destination: document.getElementById("destination"),
   originSuggestions: document.getElementById("originSuggestions"),
   destinationSuggestions: document.getElementById("destinationSuggestions"),
+  avoidSystems: document.getElementById("avoidSystems"),
   jumpRange: document.getElementById("jumpRange"),
   useGates: document.getElementById("useGates"),
   metrics: document.getElementById("metrics"),
@@ -313,6 +314,40 @@ function parseSystem(value) {
   return state.systemsByName.get(String(value).trim().toLowerCase());
 }
 
+function parseAvoidSystems(value) {
+  const blockedIds = [];
+  const unresolved = [];
+  const seen = new Set();
+  const entries = String(value || "")
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  entries.forEach((entry) => {
+    const system = parseSystem(entry);
+    if (!system) {
+      unresolved.push(entry);
+      return;
+    }
+    if (seen.has(system.id)) return;
+    seen.add(system.id);
+    blockedIds.push(system.id);
+  });
+
+  return { blockedIds, unresolved };
+}
+
+function normalizeAvoidSystemsField() {
+  const parsed = parseAvoidSystems(els.avoidSystems.value);
+  if (parsed.blockedIds.length) {
+    const systems = parsed.blockedIds.map((id) => state.systemsById.get(id)).filter(Boolean);
+    els.avoidSystems.value = systems.map((system) => formatSystem(system)).join("\n");
+  } else if (!parsed.unresolved.length) {
+    els.avoidSystems.value = "";
+  }
+  return parsed;
+}
+
 function formatSystem(system) {
   return system ? system.name : "";
 }
@@ -435,6 +470,7 @@ function resolveRouteFieldsToNames() {
   const destination = parseSystem(els.destination.value);
   if (origin) els.origin.value = formatSystem(origin);
   if (destination) els.destination.value = formatSystem(destination);
+  normalizeAvoidSystemsField();
 }
 
 function escapeHtml(value) {
@@ -947,11 +983,15 @@ function routeShareUrl() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
   if (!origin || !destination) return "";
+  const avoid = normalizeAvoidSystemsField();
   const params = new URLSearchParams();
   params.set("system1", String(origin.id));
   params.set("system2", String(destination.id));
   params.set("jumpDistance", String(Number(els.jumpRange.value || 120)));
   params.set("optimize", new FormData(els.form).get("optimize") || "fuel");
+  if (avoid.blockedIds.length) {
+    params.set("avoid", avoid.blockedIds.join(","));
+  }
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -985,9 +1025,11 @@ function loadUrlParams() {
   const destination = params.get("system2");
   const jump = params.get("jumpDistance");
   const optimize = params.get("optimize");
+  const avoid = params.get("avoid");
   if (origin) els.origin.value = origin;
   if (destination) els.destination.value = destination;
   if (jump) els.jumpRange.value = jump;
+  if (avoid) els.avoidSystems.value = avoid.split(",").join("\n");
   if (["fuel", "jumps"].includes(optimize)) {
     document.querySelector(`[name="optimize"][value="${optimize}"]`).checked = true;
   }
@@ -1003,7 +1045,7 @@ function hydrateWorkerRouteResult(result) {
   };
 }
 
-function findRouteInMain(origin, destination, mode, range) {
+function findRouteInMain(origin, destination, mode, range, blockedSystemIds) {
   const systemsById = state.systemsById;
   const gateAdjacency = RouteCore.buildGateAdjacency(systemsById, state.gates);
   if (!state.spatialIndexes.has(range)) {
@@ -1018,6 +1060,7 @@ function findRouteInMain(origin, destination, mode, range) {
     range,
     useGates: els.useGates.checked,
     spatialIndex: state.spatialIndexes.get(range),
+    blockedSystemIds,
   };
   const result = RouteCore.findRoute({ ...base, mode });
   const fuelBest = mode === "fuel" ? result : RouteCore.findRoute({ ...base, mode: "fuel" });
@@ -1025,7 +1068,7 @@ function findRouteInMain(origin, destination, mode, range) {
   return result;
 }
 
-async function calculateRoute(origin, destination, mode, range) {
+async function calculateRoute(origin, destination, mode, range, blockedSystemIds) {
   if (routeWorker) {
     await syncRouteWorker();
     const message = await workerMessage({
@@ -1035,10 +1078,11 @@ async function calculateRoute(origin, destination, mode, range) {
       range,
       mode,
       useGates: els.useGates.checked,
+      blockedSystemIds,
     });
     return hydrateWorkerRouteResult(message.result);
   }
-  return findRouteInMain(origin, destination, mode, range);
+  return findRouteInMain(origin, destination, mode, range, blockedSystemIds);
 }
 
 async function calculate() {
@@ -1058,6 +1102,14 @@ async function calculate() {
     return;
   }
   resolveRouteFieldsToNames();
+  const avoid = normalizeAvoidSystemsField();
+  const blockedSystemIds = avoid.blockedIds.filter((id) => id !== origin.id && id !== destination.id);
+  if (avoid.unresolved.length) {
+    renderRouteState("Avoid list has unknown systems", `Could not match: ${avoid.unresolved.slice(0, 3).join(", ")}`, "danger", "Fix");
+    setStatus("Avoid list contains unknown system names or IDs");
+    setCalculating(false);
+    return;
+  }
   selectSystem(origin);
   setStatus("Calculating route");
   renderRouteState("Calculating route", "Checking jump range and available gates.", "", "Wait");
@@ -1069,12 +1121,12 @@ async function calculate() {
   const mode = new FormData(els.form).get("optimize") || "fuel";
   const range = Number(els.jumpRange.value || 120);
   try {
-    let result = await calculateRoute(origin, destination, mode, range);
+    let result = await calculateRoute(origin, destination, mode, range, blockedSystemIds);
     for (let pass = 0; pass < 4 && result; pass++) {
       const added = await discoverGateLinksForRoute(result);
       if (token !== state.routeToken) return;
       if (!added) break;
-      result = await calculateRoute(origin, destination, mode, range);
+      result = await calculateRoute(origin, destination, mode, range, blockedSystemIds);
     }
     renderRoute(result);
     if (result) fitSystems(result.path);
@@ -1101,6 +1153,7 @@ function bindEvents() {
     field.addEventListener("input", scheduleRouteUpdate);
     field.addEventListener("change", scheduleRouteUpdate);
   });
+  els.avoidSystems.addEventListener("change", scheduleRouteUpdate);
   els.jumpRange.addEventListener("input", updateRangePresets);
   els.jumpRange.addEventListener("change", updateRangePresets);
   els.rangePresets.forEach((button) => {

@@ -76,6 +76,47 @@ test("route search falls back to jump links when gates are disabled", () => {
   assert.equal(result.edges.every((edge) => !edge.gate), true);
 });
 
+test("route search avoids blocked intermediate systems", () => {
+  const routeSystems = [
+    { id: 30, name: "Start", x: 0, y: 0, z: 0 },
+    { id: 31, name: "Blocked", x: 10, y: 0, z: 0 },
+    { id: 32, name: "North", x: 0, y: 10, z: 0 },
+    { id: 33, name: "East", x: 10, y: 10, z: 0 },
+    { id: 34, name: "End", x: 20, y: 10, z: 0 },
+  ];
+  const systemsById = new Map(routeSystems.map((system) => [system.id, system]));
+  const result = RouteCore.findRoute({
+    systems: routeSystems,
+    systemsById,
+    gateAdjacency: new Map(),
+    spatialIndex: RouteCore.makeSpatialIndex(routeSystems, 15),
+    origin: routeSystems[0],
+    destination: routeSystems[4],
+    range: 15,
+    mode: "jumps",
+    useGates: false,
+    blockedSystemIds: [31],
+  });
+
+  assert.deepEqual(result.path.map((system) => system.id), [30, 33, 34]);
+  assert.equal(result.path.some((system) => system.id === 31), false);
+});
+
+test("route search never blocks the chosen endpoints", () => {
+  const context = routeContext();
+  const result = RouteCore.findRoute({
+    ...context,
+    origin: systems[0],
+    destination: systems[2],
+    range: 11,
+    mode: "jumps",
+    useGates: false,
+    blockedSystemIds: [1, 3],
+  });
+
+  assert.deepEqual(result.path.map((system) => system.id), [1, 2, 3]);
+});
+
 test("fuel score compares the selected route to the fuel-best route", () => {
   const fuelBest = { edges: [{ distance: 10, gate: false }] };
   const selected = { edges: [{ distance: 20, gate: false }] };
