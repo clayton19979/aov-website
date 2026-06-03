@@ -23,6 +23,7 @@ function resultForMessage(result, fuelBest) {
     pathIds: result.path.map((system) => system.id),
     edges: result.edges.map(edgeForMessage),
     cost: result.cost,
+    fuelBestCost: fuelBest?.cost ?? result.cost,
     fuelScore: RouteCore.fuelScore(result, fuelBest),
   };
 }

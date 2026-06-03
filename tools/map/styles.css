@@ -206,7 +206,7 @@ h3 {
 
 .system-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -215,6 +215,14 @@ h3 {
   height: 34px;
   font-size: 0.74rem;
   font-weight: 800;
+}
+
+.field-note {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-transform: none;
 }
 
 .control-panel {
@@ -541,6 +549,10 @@ textarea:focus {
 
 .route-chip.jump {
   color: var(--accent);
+}
+
+.route-chip.stop {
+  color: #8bc8ff;
 }
 
 .route-chip.smart {

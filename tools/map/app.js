@@ -26,6 +26,7 @@ const state = {
   bounds: null,
   route: [],
   routeEdges: [],
+  routeCheckpoints: [],
   gates: [],
   gateAdjacency: new Map(),
   gatesLoaded: false,
@@ -52,6 +53,7 @@ const els = {
   form: document.getElementById("routeForm"),
   origin: document.getElementById("origin"),
   destination: document.getElementById("destination"),
+  waypoints: document.getElementById("waypoints"),
   originSuggestions: document.getElementById("originSuggestions"),
   destinationSuggestions: document.getElementById("destinationSuggestions"),
   avoidSystems: document.getElementById("avoidSystems"),
@@ -67,6 +69,7 @@ const els = {
   shareRoute: document.getElementById("shareRoute"),
   shareLink: document.getElementById("shareLink"),
   setOrigin: document.getElementById("setOrigin"),
+  addWaypoint: document.getElementById("addWaypoint"),
   setDestination: document.getElementById("setDestination"),
   centerSystem: document.getElementById("centerSystem"),
   rangePresets: document.querySelectorAll(".range-presets button"),
@@ -110,6 +113,7 @@ function updateRouteActions() {
 function updateSystemActions() {
   const hasSelection = Boolean(state.selected);
   els.setOrigin.disabled = !hasSelection;
+  els.addWaypoint.disabled = !hasSelection;
   els.setDestination.disabled = !hasSelection;
   els.centerSystem.disabled = !hasSelection;
 }
@@ -314,36 +318,39 @@ function parseSystem(value) {
   return state.systemsByName.get(String(value).trim().toLowerCase());
 }
 
+function parseResolvedSystemsField(value) {
+  return RoutePlan.resolveSystems(value, parseSystem);
+}
+
 function parseAvoidSystems(value) {
-  const blockedIds = [];
-  const unresolved = [];
-  const seen = new Set();
-  const entries = String(value || "")
-    .split(/[\n,]+/)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  const resolved = parseResolvedSystemsField(value);
+  return {
+    blockedIds: resolved.systems.map((system) => system.id),
+    unresolved: resolved.unresolved,
+  };
+}
 
-  entries.forEach((entry) => {
-    const system = parseSystem(entry);
-    if (!system) {
-      unresolved.push(entry);
-      return;
-    }
-    if (seen.has(system.id)) return;
-    seen.add(system.id);
-    blockedIds.push(system.id);
-  });
-
-  return { blockedIds, unresolved };
+function parseWaypoints(value) {
+  return parseResolvedSystemsField(value);
 }
 
 function normalizeAvoidSystemsField() {
   const parsed = parseAvoidSystems(els.avoidSystems.value);
   if (parsed.blockedIds.length) {
     const systems = parsed.blockedIds.map((id) => state.systemsById.get(id)).filter(Boolean);
-    els.avoidSystems.value = systems.map((system) => formatSystem(system)).join("\n");
+    els.avoidSystems.value = RoutePlan.normalizeSystemsText(systems, formatSystem);
   } else if (!parsed.unresolved.length) {
     els.avoidSystems.value = "";
+  }
+  return parsed;
+}
+
+function normalizeWaypointField() {
+  const parsed = parseWaypoints(els.waypoints.value);
+  if (parsed.systems.length) {
+    els.waypoints.value = RoutePlan.normalizeSystemsText(parsed.systems, formatSystem);
+  } else if (!parsed.unresolved.length) {
+    els.waypoints.value = "";
   }
   return parsed;
 }
@@ -470,6 +477,7 @@ function resolveRouteFieldsToNames() {
   const destination = parseSystem(els.destination.value);
   if (origin) els.origin.value = formatSystem(origin);
   if (destination) els.destination.value = formatSystem(destination);
+  normalizeWaypointField();
   normalizeAvoidSystemsField();
 }
 
@@ -485,6 +493,7 @@ function escapeHtml(value) {
 function renderRouteState(title, detail, tone = "", chip = "Idle") {
   state.route = [];
   state.routeEdges = [];
+  state.routeCheckpoints = [];
   state.activeRouteIndex = -1;
   els.steps.innerHTML = `<li><span class="step-index ${tone}">${tone === "danger" ? "!" : "-"}</span><div><strong class="${tone}">${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></div><span class="route-chip">${escapeHtml(chip)}</span></li>`;
   els.metrics.innerHTML = `<div><span>Systems</span><strong>--</strong></div><div><span>Jump distance</span><strong>--</strong></div><div><span>Fuel efficiency score</span><strong>--</strong></div>`;
@@ -492,8 +501,16 @@ function renderRouteState(title, detail, tone = "", chip = "Idle") {
   draw();
 }
 
-function routeChip(edge, index) {
-  if (!index) return `<span class="route-chip">Start</span>`;
+function checkpointLabel(point) {
+  if (!point) return "";
+  if (point.type === "origin") return "Start";
+  if (point.type === "destination") return "End";
+  return `Via ${point.order}`;
+}
+
+function routeChip(edge, index, result) {
+  const checkpoint = result?.checkpoints?.find((point) => point.pathIndex === index);
+  if (checkpoint) return `<span class="route-chip stop">${escapeHtml(checkpointLabel(checkpoint))}</span>`;
   if (edge?.gate && edge.kind === "game") return `<span class="route-chip game">Game ${edge.count || 1}</span>`;
   if (edge?.gate) return `<span class="route-chip smart">Smart</span>`;
   return `<span class="route-chip jump">Jump</span>`;
@@ -502,6 +519,7 @@ function routeChip(edge, index) {
 function renderRoute(result) {
   state.route = result?.path ?? [];
   state.routeEdges = result?.edges ?? [];
+  state.routeCheckpoints = result?.checkpoints ?? [];
   state.activeRouteIndex = -1;
   els.steps.innerHTML = "";
 
@@ -530,7 +548,7 @@ function renderRoute(result) {
         <strong>${safeName}</strong>
         <small>Region ${system.regionId}${edge?.gate ? ` - ${edge.kind === "game" ? "Game Gate" : "Smart Gate"}` : edge ? ` - ${edge.distance.toFixed(1)} LY` : " - depart"}</small>
       </div>
-      ${routeChip(edge, index)}
+      ${routeChip(edge, index, result)}
     `;
     li.dataset.systemId = String(system.id);
     li.addEventListener("mouseenter", () => {
@@ -586,6 +604,16 @@ function centerOnSystem(system) {
 function setSelectedRouteField(field) {
   if (!state.selected) return;
   field.value = formatSystem(state.selected);
+  if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
+}
+
+function addSelectedWaypoint() {
+  if (!state.selected) return;
+  const parsed = parseWaypoints(els.waypoints.value);
+  if (!parsed.systems.some((system) => system.id === state.selected.id)) {
+    parsed.systems.push(state.selected);
+  }
+  els.waypoints.value = RoutePlan.normalizeSystemsText(parsed.systems, formatSystem);
   if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
 }
 
@@ -940,6 +968,10 @@ function systemLink(system) {
 
 function routeClipboardText() {
   if (!state.route.length) return "";
+  const plannedStops = [parseSystem(els.origin.value)]
+    .concat(parseWaypoints(els.waypoints.value).systems)
+    .concat([parseSystem(els.destination.value)])
+    .filter(Boolean);
   const start = state.route[0];
   const end = state.route[state.route.length - 1];
   const parts = [systemLink(start)];
@@ -951,7 +983,7 @@ function routeClipboardText() {
   }
 
   return [
-    `${start.name} -> ${end.name}`,
+    plannedStops.map((system) => system.name).join(" -> ") || `${start.name} -> ${end.name}`,
     "Gate: (x)-> SmartGate: []-> Jump: ly->",
     parts.join(""),
   ].join("\n");
@@ -983,12 +1015,17 @@ function routeShareUrl() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
   if (!origin || !destination) return "";
+  const waypoints = normalizeWaypointField();
   const avoid = normalizeAvoidSystemsField();
+  if (waypoints.unresolved.length || avoid.unresolved.length) return "";
   const params = new URLSearchParams();
   params.set("system1", String(origin.id));
   params.set("system2", String(destination.id));
   params.set("jumpDistance", String(Number(els.jumpRange.value || 120)));
   params.set("optimize", new FormData(els.form).get("optimize") || "fuel");
+  if (waypoints.systems.length) {
+    params.set("via", waypoints.systems.map((system) => system.id).join(","));
+  }
   if (avoid.blockedIds.length) {
     params.set("avoid", avoid.blockedIds.join(","));
   }
@@ -1025,10 +1062,12 @@ function loadUrlParams() {
   const destination = params.get("system2");
   const jump = params.get("jumpDistance");
   const optimize = params.get("optimize");
+  const via = params.get("via");
   const avoid = params.get("avoid");
   if (origin) els.origin.value = origin;
   if (destination) els.destination.value = destination;
   if (jump) els.jumpRange.value = jump;
+  if (via) els.waypoints.value = via.split(",").join("\n");
   if (avoid) els.avoidSystems.value = avoid.split(",").join("\n");
   if (["fuel", "jumps"].includes(optimize)) {
     document.querySelector(`[name="optimize"][value="${optimize}"]`).checked = true;
@@ -1041,6 +1080,7 @@ function hydrateWorkerRouteResult(result) {
     path: result.pathIds.map((id) => state.systemsById.get(id)).filter(Boolean),
     edges: result.edges || [],
     cost: result.cost,
+    fuelBestCost: result.fuelBestCost,
     fuelScore: result.fuelScore ?? 100,
   };
 }
@@ -1064,7 +1104,10 @@ function findRouteInMain(origin, destination, mode, range, blockedSystemIds) {
   };
   const result = RouteCore.findRoute({ ...base, mode });
   const fuelBest = mode === "fuel" ? result : RouteCore.findRoute({ ...base, mode: "fuel" });
-  if (result && fuelBest) result.fuelScore = RouteCore.fuelScore(result, fuelBest);
+  if (result && fuelBest) {
+    result.fuelBestCost = fuelBest.cost;
+    result.fuelScore = RouteCore.fuelScore(result, fuelBest);
+  }
   return result;
 }
 
@@ -1085,6 +1128,17 @@ async function calculateRoute(origin, destination, mode, range, blockedSystemIds
   return findRouteInMain(origin, destination, mode, range, blockedSystemIds);
 }
 
+async function calculateLegRoute(leg, mode, range, blockedSystemIds, token) {
+  let result = await calculateRoute(leg.origin, leg.destination, mode, range, blockedSystemIds);
+  for (let pass = 0; pass < 4 && result; pass++) {
+    const added = await discoverGateLinksForRoute(result);
+    if (token !== state.routeToken) return null;
+    if (!added) break;
+    result = await calculateRoute(leg.origin, leg.destination, mode, range, blockedSystemIds);
+  }
+  return result;
+}
+
 async function calculate() {
   const token = ++state.routeToken;
   setCalculating(true);
@@ -1102,8 +1156,15 @@ async function calculate() {
     return;
   }
   resolveRouteFieldsToNames();
+  const waypoints = normalizeWaypointField();
   const avoid = normalizeAvoidSystemsField();
   const blockedSystemIds = avoid.blockedIds.filter((id) => id !== origin.id && id !== destination.id);
+  if (waypoints.unresolved.length) {
+    renderRouteState("Via list has unknown systems", `Could not match: ${waypoints.unresolved.slice(0, 3).join(", ")}`, "danger", "Fix");
+    setStatus("Via list contains unknown system names or IDs");
+    setCalculating(false);
+    return;
+  }
   if (avoid.unresolved.length) {
     renderRouteState("Avoid list has unknown systems", `Could not match: ${avoid.unresolved.slice(0, 3).join(", ")}`, "danger", "Fix");
     setStatus("Avoid list contains unknown system names or IDs");
@@ -1120,16 +1181,46 @@ async function calculate() {
   }
   const mode = new FormData(els.form).get("optimize") || "fuel";
   const range = Number(els.jumpRange.value || 120);
+  const plan = RoutePlan.buildRoutePlan(origin, destination, waypoints.systems);
   try {
-    let result = await calculateRoute(origin, destination, mode, range, blockedSystemIds);
-    for (let pass = 0; pass < 4 && result; pass++) {
-      const added = await discoverGateLinksForRoute(result);
-      if (token !== state.routeToken) return;
-      if (!added) break;
-      result = await calculateRoute(origin, destination, mode, range, blockedSystemIds);
+    if (!plan.legs.length) {
+      renderRoute({
+        path: [origin],
+        edges: [],
+        checkpoints: [{ pathIndex: 0, systemId: origin.id, type: "origin", order: 0 }],
+        cost: 0,
+        fuelBestCost: 0,
+        fuelScore: 100,
+      });
+      fitSystems([origin]);
+      return;
     }
-    renderRoute(result);
-    if (result) fitSystems(result.path);
+    const segments = [];
+    for (const leg of plan.legs) {
+      const result = await calculateLegRoute(leg, mode, range, blockedSystemIds, token);
+      if (token !== state.routeToken) return;
+      if (!result) {
+        renderRouteState(
+          `No route found for leg ${leg.legIndex + 1}`,
+          `${leg.origin.name} -> ${leg.destination.name}`,
+          "danger",
+          "Check",
+        );
+        setStatus(`No route found between ${leg.origin.name} and ${leg.destination.name}`);
+        return;
+      }
+      segments.push(result);
+    }
+
+    const merged = RoutePlan.mergeRouteSegments(segments);
+    if (merged) {
+      merged.fuelScore = RouteCore.fuelScore(
+        { cost: merged.cost, edges: merged.edges },
+        { cost: merged.fuelBestCost, edges: [] },
+      );
+    }
+    renderRoute(merged);
+    if (merged) fitSystems(merged.path);
   } finally {
     if (token === state.routeToken) setCalculating(false);
   }
@@ -1153,6 +1244,7 @@ function bindEvents() {
     field.addEventListener("input", scheduleRouteUpdate);
     field.addEventListener("change", scheduleRouteUpdate);
   });
+  els.waypoints.addEventListener("change", scheduleRouteUpdate);
   els.avoidSystems.addEventListener("change", scheduleRouteUpdate);
   els.jumpRange.addEventListener("input", updateRangePresets);
   els.jumpRange.addEventListener("change", updateRangePresets);
@@ -1189,6 +1281,7 @@ function bindEvents() {
   els.shareRoute.addEventListener("click", copyShareLinkToClipboard);
   els.shareLink.addEventListener("click", copyShareLinkToClipboard);
   els.setOrigin.addEventListener("click", () => setSelectedRouteField(els.origin));
+  els.addWaypoint.addEventListener("click", addSelectedWaypoint);
   els.setDestination.addEventListener("click", () => setSelectedRouteField(els.destination));
   els.centerSystem.addEventListener("click", () => centerOnSystem(state.selected));
 

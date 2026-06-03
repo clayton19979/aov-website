@@ -20,6 +20,12 @@ Route links support the same core shape as common Frontier planners:
 
 `?system1=30001573&system2=30013956&jumpDistance=120&optimize=fuel&avoid=30001844,30002270`
 
+Multi-stop routes also support:
+
+`?system1=30001573&via=30001844,30003190&system2=30013956&jumpDistance=120&optimize=jumps`
+
+Use the `Via systems` field to force ordered intermediate stops. Duplicate entries are ignored, the route is calculated leg-by-leg, and share links preserve the selected stop order.
+
 ## Avoid Systems
 
 Use the `Avoid systems` field to exclude hostile or undesirable stops by name or system ID. Separate entries with commas or new lines. The planner ignores duplicates, keeps the selected origin and destination routable even if they appear in the avoid list, and includes the normalized `avoid` IDs in share links.
