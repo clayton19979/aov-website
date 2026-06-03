@@ -1,4 +1,5 @@
 import { Metadata } from 'next'
+import Link from 'next/link'
 import { LoginButton } from '@/components/auth/LoginButton'
 
 export const metadata: Metadata = {
@@ -41,12 +42,12 @@ export default function LoginPage() {
         <LoginButton />
 
         {/* Back to landing */}
-        <a
+        <Link
           href="/"
           className="font-mono text-xs tracking-widest uppercase text-white/15 hover:text-white/30 transition-colors"
         >
           ← Return
-        </a>
+        </Link>
       </div>
 
       {/* Bottom bar */}

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { StarField } from '@/components/landing/StarField'
 import { VoidEclipse } from '@/components/landing/VoidEclipse'
 import { DiscordCTA } from '@/components/landing/DiscordCTA'
@@ -52,12 +53,12 @@ export default function LandingPage() {
         <DiscordCTA />
 
         {/* Member access */}
-        <a
+        <Link
           href="/login"
           className="inline-flex items-center gap-2 border border-void-teal/20 hover:border-void-teal/50 px-6 py-2 font-mono text-xs tracking-widest uppercase text-void-teal/50 hover:text-void-teal transition-all duration-300"
         >
           ◈ Member Access
-        </a>
+        </Link>
       </div>
 
       {/* Bottom bar */}
