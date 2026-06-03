@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BaseSnapshot, ChainObject, buildRealWarnings, getKpis, getStatus } from "./baseOps";
+import { BaseSnapshot, ChainObject, buildRealWarnings, getKpis, getStatus, parseSnapshotPayload, serializeSnapshot } from "./baseOps";
 
 const node: ChainObject = {
   id: "0xnode",
@@ -100,5 +100,24 @@ describe("real chain snapshot helpers", () => {
 
     expect(warnings.some((warning) => warning.id === "0xassembly-offline")).toBe(true);
     expect(warnings.some((warning) => warning.id === "0xstorage-0xkey-capacity")).toBe(true);
+  });
+
+  it("serializes and parses exported snapshots", () => {
+    const exported = serializeSnapshot(snapshot);
+    const parsed = parseSnapshotPayload(JSON.parse(exported));
+
+    expect(parsed).toEqual(snapshot);
+  });
+
+  it("parses raw snapshot objects without an export envelope", () => {
+    const parsed = parseSnapshotPayload(snapshot);
+
+    expect(parsed.character).toBeNull();
+    expect(parsed.objects).toHaveLength(3);
+    expect(parsed.objects[2].inventories[0].items[0].name).toBe("Common Ore");
+  });
+
+  it("rejects malformed snapshot payloads", () => {
+    expect(() => parseSnapshotPayload({ hello: "world" })).toThrow("missing required top-level fields");
   });
 });

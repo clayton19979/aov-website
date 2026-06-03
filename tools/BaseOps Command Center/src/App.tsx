@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useConnection } from "@evefrontier/dapp-kit";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import {
   BaseSnapshot,
   ChainObject,
@@ -33,6 +33,8 @@ import {
   getFuelEta,
   getKpis,
   getStatus,
+  parseSnapshotPayload,
+  serializeSnapshot,
   shortAddress,
 } from "./data/baseOps";
 
@@ -43,9 +45,16 @@ const severityLabel: Record<Severity, string> = {
   stable: "Stable",
 };
 
+const SNAPSHOT_CACHE_KEY = "baseops-command-center:last-snapshot";
+type SnapshotSource = "live" | "cached" | "imported";
+
 function App() {
   const { isConnected, walletAddress, hasEveVault, handleConnect, handleDisconnect } = useConnection();
   const [ownerInput, setOwnerInput] = useState(DEFAULT_OWNER);
+  const [importedSnapshot, setImportedSnapshot] = useState<BaseSnapshot | null>(null);
+  const [cachedSnapshot, setCachedSnapshot] = useState<BaseSnapshot | null>(() => loadStoredSnapshot());
+  const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const activeOwner = walletAddress || ownerInput || DEFAULT_OWNER;
 
   const snapshotQuery = useQuery({
@@ -54,7 +63,21 @@ function App() {
     refetchOnWindowFocus: false,
   });
 
-  const snapshot = snapshotQuery.data;
+  const liveSnapshot = snapshotQuery.data;
+  useEffect(() => {
+    if (!liveSnapshot) return;
+    setCachedSnapshot(liveSnapshot);
+    storeSnapshot(liveSnapshot);
+  }, [liveSnapshot]);
+
+  const snapshot = importedSnapshot ?? liveSnapshot ?? cachedSnapshot;
+  const snapshotSource: SnapshotSource | null = importedSnapshot
+    ? "imported"
+    : liveSnapshot
+      ? "live"
+      : cachedSnapshot
+        ? "cached"
+        : null;
   const kpis = snapshot ? getKpis(snapshot) : null;
   const warnings = snapshot ? buildRealWarnings(snapshot) : [];
   const objects = snapshot?.objects ?? [];
@@ -64,6 +87,38 @@ function App() {
   const assemblies = objects.filter((object) => object.kind === "Assembly");
   const storageUsedPercent =
     kpis && kpis.totalMaxCapacity > 0 ? `${Math.round((kpis.totalUsedCapacity / kpis.totalMaxCapacity) * 100)}%` : "Unavailable";
+
+  function handleExportSnapshot() {
+    if (!snapshot) return;
+    const blob = new Blob([serializeSnapshot(snapshot)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `baseops-snapshot-${snapshot.ownerAddress.slice(0, 10)}-${Date.now()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setSnapshotMessage(`Exported ${snapshotSource ?? "snapshot"} JSON.`);
+  }
+
+  async function handleImportSnapshot(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = parseSnapshotPayload(JSON.parse(text));
+      setImportedSnapshot(parsed);
+      setSnapshotMessage(`Imported snapshot for ${shortAddress(parsed.ownerAddress)}.`);
+    } catch (error) {
+      setSnapshotMessage(error instanceof Error ? error.message : "Snapshot import failed.");
+    }
+  }
+
+  function handleReturnToLive() {
+    setImportedSnapshot(null);
+    setSnapshotMessage(liveSnapshot ? "Returned to live chain view." : "Showing the last cached live snapshot.");
+  }
 
   return (
     <main className="app-shell">
@@ -105,6 +160,24 @@ function App() {
             <Wallet size={17} aria-hidden="true" />
             <span>{isConnected ? "Disconnect" : "Connect"}</span>
           </button>
+          <button className="action-button" type="button" onClick={() => importInputRef.current?.click()}>
+            Import Snapshot
+          </button>
+          <button className="action-button" type="button" onClick={handleExportSnapshot} disabled={!snapshot}>
+            Export Snapshot
+          </button>
+          {importedSnapshot ? (
+            <button className="action-button" type="button" onClick={handleReturnToLive}>
+              Return To Live
+            </button>
+          ) : null}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden-file-input"
+            onChange={handleImportSnapshot}
+          />
         </div>
       </header>
 
@@ -114,6 +187,12 @@ function App() {
           label={isConnected ? `EVE Vault ${shortAddress(walletAddress ?? "")}` : "EVE Vault not connected"}
         />
         <StatusPill severity="info" label="Live Sui testnet / Stillness" />
+        {snapshotSource ? (
+          <StatusPill
+            severity={snapshotSource === "live" ? "stable" : snapshotSource === "imported" ? "warning" : "info"}
+            label={snapshotSource === "live" ? "Viewing live snapshot" : snapshotSource === "imported" ? "Viewing imported snapshot" : "Viewing cached snapshot"}
+          />
+        ) : null}
         <span className="timestamp">
           {snapshot?.generatedAt
             ? `Updated ${new Date(snapshot.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
@@ -121,14 +200,35 @@ function App() {
         </span>
       </section>
 
+      {snapshotMessage ? <Notice title="Snapshot status" detail={snapshotMessage} severity="info" /> : null}
+
+      {snapshotSource === "cached" && !snapshotQuery.isLoading ? (
+        <Notice
+          title="Showing cached live data"
+          detail="The last successful live snapshot is loaded from this browser until the chain request succeeds again."
+          severity="info"
+        />
+      ) : null}
+
+      {snapshotSource === "imported" ? (
+        <Notice
+          title="Showing imported snapshot"
+          detail="This view is pinned to the imported JSON until you return to the live chain stream."
+          severity="warning"
+        />
+      ) : null}
+
       {snapshotQuery.isError ? (
         <Notice
           title="Could not load chain data"
           detail={snapshotQuery.error instanceof Error ? snapshotQuery.error.message : "The Sui GraphQL request failed."}
+          severity="critical"
         />
       ) : null}
 
-      {snapshotQuery.isLoading ? <Notice title="Loading real wallet data" detail="Fetching the character and owned smart assemblies from Sui GraphQL." /> : null}
+      {snapshotQuery.isLoading && !snapshot ? (
+        <Notice title="Loading real wallet data" detail="Fetching the character and owned smart assemblies from Sui GraphQL." severity="info" />
+      ) : null}
 
       {snapshot ? (
         <>
@@ -406,9 +506,9 @@ function Panel({
   );
 }
 
-function Notice({ title, detail }: { title: string; detail: string }) {
+function Notice({ title, detail, severity = "warning" }: { title: string; detail: string; severity?: Severity }) {
   return (
-    <section className="notice">
+    <section className={`notice tone-${severity}`}>
       <AlertTriangle size={18} aria-hidden="true" />
       <div>
         <h2>{title}</h2>
@@ -467,3 +567,25 @@ function StatusPill({ severity, label }: { severity: Severity; label: string }) 
 }
 
 export default App;
+
+function loadStoredSnapshot(): BaseSnapshot | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(SNAPSHOT_CACHE_KEY);
+    if (!raw) return null;
+    return parseSnapshotPayload(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function storeSnapshot(snapshot: BaseSnapshot) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(SNAPSHOT_CACHE_KEY, serializeSnapshot(snapshot));
+  } catch {
+    // Ignore storage failures and keep the live snapshot in memory only.
+  }
+}

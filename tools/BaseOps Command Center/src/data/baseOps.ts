@@ -122,6 +122,12 @@ export type RealWarning = {
   detail: string;
 };
 
+export type SnapshotExport = {
+  version: 1;
+  exportedAt: string;
+  snapshot: BaseSnapshot;
+};
+
 const GET_CHARACTER_AND_OWNED_OBJECTS = `
 query GetCharacterAndOwnedObjects($owner: SuiAddress!, $characterPlayerProfileType: String!) {
   address(address: $owner) {
@@ -282,6 +288,7 @@ type DatahubTypeInfo = {
 };
 
 const typeNameCache = new Map<string, string>();
+const SNAPSHOT_EXPORT_VERSION = 1;
 
 async function executeGraphQLQuery<T>(
   query: string,
@@ -508,6 +515,48 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
 }
 
+export function serializeSnapshot(snapshot: BaseSnapshot): string {
+  const payload: SnapshotExport = {
+    version: SNAPSHOT_EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    snapshot,
+  };
+
+  return JSON.stringify(payload, null, 2);
+}
+
+export function parseSnapshotPayload(payload: unknown): BaseSnapshot {
+  const snapshotSource =
+    isRecord(payload) && "snapshot" in payload && isRecord(payload.snapshot) ? payload.snapshot : payload;
+
+  if (!isRecord(snapshotSource)) {
+    throw new Error("Snapshot payload is not a JSON object.");
+  }
+
+  const ownerAddress = readString(snapshotSource.ownerAddress);
+  const generatedAt = readString(snapshotSource.generatedAt);
+  const network = readString(snapshotSource.network);
+  const tenant = readString(snapshotSource.tenant);
+
+  if (!ownerAddress || !generatedAt || !network || !tenant) {
+    throw new Error("Snapshot payload is missing required top-level fields.");
+  }
+
+  if (network !== "testnet") {
+    throw new Error(`Unsupported snapshot network "${network}".`);
+  }
+
+  return {
+    ownerAddress,
+    generatedAt,
+    network,
+    tenant,
+    character: parseCharacterSnapshot(snapshotSource.character),
+    objects: readArray(snapshotSource.objects).map(parseChainObject),
+    errors: readStringArray(snapshotSource.errors),
+  };
+}
+
 function parseCharacter(json: RawObjectJson, ownerAddress: string): CharacterSnapshot {
   return {
     id: json.id ?? "",
@@ -517,6 +566,79 @@ function parseCharacter(json: RawObjectJson, ownerAddress: string): CharacterSna
     address: json.character_address ?? ownerAddress,
     name: json.metadata?.name?.trim() || "Unnamed Character",
   } as CharacterSnapshot;
+}
+
+function parseCharacterSnapshot(value: unknown): CharacterSnapshot | null {
+  if (value == null) return null;
+  if (!isRecord(value)) {
+    throw new Error("Snapshot character payload is invalid.");
+  }
+
+  return {
+    id: readString(value.id),
+    itemId: readString(value.itemId),
+    tenant: readString(value.tenant) || EVE_TENANT,
+    tribeId: typeof value.tribeId === "number" && Number.isFinite(value.tribeId) ? value.tribeId : null,
+    address: readString(value.address),
+    name: readString(value.name) || "Unnamed Character",
+  };
+}
+
+function parseChainObject(value: unknown): ChainObject {
+  if (!isRecord(value)) {
+    throw new Error("Snapshot object payload is invalid.");
+  }
+
+  return {
+    id: readString(value.id),
+    typeRepr: readString(value.typeRepr),
+    kind: parseObjectKind(value.kind),
+    json: isRecord(value.json) ? (value.json as RawObjectJson) : {},
+    inventories: readArray(value.inventories).map(parseInventorySnapshot),
+  };
+}
+
+function parseInventorySnapshot(value: unknown): InventorySnapshot {
+  if (!isRecord(value)) {
+    throw new Error("Snapshot inventory payload is invalid.");
+  }
+
+  return {
+    id: readString(value.id),
+    key: readString(value.key),
+    maxCapacity: readNumber(value.maxCapacity),
+    usedCapacity: readNumber(value.usedCapacity),
+    items: readArray(value.items).map(parseInventoryItem),
+  };
+}
+
+function parseInventoryItem(value: unknown): InventoryItem {
+  if (!isRecord(value)) {
+    throw new Error("Snapshot inventory item payload is invalid.");
+  }
+
+  return {
+    key: readString(value.key),
+    tenant: readString(value.tenant),
+    typeId: readString(value.typeId),
+    itemId: readString(value.itemId),
+    name: readString(value.name),
+    volume: readNumber(value.volume),
+    quantity: readNumber(value.quantity),
+  };
+}
+
+function parseObjectKind(value: unknown): ObjectKind {
+  switch (value) {
+    case "Assembly":
+    case "Network Node":
+    case "Storage Unit":
+    case "Smart Gate":
+    case "Character":
+      return value;
+    default:
+      return "Unknown";
+  }
 }
 
 function extractInventories(data: DynamicFieldsResponse | undefined): InventorySnapshot[] {
@@ -587,6 +709,26 @@ function toNumber(value: string | number | undefined): number {
   if (!value) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function readStringArray(value: unknown): string[] {
+  return readArray(value).filter((entry): entry is string => typeof entry === "string");
+}
+
+function readNumber(value: unknown): number {
+  return typeof value === "number" ? (Number.isFinite(value) ? value : 0) : toNumber(typeof value === "string" ? value : undefined);
 }
 
 function severityRank(severity: Severity): number {

@@ -185,7 +185,8 @@ h1 {
 }
 
 .icon-button,
-.wallet-button {
+.wallet-button,
+.action-button {
   min-height: 34px;
   border: 1px solid var(--line);
   border-radius: 0;
@@ -195,7 +196,8 @@ h1 {
 }
 
 .icon-button:hover,
-.wallet-button:hover {
+.wallet-button:hover,
+.action-button:hover {
   border-color: rgba(0, 180, 216, 0.40);
   color: var(--stable);
 }
@@ -216,6 +218,22 @@ h1 {
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  align-self: end;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hidden-file-input {
+  display: none;
 }
 
 .status-band {
@@ -281,6 +299,16 @@ h1 {
   padding: 12px 14px;
   color: var(--warning);
   border-left: 2px solid var(--warning);
+}
+
+.notice.tone-info {
+  color: var(--stable);
+  border-left-color: var(--stable);
+}
+
+.notice.tone-critical {
+  color: var(--critical);
+  border-left-color: var(--critical);
 }
 
 .notice p {
@@ -764,7 +792,8 @@ td {
   }
 
   .icon-button,
-  .wallet-button {
+  .wallet-button,
+  .action-button {
     align-self: stretch;
     justify-content: center;
   }
