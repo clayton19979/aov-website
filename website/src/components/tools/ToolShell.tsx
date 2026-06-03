@@ -11,7 +11,7 @@ type Props = {
 
 export function ToolShell({ tool, children, fullBleed = false, characterName }: Props) {
   return (
-    <div className={`bg-void-black flex flex-col ${fullBleed ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
+    <div className={`bg-void-black flex flex-col ${fullBleed ? 'h-dvh overflow-hidden' : 'min-h-screen'}`}>
       <TopBar characterName={characterName} />
       <div className="border-b border-void-teal/10 px-6 py-3 flex-shrink-0">
         <BackLink href="/tools" label="Tools" />
