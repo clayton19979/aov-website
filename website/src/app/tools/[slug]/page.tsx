@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { tools } from '@/data/tools'
 import { toolComponents } from '@/components/tools/toolComponents'
 import { ToolShell } from '@/components/tools/ToolShell'
+import { getSession } from '@/lib/session'
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -25,12 +26,15 @@ export default async function ToolPage({ params }: Props) {
 
   if (!tool) notFound()
 
-  const ToolComponent = toolComponents[slug]
+  const [session, ToolComponent] = await Promise.all([
+    getSession(),
+    Promise.resolve(toolComponents[slug]),
+  ])
 
   const fullBleed = slug === 'void-map' || slug === 'baseops-command-center'
 
   return (
-    <ToolShell tool={tool} fullBleed={fullBleed}>
+    <ToolShell tool={tool} fullBleed={fullBleed} characterName={session?.characterName}>
       {ToolComponent ? <ToolComponent /> : (
         <div className="font-mono text-xs text-white/20 tracking-widest uppercase px-6 py-8">
           Interface not yet registered.
