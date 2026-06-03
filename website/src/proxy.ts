@@ -19,8 +19,11 @@ export async function proxy(request: NextRequest) {
 
   const sessionToken = request.cookies.get('aov-session')?.value
 
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('next', pathname)
+
   if (!sessionToken) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return NextResponse.redirect(loginUrl)
   }
 
   try {
@@ -28,7 +31,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   } catch {
     // Token invalid or expired
-    const response = NextResponse.redirect(new URL('/login', request.url))
+    const response = NextResponse.redirect(loginUrl)
     response.cookies.delete('aov-session')
     return response
   }

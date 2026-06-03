@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { LoginButton } from '@/components/auth/LoginButton'
 
 export const metadata: Metadata = {
@@ -39,7 +40,9 @@ export default function LoginPage() {
         </p>
 
         {/* Connect button */}
-        <LoginButton />
+        <Suspense>
+          <LoginButton />
+        </Suspense>
 
         {/* Back to landing */}
         <Link

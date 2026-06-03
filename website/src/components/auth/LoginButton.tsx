@@ -7,7 +7,7 @@ import {
   useCurrentAccount,
 } from '@mysten/dapp-kit-react'
 import { checkTribeMembership } from '@/lib/tribe'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 type AuthState =
   | 'idle'           // not connected
@@ -24,6 +24,8 @@ export function LoginButton() {
   const wallets = useWallets()
   const account = useCurrentAccount()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const nextPath = searchParams.get('next') ?? '/hub'
 
   const [state, setState] = useState<AuthState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
@@ -79,7 +81,7 @@ export function LoginButton() {
       }
 
       setState('verified')
-      setTimeout(() => router.push('/hub'), 1200)
+      setTimeout(() => router.push(nextPath), 1200)
     } catch (err) {
       setErrorMessage(String(err))
       setState('error')
