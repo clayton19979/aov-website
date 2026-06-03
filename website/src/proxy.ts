@@ -13,8 +13,8 @@ export async function proxy(request: NextRequest) {
   // Allow static tool assets (public/ directory) without auth
   if (pathname.startsWith('/tools/map/') || pathname.startsWith('/tools/baseops/')) return NextResponse.next()
 
-  // Redirect authenticated users away from /login to avoid re-auth friction
-  if (pathname === '/login') {
+  // Redirect authenticated users away from the landing page and /login to avoid re-auth friction
+  if (pathname === '/' || pathname === '/login') {
     const token = request.cookies.get('aov-session')?.value
     if (token) {
       try {
