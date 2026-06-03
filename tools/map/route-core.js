@@ -81,6 +81,15 @@
       .filter((gate) => gate.from && gate.to && gate.from !== gate.to);
   }
 
+  function gateKey(gate) {
+    const from = Number(gate?.from);
+    const to = Number(gate?.to);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to <= 0 || from === to) {
+      return null;
+    }
+    return `${Math.min(from, to)}:${Math.max(from, to)}:${gate?.kind || "game"}`;
+  }
+
   function makeSpatialIndex(systems, cellSize) {
     const buckets = new Map();
     const key = (x, y, z) => `${x},${y},${z}`;
@@ -257,6 +266,7 @@
     findRoute,
     firstNumber,
     fuelScore,
+    gateKey,
     isGateOnline,
     makeSpatialIndex,
     nearbySystems,

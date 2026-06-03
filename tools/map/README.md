@@ -35,3 +35,7 @@ Only online links are used; rows marked `online: false`, `active: false`, `enabl
 ## Public Smart Gates
 
 Frontier GPS also checks live Stillness Smart Gate assemblies on Sui when gate routing is enabled. A Smart Gate is used only when both paired gates are online, linked, have no extension access logic, and have public Location Registry entries that reveal their solar systems. Extension-restricted gates and gates without public locations are reported in the gate status text but are not used for routing.
+
+## Discovered Gate Cache
+
+When Frontier GPS discovers live `gateLinks` from the World API while calculating a route, it now keeps those links in a local browser cache for 24 hours. That means repeat route calculations can start with a richer gate graph immediately, and temporary World API errors no longer suppress retries for the rest of the session.
