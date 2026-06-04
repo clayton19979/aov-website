@@ -128,3 +128,18 @@ textarea {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Blinking terminal caret (PhraseCycler) ────────────────── */
+@keyframes caret-blink {
+  0%, 45%  { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100%     { opacity: 1; }
+}
+
+.phrase-caret {
+  animation: caret-blink 1.1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phrase-caret { animation: none; }
+}
