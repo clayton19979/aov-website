@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { StarField } from '@/components/landing/StarField'
 import { VoidEclipse } from '@/components/landing/VoidEclipse'
@@ -18,6 +19,7 @@ function fadeUp(delay: number) {
 
 export default function LandingPage() {
   const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
+  const [memberHovered, setMemberHovered] = useState(false)
 
   return (
     <main
@@ -69,7 +71,21 @@ export default function LandingPage() {
         <motion.div {...fadeUp(0.48)}>
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 border border-void-teal/20 hover:border-void-teal/50 px-6 py-2 font-mono text-xs tracking-widest uppercase text-void-teal/50 hover:text-void-teal transition-all duration-300"
+            onMouseEnter={() => setMemberHovered(true)}
+            onMouseLeave={() => setMemberHovered(false)}
+            className="inline-flex items-center gap-2 border px-6 py-2 font-mono text-xs tracking-widest uppercase transition-all duration-300"
+            style={{
+              borderColor: memberHovered
+                ? 'color-mix(in srgb, var(--accent) 50%, transparent)'
+                : 'color-mix(in srgb, var(--accent) 20%, transparent)',
+              color: memberHovered
+                ? 'var(--accent)'
+                : 'color-mix(in srgb, var(--accent) 50%, transparent)',
+              boxShadow: memberHovered
+                ? '0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent), 0 0 18px 4px color-mix(in srgb, var(--accent) 10%, transparent)'
+                : '0 0 10px 1px color-mix(in srgb, var(--accent) 5%, transparent)',
+              transition: 'border-color 300ms ease, color 300ms ease, box-shadow 350ms ease',
+            }}
           >
             ◈ Member Access
           </Link>
