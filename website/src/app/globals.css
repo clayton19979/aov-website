@@ -204,3 +204,27 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .login-portal-glow { animation: none; }
 }
+
+/* ── PhraseCycler: blinking terminal caret ──────────────────── */
+.phrase-caret {
+  animation: caret-blink 1s step-start infinite;
+}
+
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phrase-caret { animation: none; }
+}
+
+/* ── Operations page: standby status-pulse ──────────────────── */
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50%       { opacity: 1;    transform: scale(1.4); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="status-pulse"] { animation: none !important; }
+}
