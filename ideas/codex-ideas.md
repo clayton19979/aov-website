@@ -58,6 +58,14 @@ Entry format:
 - Why it matters: Fleet form-ups and base defense both slow down when supplies are trapped behind one officer's schedule. This would make staging faster, reduce distribution mistakes, and keep a clear record of what has already been issued.
 - Build notes: Load kits into a smart storage unit, define who can claim which package and how often, deliver the items into the player's own inventory, and show remaining stock and claim history in a simple web app.
 
+## Inventory Bridge Assistant
+- Usefulness: 8/10
+- Difficulty: 5/10
+- Source notes: Based on Storage Unit item bridging, where players move items from the game into on-chain inventory and back again, plus the in-game dApp inventory module, dApp kit wallet and smart-object reads, and inventory update events from the world interface docs.
+- Summary: A helper app that shows players which items are ready for storage-unit deals, which items are still sitting in temporary holding, and which items need to be moved back into the game before they can be used normally. In plain English, it makes the "put this item on the programmable side of the game" step visible instead of confusing.
+- Why it matters: Many storage, market, reward, and delivery tools depend on players moving items through this bridge correctly. A simple checklist and status page would prevent failed trades, lost time, and support questions when someone thinks an item is available but it is still in the wrong place.
+- Build notes: Use the dApp kit to identify the selected storage unit and connected character, read the player's temporary and owned inventory state, listen for inventory update events, and show clear next actions for deposit, withdrawal, delivery, or return-to-game steps.
+
 ## Base Fuel and Power Planner
 - Usefulness: 8/10
 - Difficulty: 5/10
@@ -89,6 +97,14 @@ Entry format:
 - Summary: A defense dashboard that warns base owners when trouble enters range and lets them tune what their turrets care about most, such as attackers first, fragile ships first, or specific ship classes. In plain English, it is part security alarm and part "teach my guns what matters" control panel.
 - Why it matters: Frontier defenses are programmable, which means the difference between a good setup and a bad one can be huge. This would help smaller groups react faster to raids and help larger groups standardize smarter base-defense behavior.
 - Build notes: Pull turret status and target changes into a live dashboard, offer simple priority presets for different defense styles, and save those rules back into each turret's custom logic through a web app.
+
+## Structure Handoff Desk
+- Usefulness: 8/10
+- Difficulty: 6/10
+- Source notes: Based on the ownership model where each structure is controlled by an `OwnerCap`, which is a digital keycard for one object, and the docs saying that keycard can be transferred to another player, character, or organization-like address without moving the structure itself.
+- Summary: A transfer desk for safely handing a gate, storage unit, turret, or network node to another trusted owner. It would show exactly what is being transferred, who will control it afterward, and what actions the old owner will lose before the player signs the transaction.
+- Why it matters: Structure ownership mistakes will be expensive. This would help corps sell assets, rotate operators, transfer bases after mergers, or move control from one character to another without relying on screenshots and chat promises.
+- Build notes: Resolve the current character and owned assemblies, identify the selected structure's owner keycard, verify the receiving address or character, build the transfer transaction using the documented owner-cap transfer flow, and save a plain-language receipt for both sides.
 
 ## Access and Permission Checker
 - Usefulness: 7/10
