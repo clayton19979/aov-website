@@ -244,3 +244,28 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   [style*="status-pulse"] { animation: none !important; }
 }
+
+/* ── TopBar: live "ONLINE" status indicator (accent-aware pulse) ─ */
+.status-online-dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: status-online-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes status-online-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    box-shadow: 0 0 3px 0 color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-online-dot {
+    animation: none;
+    opacity: 0.8;
+  }
+}
