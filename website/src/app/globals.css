@@ -128,3 +128,15 @@ textarea {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Standby status pulse (Operations "coming online" cards) ── */
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 0.25;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 7px 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
