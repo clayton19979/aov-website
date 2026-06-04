@@ -38,19 +38,42 @@ export function HubGrid() {
   ]
 
   return (
-    <div className="flex flex-col flex-1 items-center justify-center py-12">
-      <div className="w-full max-w-3xl px-8">
+    <div className="relative flex flex-col flex-1 items-center justify-center py-12">
+      {/* Ambient accent glow — mirrors the landing page atmosphere */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--accent) 3%, transparent) 0%, transparent 55%)',
+        }}
+        aria-hidden="true"
+      />
+
+      <div className="relative w-full max-w-3xl px-8">
         {/* Section label */}
         <div className="flex items-center gap-4 mb-10">
-          <span className="font-mono text-xs tracking-widest text-void-teal/20 uppercase">
+          <span
+            className="font-mono text-xs tracking-widest uppercase"
+            style={{ color: 'color-mix(in srgb, var(--accent) 20%, transparent)' }}
+          >
             Command Hub
           </span>
-          <div className="flex-1 h-px bg-void-teal/10" />
-          <span className="font-mono text-xs text-void-teal/15 select-none">◈</span>
+          <div
+            className="flex-1 h-px"
+            style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)' }}
+          />
+          <span
+            className="font-mono text-xs select-none"
+            style={{ color: 'color-mix(in srgb, var(--accent) 15%, transparent)' }}
+          >
+            ◈
+          </span>
         </div>
 
         {/* Command strips */}
-        <div className="border-t border-void-teal/10">
+        <div
+          className="border-t"
+          style={{ borderTopColor: 'color-mix(in srgb, var(--accent) 10%, transparent)' }}
+        >
           {sections.map((s, i) => (
             <HubQuadrant key={s.href} {...s} index={i} />
           ))}
