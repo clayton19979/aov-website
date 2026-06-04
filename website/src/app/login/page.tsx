@@ -1,8 +1,6 @@
 import { Metadata } from 'next'
-import Link from 'next/link'
-import { Suspense } from 'react'
-import { LoginButton } from '@/components/auth/LoginButton'
 import { StarField } from '@/components/landing/StarField'
+import { LoginContent } from '@/components/auth/LoginContent'
 
 export const metadata: Metadata = {
   title: 'Access — Architects of the Void',
@@ -20,39 +18,7 @@ export default function LoginPage() {
         aria-hidden="true"
       />
 
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center max-w-md">
-        {/* Mark */}
-        <div className="font-mono text-sm tracking-widest text-void-teal">◈ AoV</div>
-
-        {/* Heading */}
-        <div className="flex flex-col gap-3">
-          <h1 className="font-mono text-2xl tracking-widest uppercase text-white/90">
-            Member Access
-          </h1>
-          <p className="font-mono text-xs tracking-widest text-void-teal/60 italic">
-            &quot;AUREX does not promote. AUREX recognizes.&quot;
-          </p>
-        </div>
-
-        {/* Description */}
-        <p className="font-mono text-xs tracking-wide text-white/20 leading-relaxed uppercase">
-          Connect your EVE Vault wallet to verify membership in the Architects of the Void.
-          Only characters belonging to the order may enter.
-        </p>
-
-        {/* Connect button */}
-        <Suspense>
-          <LoginButton />
-        </Suspense>
-
-        {/* Back to landing */}
-        <Link
-          href="/"
-          className="font-mono text-xs tracking-widest uppercase text-white/15 hover:text-white/30 transition-colors"
-        >
-          ← Return
-        </Link>
-      </div>
+      <LoginContent />
 
       {/* Bottom bar */}
       <footer className="absolute bottom-0 inset-x-0 flex items-center justify-between px-6 py-3 border-t border-void-teal/10">
