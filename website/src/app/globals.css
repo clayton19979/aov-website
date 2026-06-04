@@ -173,14 +173,21 @@ textarea {
   to   { transform: rotate(360deg); }
 }
 
-/* ── Standby status pulse (Operations "coming online" cards) ── */
-@keyframes status-pulse {
-  0%, 100% {
-    opacity: 0.25;
-    box-shadow: 0 0 0 0 transparent;
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 7px 1px color-mix(in srgb, var(--accent) 55%, transparent);
-  }
+/* ── Login portal: theme-aware breathing radial glow ────────── */
+.login-portal-glow {
+  background: radial-gradient(
+    ellipse at 50% 40%,
+    color-mix(in srgb, var(--accent) 5%, transparent) 0%,
+    transparent 60%
+  );
+  animation: portal-breathe 7s ease-in-out infinite;
+}
+
+@keyframes portal-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-portal-glow { animation: none; }
 }
