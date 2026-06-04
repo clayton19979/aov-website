@@ -58,6 +58,14 @@ Entry format:
 - Why it matters: Fleet form-ups and base defense both slow down when supplies are trapped behind one officer's schedule. This would make staging faster, reduce distribution mistakes, and keep a clear record of what has already been issued.
 - Build notes: Load kits into a smart storage unit, define who can claim which package and how often, deliver the items into the player's own inventory, and show remaining stock and claim history in a simple web app.
 
+## Item Bridge and Return Tracker
+- Usefulness: 8/10
+- Difficulty: 5/10
+- Source notes: Based on Storage Unit docs saying items must be moved from normal game inventory into the programmable side of the game before storage tools can use them, and can later be returned back to the game, plus inventory events and GraphQL reads in the world interface docs.
+- Summary: A simple tracker that shows which of a player's items are ready for player-made storage apps, markets, missions, or rewards, and which items still need to be moved back into the normal game. In plain English, it prevents players from losing track of goods that are sitting in the "app usable" version of inventory.
+- Why it matters: Many useful Frontier tools depend on items being available to outside apps first. This would save traders, haulers, and quartermasters from confusion when an item is not where they expected it, and it would make storage-based services easier for normal players to trust.
+- Build notes: Connect through EVE Vault, read the player's character and storage-related item events, show clear "in game", "ready for apps", and "returned" status labels, and add reminders for items that have been left in temporary storage too long.
+
 ## Base Fuel and Power Planner
 - Usefulness: 8/10
 - Difficulty: 5/10
