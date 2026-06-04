@@ -67,12 +67,19 @@ export default async function DesignationsPage() {
               {removalDesignations.map(rd => (
                 <div
                   key={rd.name}
-                  className="border border-dashed border-white/10 p-4"
+                  className="group relative border border-dashed border-white/10 p-4 transition-colors duration-300 hover:border-[#ff003c]/40 hover:bg-[#ff003c]/[0.03]"
                 >
-                  <p className="font-mono text-xs tracking-widest uppercase text-white/30 mb-2">
+                  {/* Severance marker — a danger tick that surfaces on hover */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-3 top-3 font-mono text-xs text-[#ff003c]/0 group-hover:text-[#ff003c]/50 transition-colors duration-300 select-none"
+                  >
+                    ✕
+                  </span>
+                  <p className="font-mono text-xs tracking-widest uppercase text-white/30 group-hover:text-[#ff003c]/70 transition-colors duration-300 mb-2">
                     {rd.name}
                   </p>
-                  <p className="font-mono text-xs text-white/20 leading-relaxed tracking-wide">
+                  <p className="font-mono text-xs text-white/20 group-hover:text-white/35 leading-relaxed tracking-wide transition-colors duration-300">
                     {rd.description}
                   </p>
                 </div>
