@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { LoginButton } from '@/components/auth/LoginButton'
+import { StarField } from '@/components/landing/StarField'
 
 export const metadata: Metadata = {
   title: 'Access — Architects of the Void',
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <main className="relative flex flex-col items-center justify-center min-h-screen bg-void-black">
+    <main className="relative flex flex-col items-center justify-center min-h-screen bg-void-black overflow-hidden">
+      {/* Background star field */}
+      <StarField />
+
       {/* Radial glow */}
       <div
         className="absolute inset-0 pointer-events-none"
