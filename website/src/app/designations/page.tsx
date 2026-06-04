@@ -24,8 +24,13 @@ export default async function DesignationsPage() {
 
         <div className="flex flex-col gap-8">
           {tiers.map(tier => (
-            <section key={tier.tier}>
-              <div className="flex items-baseline gap-6 mb-4 pb-3 border-b border-void-teal/10">
+            <section key={tier.tier} className="group/tier">
+              <div className="relative flex items-baseline gap-6 mb-4 pb-3 pl-3 border-b border-void-teal/10 transition-colors duration-300 group-hover/tier:border-void-teal/25">
+                {/* Left accent bar — recurring HUD motif (Hub / ToolCard / NodeCard), brightens on hover */}
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 bottom-3 w-px bg-void-teal/25 transition-colors duration-300 group-hover/tier:bg-void-teal/70"
+                />
                 <span className="font-mono text-xs text-void-teal/30 tracking-widest">
                   TIER {tier.tier}
                 </span>
@@ -35,7 +40,7 @@ export default async function DesignationsPage() {
                 <span className="font-mono text-xs text-white/20 tracking-wide uppercase">
                   {tier.role}
                 </span>
-                <span className="ml-auto font-mono text-xs text-white/15 tracking-widest">
+                <span className="ml-auto font-mono text-xs text-white/25 tracking-widest border border-void-teal/15 px-2 py-0.5 transition-colors duration-300 group-hover/tier:border-void-teal/35 group-hover/tier:text-white/45">
                   {tier.count}
                 </span>
               </div>
