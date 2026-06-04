@@ -23,8 +23,16 @@ export function TopBar({ characterName }: Props) {
         <TopBarNav />
         <div className="flex items-center gap-4">
           <ThemeSwitcher />
-          <span className="font-mono text-xs tracking-widest text-white/20 uppercase">
-            {displayName} · ONLINE
+          <span className="flex items-center gap-2 font-mono text-xs tracking-widest text-white/20 uppercase">
+            <span>{displayName}</span>
+            <span className="text-white/15">·</span>
+            <span className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="status-online-dot inline-block h-1.5 w-1.5 rounded-full"
+              />
+              ONLINE
+            </span>
           </span>
           <LogoutButton />
         </div>
