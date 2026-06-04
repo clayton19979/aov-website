@@ -15,7 +15,7 @@ export function TopBarNav() {
           <Link
             key={link.href}
             href={link.href}
-            className={`relative pb-1 font-mono text-xs tracking-widest uppercase transition-colors duration-200 ${
+            className={`group relative pb-1 font-mono text-xs tracking-widest uppercase transition-colors duration-200 ${
               active
                 ? 'text-void-teal'
                 : 'text-white/20 hover:text-void-teal/60'
@@ -24,12 +24,12 @@ export function TopBarNav() {
             {link.label}
             <span
               aria-hidden="true"
-              className="absolute bottom-0 left-0 right-0 h-px origin-left transition-[transform,opacity] duration-300"
-              style={{
-                background: 'var(--accent)',
-                opacity: active ? 0.65 : 0,
-                transform: active ? 'scaleX(1)' : 'scaleX(0)',
-              }}
+              style={{ background: 'var(--accent)' }}
+              className={`absolute bottom-0 left-0 right-0 h-px origin-left transition-[transform,opacity] duration-300 ${
+                active
+                  ? 'scale-x-100 opacity-[0.65]'
+                  : 'scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-[0.4]'
+              }`}
             />
           </Link>
         )
