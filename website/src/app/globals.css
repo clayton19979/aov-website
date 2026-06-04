@@ -119,6 +119,19 @@ textarea {
   cursor: text;
 }
 
+/* ── Themed text selection (accent-aware, matches active theme) ─ */
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #ffffff;
+  text-shadow: none;
+}
+
+::-moz-selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #ffffff;
+  text-shadow: none;
+}
+
 /* ── Chromatic aberration on glitch title ───────────────────── */
 .glitch-title {
   text-shadow:
