@@ -43,6 +43,24 @@ export function ToolCard({ tool }: Props) {
       {/* Left accent bar */}
       <div className="absolute left-0 top-0 bottom-0 w-px bg-void-teal opacity-0 group-hover:opacity-40 transition-opacity duration-300" />
 
+      {/* HUD corner brackets — converge inward on hover (live cards only) */}
+      {isLive && (
+        <div className="pointer-events-none absolute inset-0 z-10" aria-hidden="true">
+          <span
+            className={`absolute h-2.5 w-2.5 border-t border-l border-void-teal transition-all duration-300 ${hovered ? 'opacity-70 top-2 left-2' : 'opacity-0 top-1 left-1'}`}
+          />
+          <span
+            className={`absolute h-2.5 w-2.5 border-t border-r border-void-teal transition-all duration-300 ${hovered ? 'opacity-70 top-2 right-2' : 'opacity-0 top-1 right-1'}`}
+          />
+          <span
+            className={`absolute h-2.5 w-2.5 border-b border-l border-void-teal transition-all duration-300 ${hovered ? 'opacity-70 bottom-2 left-2' : 'opacity-0 bottom-1 left-1'}`}
+          />
+          <span
+            className={`absolute h-2.5 w-2.5 border-b border-r border-void-teal transition-all duration-300 ${hovered ? 'opacity-70 bottom-2 right-2' : 'opacity-0 bottom-1 right-1'}`}
+          />
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         <h3 className="font-mono text-sm tracking-widest uppercase text-void-teal">
           {tool.name}

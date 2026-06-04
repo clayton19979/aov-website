@@ -15,6 +15,12 @@ export function DiscordCTA() {
       rel="noopener noreferrer"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      style={{
+        boxShadow: hovered
+          ? '0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 0 28px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 60px color-mix(in srgb, var(--accent) 8%, transparent)'
+          : '0 0 14px color-mix(in srgb, var(--accent) 10%, transparent)',
+        transition: 'box-shadow 350ms ease',
+      }}
       className="
         group relative inline-flex items-center gap-3 overflow-hidden
         border border-void-teal/50 hover:border-void-teal
