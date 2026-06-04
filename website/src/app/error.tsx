@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
+import { GlitchTitle } from '@/components/shared/GlitchTitle'
 
 type Props = {
   error: Error & { digest?: string }
@@ -18,9 +19,9 @@ export default function GlobalError({ error, reset }: Props) {
       <div className="max-w-md w-full border border-void-teal/20 bg-void-black/60 p-8 text-center space-y-6">
         <div className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-void-teal/60 uppercase">System Status</p>
-          <h1 className="text-2xl tracking-[0.2em] text-void-teal uppercase glitch-title">
+          <GlitchTitle className="text-2xl tracking-[0.2em] text-void-teal uppercase">
             Signal Lost
-          </h1>
+          </GlitchTitle>
         </div>
 
         <div className="border-t border-void-teal/10 pt-6 space-y-2">

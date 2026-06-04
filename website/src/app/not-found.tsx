@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { GlitchTitle } from '@/components/shared/GlitchTitle'
 
 export const metadata = {
   title: '404 — AoV',
@@ -10,9 +11,9 @@ export default function NotFound() {
       <div className="max-w-md w-full border border-void-teal/20 bg-void-black/60 p-8 text-center space-y-6">
         <div className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-void-teal/60 uppercase">Registry Error</p>
-          <h1 className="text-2xl tracking-[0.2em] text-void-teal uppercase glitch-title">
+          <GlitchTitle className="text-2xl tracking-[0.2em] text-void-teal uppercase">
             Node Not Found
-          </h1>
+          </GlitchTitle>
         </div>
 
         <div className="border-t border-void-teal/10 pt-6 space-y-2">
