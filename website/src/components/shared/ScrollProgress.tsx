@@ -24,18 +24,18 @@ export function ScrollProgress() {
         className="relative h-full overflow-visible"
         style={{ width: pct, transition: 'width 80ms linear' }}
       >
-        {/* comet-tail gradient: transparent → full teal */}
+        {/* comet-tail gradient: transparent → full accent */}
         <div
           className="absolute inset-0"
-          style={{ background: 'linear-gradient(to right, transparent, #00b4d899 55%, #00b4d8)' }}
+          style={{ background: 'linear-gradient(to right, transparent, color-mix(in srgb, var(--accent) 60%, transparent) 55%, var(--accent))' }}
         />
         {/* glowing head at the leading edge */}
         {progress > 0 && (
           <div
             className="absolute right-0 top-1/2 -translate-y-1/2 w-5 h-[3px] rounded-full"
             style={{
-              background: '#00b4d8',
-              boxShadow: '0 0 6px 2px #00b4d8aa, 0 0 14px 4px #00b4d855',
+              background: 'var(--accent)',
+              boxShadow: '0 0 6px 2px color-mix(in srgb, var(--accent) 67%, transparent), 0 0 14px 4px color-mix(in srgb, var(--accent) 33%, transparent)',
             }}
           />
         )}

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { LogoutButton } from './LogoutButton'
 import { TopBarNav } from './TopBarNav'
 import { MobileNavStrip } from './MobileNavStrip'
+import { ThemeSwitcher } from './ThemeSwitcher'
 
 type Props = {
   characterName?: string
@@ -21,6 +22,7 @@ export function TopBar({ characterName }: Props) {
         </Link>
         <TopBarNav />
         <div className="flex items-center gap-4">
+          <ThemeSwitcher />
           <span className="font-mono text-xs tracking-widest text-white/20 uppercase">
             {displayName} · ONLINE
           </span>
