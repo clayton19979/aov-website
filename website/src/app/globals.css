@@ -191,3 +191,42 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .login-portal-glow { animation: none; }
 }
+
+/* ── SectionTitle: HUD readout node + theme-aware title glow ─── */
+.section-title-glow {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Divider draws in from its origin node on mount */
+.section-divider-line {
+  transform-origin: left center;
+  animation: section-divider-draw 0.7s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+@keyframes section-divider-draw {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 1; }
+}
+
+/* Bright pulsing node anchoring the divider's origin */
+.section-divider-node {
+  background: var(--accent);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: section-node-pulse 3.2s ease-in-out infinite;
+}
+
+@keyframes section-node-pulse {
+  0%, 100% {
+    opacity: 0.55;
+    box-shadow: 0 0 5px 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 11px 2px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-divider-line { animation: none; }
+  .section-divider-node { animation: none; }
+}
