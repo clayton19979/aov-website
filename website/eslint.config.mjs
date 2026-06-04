@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Bundled tool assets — pre-compiled vendor JS, not source files
+    "public/**",
   ]),
 ]);
 

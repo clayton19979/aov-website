@@ -18,3 +18,5 @@ Thumbs.db
 
 # Playwright / test artifacts
 **/.playwright-cli/
+
+.vercel

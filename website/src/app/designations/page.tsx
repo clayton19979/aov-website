@@ -1,6 +1,7 @@
 import { TopBar } from '@/components/shared/TopBar'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { BackLink } from '@/components/shared/BackLink'
+import { ScrollProgress } from '@/components/shared/ScrollProgress'
 import { DesignationNodeCard } from '@/components/designations/DesignationNodeCard'
 import { getSession } from '@/lib/session'
 import { tiers, removalDesignations } from '@/data/designations'
@@ -13,12 +14,13 @@ export default async function DesignationsPage() {
   const session = await getSession()
   return (
     <div className="min-h-screen bg-void-black flex flex-col">
+      <ScrollProgress />
       <TopBar characterName={session?.characterName} />
       <main className="flex-1 px-6 py-8 max-w-4xl mx-auto w-full">
         <div className="mb-6">
           <BackLink href="/hub" label="Hub" />
         </div>
-        <SectionTitle glyph="⬡" title="DESIGNATIONS" subtitle="AUREX does not promote. AUREX recognizes." />
+        <SectionTitle glyph="△" title="DESIGNATIONS" subtitle="AUREX does not promote. AUREX recognizes." />
 
         <div className="flex flex-col gap-8">
           {tiers.map(tier => (

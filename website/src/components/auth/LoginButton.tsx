@@ -7,7 +7,7 @@ import {
   useCurrentAccount,
 } from '@mysten/dapp-kit-react'
 import { checkTribeMembership } from '@/lib/tribe'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 type AuthState =
   | 'idle'           // not connected
@@ -24,6 +24,10 @@ export function LoginButton() {
   const wallets = useWallets()
   const account = useCurrentAccount()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const rawNext = searchParams.get('next') ?? '/hub'
+  // Guard against open redirects — only follow internal paths
+  const nextPath = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/hub'
 
   const [state, setState] = useState<AuthState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
@@ -57,7 +61,7 @@ export function LoginButton() {
         return
       }
 
-      // Tribe confirmed — create server session
+      // Tribe confirmed client-side — server re-verifies independently before issuing session.
       setCharacterName(result.characterName)
       setTribeName(result.tribeName)
       setState('creating-session')
@@ -65,12 +69,7 @@ export function LoginButton() {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address,
-          tribeId: result.tribeId,
-          characterName: result.characterName,
-          characterId: result.characterId,
-        }),
+        body: JSON.stringify({ address }),
       })
 
       if (!res.ok) {
@@ -79,7 +78,7 @@ export function LoginButton() {
       }
 
       setState('verified')
-      setTimeout(() => router.push('/hub'), 1200)
+      setTimeout(() => router.push(nextPath), 1200)
     } catch (err) {
       setErrorMessage(String(err))
       setState('error')

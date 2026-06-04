@@ -26,7 +26,7 @@ export default async function OperationsPage() {
           <BackLink href="/hub" label="Hub" />
         </div>
         <SectionTitle
-          glyph="⬡"
+          glyph="⊕"
           title="OPERATIONS"
           subtitle="Coming online"
         />
