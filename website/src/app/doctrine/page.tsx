@@ -33,13 +33,33 @@ export default async function DoctrinePage() {
             <p className="font-mono text-xs tracking-widest uppercase text-white/20 mb-4">
               The Five Axioms
             </p>
-            <ol className="flex flex-col gap-2">
-              {doctrine.coreBeliefs.axioms.map((axiom, i) => (
-                <li key={i} className="flex items-start gap-4">
-                  <span className="font-mono text-xs text-void-teal/30 shrink-0">
+            <ol className="flex flex-col">
+              {doctrine.coreBeliefs.axioms.map((axiom, i, arr) => (
+                <li key={i} className="relative flex items-start gap-5 pb-5 last:pb-0">
+                  {/* connecting line linking this node to the next */}
+                  {i < arr.length - 1 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-3 top-6 bottom-0 w-px -translate-x-1/2"
+                      style={{
+                        background:
+                          'linear-gradient(to bottom, color-mix(in srgb, var(--accent) 30%, transparent), transparent)',
+                      }}
+                    />
+                  )}
+                  {/* numbered node */}
+                  <span
+                    className="relative z-10 grid h-6 w-6 shrink-0 place-items-center font-mono text-[10px] tracking-wider"
+                    style={{
+                      color: 'var(--accent)',
+                      border: '1px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+                      background: 'color-mix(in srgb, var(--accent) 6%, transparent)',
+                      boxShadow: '0 0 8px 0 color-mix(in srgb, var(--accent) 12%, transparent)',
+                    }}
+                  >
                     {String(i + 1).padStart(2, '0')}
                   </span>
-                  <span className="font-mono text-sm text-white/70 tracking-wide">
+                  <span className="pt-0.5 font-mono text-sm text-white/70 tracking-wide leading-relaxed">
                     {axiom}
                   </span>
                 </li>
