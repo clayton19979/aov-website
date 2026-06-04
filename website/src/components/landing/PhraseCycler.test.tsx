@@ -12,11 +12,15 @@ describe('PhraseCycler', () => {
     expect(el.textContent).toBeTruthy()
   })
 
-  it('cycles to a new phrase after the interval', () => {
+  it('cycles to a new phrase after the interval', async () => {
     render(<PhraseCycler />)
     const initial = screen.getByRole('status').textContent
 
-    act(() => { vi.advanceTimersByTime(7500) })
+    // Advance past the 7000ms interval so setVisible(false) fires and React
+    // flushes the state update, registering the follow-up 300ms timeout.
+    await act(async () => { vi.advanceTimersByTime(7001) })
+    // Advance past the 300ms transition timeout to trigger the phrase swap.
+    await act(async () => { vi.advanceTimersByTime(301) })
 
     const after = screen.getByRole('status').textContent
     expect(after).not.toBe(initial)
