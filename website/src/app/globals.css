@@ -110,6 +110,22 @@ select {
   cursor: inherit;
 }
 
+/* ── Themed keyboard focus ring (adapts to active accent) ───── */
+/* Mouse clicks stay clean; only keyboard navigation reveals the ring. */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline-width: 1px;
+  outline-style: solid;
+  outline-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
 input[type="text"],
 input[type="email"],
 input[type="password"],
@@ -117,6 +133,19 @@ input[type="search"],
 input[type="number"],
 textarea {
   cursor: text;
+}
+
+/* ── Themed text selection (accent-aware, matches active theme) ─ */
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #ffffff;
+  text-shadow: none;
+}
+
+::-moz-selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #ffffff;
+  text-shadow: none;
 }
 
 /* ── Chromatic aberration on glitch title ───────────────────── */
