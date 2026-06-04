@@ -30,7 +30,7 @@ export default function LandingPage() {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at 50% 40%, rgba(0,180,216,0.04) 0%, transparent 60%)',
+          background: 'radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 4%, transparent) 0%, transparent 60%)',
         }}
         aria-hidden="true"
       />

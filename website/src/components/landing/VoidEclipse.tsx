@@ -39,8 +39,8 @@ export function VoidEclipse() {
       aria-hidden="true"
     >
       {/* Far gravitational lensing halos */}
-      <div className="absolute rounded-full border border-void-teal/[0.03]" style={{ inset: '-40px' }} />
-      <div className="absolute rounded-full border border-void-teal/[0.05]" style={{ inset: '-24px' }} />
+      <div className="absolute rounded-full" style={{ inset: '-40px', border: '1px solid color-mix(in srgb, var(--accent) 3%, transparent)' }} />
+      <div className="absolute rounded-full" style={{ inset: '-24px', border: '1px solid color-mix(in srgb, var(--accent) 5%, transparent)' }} />
 
       {/* Accretion disk — rotating conic ring, clipped by the event horizon above */}
       <div
@@ -50,15 +50,15 @@ export function VoidEclipse() {
           background: `conic-gradient(
             from 0deg,
             transparent 0deg,
-            rgba(0,180,216,0.06) 40deg,
-            rgba(0,180,216,0.22) 80deg,
-            rgba(0,180,216,0.42) 105deg,
-            rgba(0,180,216,0.22) 130deg,
-            rgba(0,180,216,0.05) 170deg,
+            color-mix(in srgb, var(--accent) 6%, transparent) 40deg,
+            color-mix(in srgb, var(--accent) 22%, transparent) 80deg,
+            color-mix(in srgb, var(--accent) 42%, transparent) 105deg,
+            color-mix(in srgb, var(--accent) 22%, transparent) 130deg,
+            color-mix(in srgb, var(--accent) 5%, transparent) 170deg,
             transparent 210deg,
-            rgba(0,180,216,0.03) 270deg,
-            rgba(0,180,216,0.07) 310deg,
-            rgba(0,180,216,0.03) 340deg,
+            color-mix(in srgb, var(--accent) 3%, transparent) 270deg,
+            color-mix(in srgb, var(--accent) 7%, transparent) 310deg,
+            color-mix(in srgb, var(--accent) 3%, transparent) 340deg,
             transparent 360deg
           )`,
           filter: 'blur(3px)',
@@ -72,10 +72,10 @@ export function VoidEclipse() {
         style={{
           background: '#000000',
           boxShadow: [
-            '0 0 0 1.5px rgba(0,180,216,0.70)',
-            '0 0 6px 1px rgba(0,180,216,0.35)',
-            '0 0 24px 4px rgba(0,180,216,0.12)',
-            '0 0 60px 8px rgba(0,180,216,0.05)',
+            '0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent)',
+            '0 0 6px 1px color-mix(in srgb, var(--accent) 35%, transparent)',
+            '0 0 24px 4px color-mix(in srgb, var(--accent) 12%, transparent)',
+            '0 0 60px 8px color-mix(in srgb, var(--accent) 5%, transparent)',
           ].join(', '),
         }}
       />
@@ -85,7 +85,7 @@ export function VoidEclipse() {
         className="absolute rounded-full pointer-events-none"
         style={{
           inset: '-18px',
-          background: 'radial-gradient(ellipse at 50% 8%, rgba(0,180,216,0.18) 0%, transparent 55%)',
+          background: 'radial-gradient(ellipse at 50% 8%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 55%)',
         }}
       />
 
