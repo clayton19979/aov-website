@@ -14,12 +14,9 @@ export default function LoginPage() {
       {/* Background star field */}
       <StarField />
 
-      {/* Radial glow */}
+      {/* Radial glow — theme-aware, slow ambient breathing */}
       <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse at 50% 40%, rgba(0,180,216,0.04) 0%, transparent 60%)',
-        }}
+        className="login-portal-glow absolute inset-0 pointer-events-none"
         aria-hidden="true"
       />
 

@@ -128,3 +128,22 @@ textarea {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Login portal: theme-aware breathing radial glow ────────── */
+.login-portal-glow {
+  background: radial-gradient(
+    ellipse at 50% 40%,
+    color-mix(in srgb, var(--accent) 5%, transparent) 0%,
+    transparent 60%
+  );
+  animation: portal-breathe 7s ease-in-out infinite;
+}
+
+@keyframes portal-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-portal-glow { animation: none; }
+}
