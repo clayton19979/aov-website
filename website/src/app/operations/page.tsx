@@ -31,10 +31,10 @@ export default async function OperationsPage() {
           subtitle="Coming online"
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {COMING_SOON.map(item => (
+          {COMING_SOON.map((item, i) => (
             <div
               key={item.title}
-              className="border border-dashed border-void-teal/10 p-6 opacity-50"
+              className="group border border-dashed border-void-teal/10 hover:border-void-teal/25 p-6 opacity-50 hover:opacity-75 transition-all duration-500"
             >
               <h3 className="font-mono text-xs tracking-widest uppercase text-void-teal/60 mb-2">
                 {item.title}
@@ -42,8 +42,13 @@ export default async function OperationsPage() {
               <p className="font-mono text-xs text-white/25 leading-relaxed tracking-wide">
                 {item.description}
               </p>
-              <p className="mt-4 font-mono text-xs text-white/15 tracking-widest uppercase">
-                Soon
+              <p className="mt-4 flex items-center gap-2 font-mono text-xs text-white/15 group-hover:text-white/30 tracking-widest uppercase transition-colors duration-500">
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full bg-void-teal"
+                  style={{ animation: `status-pulse 2.6s ease-in-out ${i * 0.35}s infinite` }}
+                  aria-hidden="true"
+                />
+                Standby
               </p>
             </div>
           ))}

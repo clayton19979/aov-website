@@ -160,17 +160,14 @@ textarea {
   to   { transform: rotate(360deg); }
 }
 
-/* ── Blinking terminal caret (PhraseCycler) ────────────────── */
-@keyframes caret-blink {
-  0%, 45%  { opacity: 1; }
-  50%, 95% { opacity: 0; }
-  100%     { opacity: 1; }
-}
-
-.phrase-caret {
-  animation: caret-blink 1.1s steps(1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .phrase-caret { animation: none; }
+/* ── Standby status pulse (Operations "coming online" cards) ── */
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 0.25;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 7px 1px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
 }
