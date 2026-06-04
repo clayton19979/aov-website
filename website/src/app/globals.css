@@ -47,6 +47,19 @@ body::after {
     rgba(0, 0, 0, 0.04) 2px,
     rgba(0, 0, 0, 0.04) 4px
   );
+  /* Slow CRT drift — the 4px tall pattern scrolls one full cycle, looping seamlessly */
+  animation: scanline-drift 8s linear infinite;
+}
+
+@keyframes scanline-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 0 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after {
+    animation: none;
+  }
 }
 
 /* ── Custom cursor (ThemeProvider injects #aov-cursor-style to override) */
