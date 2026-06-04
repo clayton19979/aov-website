@@ -39,8 +39,8 @@ export function VoidEclipse() {
       aria-hidden="true"
     >
       {/* Far gravitational lensing halos */}
-      <div className="absolute rounded-full border border-void-teal/[0.03]" style={{ inset: '-40px' }} />
-      <div className="absolute rounded-full border border-void-teal/[0.05]" style={{ inset: '-24px' }} />
+      <div className="absolute rounded-full" style={{ inset: '-40px', border: '1px solid color-mix(in srgb, var(--accent) 3%, transparent)' }} />
+      <div className="absolute rounded-full" style={{ inset: '-24px', border: '1px solid color-mix(in srgb, var(--accent) 5%, transparent)' }} />
 
       {/* Accretion disk — rotating conic ring, clipped by the event horizon above */}
       <div
