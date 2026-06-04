@@ -5,6 +5,8 @@ const SUI_RPC_URL = "https://fullnode.testnet.sui.io:443";
 const EVE_WORLD_PACKAGE_ID = "0x28b497559d65ab320d9da4613bf2498d5946b2c0ae3597ccfda3072ce127448c";
 const SYSTEM_CACHE_KEY = "frontier-gps.systems.v1";
 const SYSTEM_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const DISCOVERED_GATE_CACHE_KEY = "frontier-gps.discovered-gates.v1";
+const DISCOVERED_GATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const LY_METERS = 9_460_730_472_580_800;
 const PAGE_SIZE = 1000;
 
@@ -35,6 +37,7 @@ const state = {
   smartGatesLoading: null,
   smartGateStats: null,
   gateSystemsFetched: new Set(),
+  discoveredGateCache: new Map(),
   gateKeys: new Set(),
   spatialIndexes: new Map(),
   selected: null,
@@ -152,6 +155,65 @@ function writeCachedSystems(systems) {
   }
 }
 
+function normalizeStoredGate(row) {
+  const normalized = normalizeGateRows([row])[0];
+  if (!normalized) return null;
+  return {
+    from: normalized.from,
+    to: normalized.to,
+    name: normalized.name,
+    kind: normalized.kind,
+    count: normalized.count,
+    online: normalized.online !== false,
+  };
+}
+
+function readCachedDiscoveredGates() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(DISCOVERED_GATE_CACHE_KEY) || "null");
+    const systems = cached?.systems;
+    if (!systems || typeof systems !== "object") return new Map();
+
+    const now = Date.now();
+    const entries = new Map();
+    for (const [rawSystemId, entry] of Object.entries(systems)) {
+      const systemId = Number(rawSystemId);
+      const fetchedAt = Number(entry?.fetchedAt);
+      if (!Number.isFinite(systemId) || !Number.isFinite(fetchedAt)) continue;
+      if (now - fetchedAt > DISCOVERED_GATE_CACHE_TTL_MS) continue;
+
+      const gates = Array.isArray(entry?.gates)
+        ? entry.gates.map(normalizeStoredGate).filter(Boolean)
+        : [];
+      entries.set(systemId, { fetchedAt, gates });
+    }
+    return entries;
+  } catch {
+    return new Map();
+  }
+}
+
+function writeCachedDiscoveredGates() {
+  try {
+    const systems = {};
+    state.discoveredGateCache.forEach((entry, systemId) => {
+      systems[systemId] = {
+        fetchedAt: entry.fetchedAt,
+        gates: entry.gates,
+      };
+    });
+    localStorage.setItem(
+      DISCOVERED_GATE_CACHE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        systems,
+      }),
+    );
+  } catch {
+    // Gate cache writes are best-effort; discovery can continue without persistence.
+  }
+}
+
 function normalizeSystem(raw) {
   return {
     id: Number(raw.id),
@@ -212,6 +274,27 @@ function indexSystems(systems) {
   syncRouteWorker().catch(() => {
     state.workerReady = false;
   });
+}
+
+function restoreCachedDiscoveredGates() {
+  state.discoveredGateCache = readCachedDiscoveredGates();
+  state.gateSystemsFetched = new Set();
+
+  let restored = 0;
+  let pruned = false;
+  state.discoveredGateCache.forEach((entry, systemId) => {
+    state.gateSystemsFetched.add(systemId);
+    const gates = entry.gates.filter((gate) => state.systemsById.has(gate.from) && state.systemsById.has(gate.to));
+    if (gates.length !== entry.gates.length) {
+      entry.gates = gates;
+      pruned = true;
+    }
+    if (!gates.length) return;
+    restored += mergeGates(gates);
+  });
+
+  if (pruned) writeCachedDiscoveredGates();
+  return restored;
 }
 
 function resizeCanvas() {
@@ -863,10 +946,8 @@ function addGateNeighbor(fromId, toId, gate) {
 function mergeGates(gates) {
   let added = 0;
   gates.forEach((gate) => {
-    if (!gate.from || !gate.to || gate.from === gate.to) return;
-    const a = Math.min(gate.from, gate.to);
-    const b = Math.max(gate.from, gate.to);
-    const key = `${a}:${b}:${gate.kind || "game"}`;
+    const key = RouteCore.gateKey(gate);
+    if (!key) return;
     if (state.gateKeys.has(key)) return;
     state.gateKeys.add(key);
     const normalizedGate = {
@@ -896,7 +977,7 @@ async function fetchSystemGateLinks(system) {
   state.gateSystemsFetched.add(system.id);
   try {
     const res = await fetch(`${API_BASE}/solarsystems/${system.id}`);
-    if (!res.ok) return 0;
+    if (!res.ok) throw new Error(`World API returned ${res.status}`);
     const detail = await res.json();
     const gates = (detail.gateLinks || []).map((link) => ({
       from: detail.id,
@@ -905,9 +986,15 @@ async function fetchSystemGateLinks(system) {
       kind: "game",
       count: 1,
       online: true,
-    }));
+    })).map(normalizeStoredGate).filter(Boolean);
+    state.discoveredGateCache.set(system.id, {
+      fetchedAt: Date.now(),
+      gates,
+    });
+    writeCachedDiscoveredGates();
     return mergeGates(gates);
   } catch {
+    state.gateSystemsFetched.delete(system.id);
     return 0;
   }
 }
@@ -1342,8 +1429,13 @@ async function init() {
   try {
     const systems = await fetchAllSystems();
     indexSystems(systems);
+    const restoredGateCount = restoreCachedDiscoveredGates();
     updateRouteActions();
-    setStatus(`${systems.length.toLocaleString()} live systems loaded`);
+    setStatus(
+      restoredGateCount
+        ? `${systems.length.toLocaleString()} live systems loaded, ${restoredGateCount} cached gate links restored`
+        : `${systems.length.toLocaleString()} live systems loaded`,
+    );
   } catch (error) {
     indexSystems(fallbackSystems.map(normalizeSystem));
     updateRouteActions();

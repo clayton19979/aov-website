@@ -46,6 +46,13 @@ test("gate adjacency is bidirectional and ignores offline gates", () => {
   assert.equal(adjacency.has(2), false);
 });
 
+test("gate keys are stable across direction and include kind", () => {
+  assert.equal(RouteCore.gateKey({ from: 1, to: 4, kind: "game" }), "1:4:game");
+  assert.equal(RouteCore.gateKey({ from: 4, to: 1, kind: "game" }), "1:4:game");
+  assert.equal(RouteCore.gateKey({ from: 4, to: 1, kind: "smart" }), "1:4:smart");
+  assert.equal(RouteCore.gateKey({ from: 4, to: 4, kind: "smart" }), null);
+});
+
 test("route search uses gates when enabled", () => {
   const context = routeContext([{ from: 1, to: 4, kind: "game", count: 1, online: true }]);
   const result = RouteCore.findRoute({
