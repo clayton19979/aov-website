@@ -1,6 +1,7 @@
 import { TopBar } from '@/components/shared/TopBar'
 import { SectionTitle } from '@/components/shared/SectionTitle'
 import { BackLink } from '@/components/shared/BackLink'
+import { OperationCard } from '@/components/operations/OperationCard'
 import { getSession } from '@/lib/session'
 
 const COMING_SOON = [
@@ -32,25 +33,12 @@ export default async function OperationsPage() {
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {COMING_SOON.map((item, i) => (
-            <div
+            <OperationCard
               key={item.title}
-              className="group border border-dashed border-void-teal/10 hover:border-void-teal/25 p-6 opacity-50 hover:opacity-75 transition-all duration-500"
-            >
-              <h3 className="font-mono text-xs tracking-widest uppercase text-void-teal/60 mb-2">
-                {item.title}
-              </h3>
-              <p className="font-mono text-xs text-white/25 leading-relaxed tracking-wide">
-                {item.description}
-              </p>
-              <p className="mt-4 flex items-center gap-2 font-mono text-xs text-white/15 group-hover:text-white/30 tracking-widest uppercase transition-colors duration-500">
-                <span
-                  className="inline-block w-1.5 h-1.5 rounded-full bg-void-teal"
-                  style={{ animation: `status-pulse 2.6s ease-in-out ${i * 0.35}s infinite` }}
-                  aria-hidden="true"
-                />
-                Standby
-              </p>
-            </div>
+              title={item.title}
+              description={item.description}
+              index={i}
+            />
           ))}
         </div>
       </main>
