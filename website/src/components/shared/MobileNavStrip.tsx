@@ -15,9 +15,14 @@ export function MobileNavStrip() {
           <Link
             key={link.href}
             href={link.href}
+            style={active ? {
+              boxShadow: 'inset 0 2px 0 color-mix(in srgb, var(--accent) 65%, transparent)',
+              backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)',
+              color: 'var(--accent)',
+            } : undefined}
             className={`flex-1 text-center py-2 font-mono text-xs tracking-widest uppercase transition-colors duration-200 ${
               active
-                ? 'text-void-teal bg-void-teal/5'
+                ? ''
                 : 'text-white/20 hover:text-void-teal/60'
             }`}
           >
