@@ -6,9 +6,9 @@ export type Theme = 'void' | 'crimson' | 'spectre' | 'abyssal'
 
 export const THEMES: { id: Theme; label: string; accent: string }[] = [
   { id: 'void',    label: 'VOID',    accent: '#00b4d8' },
+  { id: 'abyssal', label: 'ABYSSAL', accent: '#00ffe5' },
   { id: 'crimson', label: 'CRIMSON', accent: '#ff2251' },
   { id: 'spectre', label: 'SPECTRE', accent: '#c084fc' },
-  { id: 'abyssal', label: 'ABYSSAL', accent: '#00ffe5' },
 ]
 
 const ThemeContext = createContext<{
