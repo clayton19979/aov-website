@@ -7,7 +7,7 @@ type Props = {
 export function SectionTitle({ glyph = '⬡', title, subtitle }: Props) {
   return (
     <div className="mb-8">
-      <h1 className="font-mono text-sm tracking-widest uppercase text-void-teal">
+      <h1 className="section-title-glow font-mono text-sm tracking-widest uppercase text-void-teal">
         {glyph} {title}
       </h1>
       {subtitle && (
@@ -15,7 +15,13 @@ export function SectionTitle({ glyph = '⬡', title, subtitle }: Props) {
           {subtitle}
         </p>
       )}
-      <div className="mt-3 h-px w-full bg-gradient-to-r from-void-teal/60 via-void-teal/20 to-transparent" />
+      <div className="relative mt-3">
+        <div className="section-divider-line h-px w-full bg-gradient-to-r from-void-teal/60 via-void-teal/20 to-transparent" />
+        <span
+          className="section-divider-node absolute left-0 top-1/2 size-[5px] -translate-x-px -translate-y-1/2 rounded-full"
+          aria-hidden="true"
+        />
+      </div>
     </div>
   )
 }
