@@ -15,7 +15,7 @@ export function SectionTitle({ glyph = '⬡', title, subtitle }: Props) {
           {subtitle}
         </p>
       )}
-      <div className="mt-3 h-px bg-void-teal/10" />
+      <div className="mt-3 h-px w-full bg-gradient-to-r from-void-teal/60 via-void-teal/20 to-transparent" />
     </div>
   )
 }

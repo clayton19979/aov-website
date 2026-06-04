@@ -46,7 +46,11 @@ export default async function DoctrinePage() {
               ))}
             </ol>
           </div>
-          <div className="border-l-2 border-void-teal/30 pl-6">
+          <div className="relative pl-6">
+            <span
+              className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-void-teal/55 via-void-teal/25 to-transparent"
+              aria-hidden="true"
+            />
             <p className="font-mono text-xs text-white/40 leading-loose tracking-wide italic">
               {doctrine.coreBeliefs.finalDoctrine}
             </p>
@@ -85,7 +89,11 @@ export default async function DoctrinePage() {
                 <p className="font-mono text-xs text-void-teal/30 mb-4 italic">
                   — {fragment.attribution}
                 </p>
-                <blockquote className="border-l-2 border-void-teal/30 pl-6">
+                <blockquote className="relative pl-6">
+                  <span
+                    className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-void-teal/55 via-void-teal/25 to-transparent"
+                    aria-hidden="true"
+                  />
                   <p className="font-mono text-sm text-white/50 leading-loose tracking-wide italic">
                     &ldquo;{fragment.text}&rdquo;
                   </p>

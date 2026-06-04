@@ -9,10 +9,10 @@ export function StarField() {
     const container = containerRef.current
     if (!container) return
 
-    const count = 120
     const fragment = document.createDocumentFragment()
 
-    for (let i = 0; i < count; i++) {
+    // White background stars
+    for (let i = 0; i < 120; i++) {
       const star = document.createElement('div')
       const size = Math.random() * 1.5 + 0.5
       const x = Math.random() * 100
@@ -28,6 +28,32 @@ export function StarField() {
         height: ${size}px;
         border-radius: 50%;
         background: rgba(255,255,255,${0.2 + Math.random() * 0.5});
+        animation: star-twinkle ${duration}s ${delay}s infinite alternate ease-in-out;
+      `
+      fragment.appendChild(star)
+    }
+
+    // Accent-tinted void particles — track the active theme accent
+    for (let i = 0; i < 18; i++) {
+      const star = document.createElement('div')
+      const size = 1 + Math.random() * 2
+      const x = Math.random() * 100
+      const y = Math.random() * 100
+      const duration = 2 + Math.random() * 4
+      const delay = Math.random() * 8
+      const pct = Math.round(30 + Math.random() * 25)
+      const glowPx = Math.round(size * 3)
+      const glowSpread = Math.round(size)
+
+      star.style.cssText = `
+        position: absolute;
+        left: ${x}%;
+        top: ${y}%;
+        width: ${size}px;
+        height: ${size}px;
+        border-radius: 50%;
+        background: color-mix(in srgb, var(--accent) ${pct}%, transparent);
+        box-shadow: 0 0 ${glowPx}px ${glowSpread}px color-mix(in srgb, var(--accent) 18%, transparent);
         animation: star-twinkle ${duration}s ${delay}s infinite alternate ease-in-out;
       `
       fragment.appendChild(star)
