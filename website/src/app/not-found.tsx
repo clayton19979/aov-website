@@ -8,7 +8,15 @@ export const metadata = {
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-void-black flex flex-col items-center justify-center px-6 font-mono">
-      <div className="max-w-md w-full border border-void-teal/20 bg-void-black/60 p-8 text-center space-y-6">
+      <div className="relative max-w-md w-full overflow-hidden border border-void-teal/20 bg-void-black/60 p-8 text-center space-y-6">
+        {/* HUD corner brackets — degraded-feed flicker */}
+        <span aria-hidden="true" className="signal-bracket pointer-events-none absolute top-0 left-0 h-4 w-4 border-t border-l border-void-teal/60" />
+        <span aria-hidden="true" className="signal-bracket pointer-events-none absolute top-0 right-0 h-4 w-4 border-t border-r border-void-teal/60" />
+        <span aria-hidden="true" className="signal-bracket pointer-events-none absolute bottom-0 left-0 h-4 w-4 border-b border-l border-void-teal/60" />
+        <span aria-hidden="true" className="signal-bracket pointer-events-none absolute bottom-0 right-0 h-4 w-4 border-b border-r border-void-teal/60" />
+        {/* Lost-signal scan sweep — searches the panel for a signal that never returns */}
+        <span aria-hidden="true" className="signal-sweep" />
+
         <div className="space-y-1">
           <p className="text-xs tracking-[0.3em] text-void-teal/60 uppercase">Registry Error</p>
           <GlitchTitle className="text-2xl tracking-[0.2em] text-void-teal uppercase">

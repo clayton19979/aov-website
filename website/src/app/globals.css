@@ -299,6 +299,46 @@ textarea {
   .tool-shell-header-scan { animation: none; opacity: 0; }
 }
 
+/* ── 404 / lost-signal panel: HUD corner brackets + scan sweep ─── */
+/* A faint accent line sweeps top→bottom of the panel as if hunting for a
+   signal that never returns; the corner brackets flicker like a degraded feed. */
+.signal-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--accent) 55%, transparent) 50%,
+    transparent
+  );
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: signal-sweep 3.8s ease-in-out infinite;
+}
+
+@keyframes signal-sweep {
+  0%   { top: 0;    opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.signal-bracket {
+  animation: signal-bracket-flicker 4s ease-in-out infinite;
+}
+
+@keyframes signal-bracket-flicker {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .signal-sweep { animation: none; opacity: 0; }
+  .signal-bracket { animation: none; opacity: 0.6; }
+}
+
 /* ── TopBar: live "ONLINE" status indicator (accent-aware pulse) ─ */
 .status-online-dot {
   background: var(--accent);
