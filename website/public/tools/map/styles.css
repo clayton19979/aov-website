@@ -186,7 +186,7 @@ button:disabled {
 
 .system-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -569,6 +569,120 @@ input:focus, textarea:focus {
 .route-chip.smart { color: rgba(0,180,216,0.55); }
 .route-chip.game,
 .danger { color: var(--danger); }
+
+/* ── Overlay section ───────────────────────────── */
+
+.overlay-section {
+  display: grid;
+  gap: 10px;
+}
+
+.overlay-toggles {
+  display: grid;
+  gap: 4px;
+}
+
+.overlay-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.20);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.overlay-toggle:has(input:checked) {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.overlay-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.overlay-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+
+.overlay-toggle:has(input:checked) .overlay-dot { opacity: 1; }
+
+.kills-dot       { background: #ff6d7a; }
+.assemblies-dot  { background: #00b4d8; }
+.bases-dot       { background: #f1b84b; }
+
+.kill-time-panel {
+  display: grid;
+  gap: 6px;
+}
+
+.overlay-sublabel {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.time-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.time-preset {
+  height: 28px;
+  border: 1px solid var(--line);
+  background: rgba(2, 11, 14, 0.85);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.time-preset:hover { border-color: var(--accent-dim); color: var(--accent); }
+
+.time-preset.active {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  background: rgba(0,180,216,0.10);
+}
+
+.overlay-status {
+  font-size: 0.66rem;
+  color: var(--muted);
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  min-height: 0;
+}
+
+.overlay-status:empty { display: none; }
+
+/* ── Legend overlay items ──────────────────────── */
+
+.legend-overlay-items {
+  display: contents;
+}
+
+.legend-kill  { background: rgba(255, 109, 122, 0.85); }
+.legend-assembly { background: rgba(0, 180, 216, 0.85); }
+.legend-base  { background: rgba(241, 184, 75, 0.85); border-radius: 50%; }
 
 /* ── Responsive ────────────────────────────────── */
 

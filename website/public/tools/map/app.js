@@ -26,6 +26,7 @@ const state = {
   bounds: null,
   route: [],
   routeEdges: [],
+  routeSegments: [],
   gates: [],
   gateAdjacency: new Map(),
   gatesLoaded: false,
@@ -45,6 +46,17 @@ const state = {
   dragMode: 'rotate',
   routeToken: 0,
   workerReady: false,
+  overlayKills: [],
+  overlayKillsLoaded: false,
+  overlayKillsLoading: null,
+  overlayKillsTimeWindow: 24,
+  overlayAssemblies: [],
+  overlayAssembliesLoaded: false,
+  overlayAssembliesLoading: null,
+  overlayPlayerBases: [],
+  showKills: false,
+  showAssemblies: false,
+  showPlayerBases: false,
 };
 
 const els = {
@@ -53,8 +65,10 @@ const els = {
   form: document.getElementById("routeForm"),
   origin: document.getElementById("origin"),
   destination: document.getElementById("destination"),
+  via: document.getElementById("via"),
   originSuggestions: document.getElementById("originSuggestions"),
   destinationSuggestions: document.getElementById("destinationSuggestions"),
+  viaSuggestions: document.getElementById("viaSuggestions"),
   jumpRange: document.getElementById("jumpRange"),
   useGates: document.getElementById("useGates"),
   metrics: document.getElementById("metrics"),
@@ -69,8 +83,19 @@ const els = {
   shareLink: document.getElementById("shareLink"),
   setOrigin: document.getElementById("setOrigin"),
   setDestination: document.getElementById("setDestination"),
+  setVia: document.getElementById("setVia"),
   centerSystem: document.getElementById("centerSystem"),
   rangePresets: document.querySelectorAll(".range-presets button"),
+  killsToggle: document.getElementById("killsToggle"),
+  assembliesToggle: document.getElementById("assembliesToggle"),
+  playerBasesToggle: document.getElementById("playerBasesToggle"),
+  killTimePanel: document.getElementById("killTimePanel"),
+  overlayStatus: document.getElementById("overlayStatus"),
+  refreshOverlays: document.getElementById("refreshOverlays"),
+  timePresets: document.querySelectorAll(".time-preset"),
+  legendKill: document.getElementById("legendKill"),
+  legendAssembly: document.getElementById("legendAssembly"),
+  legendBase: document.getElementById("legendBase"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -124,6 +149,7 @@ function updateSystemActions() {
   const hasSelection = Boolean(state.selected);
   els.setOrigin.disabled = !hasSelection;
   els.setDestination.disabled = !hasSelection;
+  els.setVia.disabled = !hasSelection;
   els.centerSystem.disabled = !hasSelection;
 }
 
@@ -303,6 +329,9 @@ function draw() {
   }
 
   drawGateLinks();
+  if (state.showKills) drawKillOverlay();
+  if (state.showAssemblies) drawAssemblyOverlay();
+  if (state.showPlayerBases) drawPlayerBaseOverlay();
   drawRoute();
 
   if (state.selected) drawSystemMarker(state.selected, "#61d5c7", 7);
@@ -485,8 +514,10 @@ function setupSystemSearch(input, container) {
 function resolveRouteFieldsToNames() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
+  const via = parseSystem(els.via.value);
   if (origin) els.origin.value = formatSystem(origin);
   if (destination) els.destination.value = formatSystem(destination);
+  if (via) els.via.value = formatSystem(via);
 }
 
 function escapeHtml(value) {
@@ -501,6 +532,7 @@ function escapeHtml(value) {
 function renderRouteState(title, detail, tone = "", chip = "Idle") {
   state.route = [];
   state.routeEdges = [];
+  state.routeSegments = [];
   state.activeRouteIndex = -1;
   els.steps.innerHTML = `<li><span class="step-index ${tone}">${tone === "danger" ? "!" : "-"}</span><div><strong class="${tone}">${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></div><span class="route-chip">${escapeHtml(chip)}</span></li>`;
   els.metrics.innerHTML = `<div><span>Systems</span><strong>--</strong></div><div><span>Jump distance</span><strong>--</strong></div><div><span>Fuel efficiency score</span><strong>--</strong></div>`;
@@ -508,8 +540,10 @@ function renderRouteState(title, detail, tone = "", chip = "Idle") {
   draw();
 }
 
-function routeChip(edge, index) {
+function routeChip(edge, index, routeLength, isWaypoint) {
   if (!index) return `<span class="route-chip">Start</span>`;
+  if (isWaypoint) return `<span class="route-chip smart">Via</span>`;
+  if (index === routeLength - 1) return `<span class="route-chip">End</span>`;
   if (edge?.gate && edge.kind === "game") return `<span class="route-chip game">Game ${edge.count || 1}</span>`;
   if (edge?.gate) return `<span class="route-chip smart">Smart</span>`;
   return `<span class="route-chip jump">Jump</span>`;
@@ -518,6 +552,7 @@ function routeChip(edge, index) {
 function renderRoute(result) {
   state.route = result?.path ?? [];
   state.routeEdges = result?.edges ?? [];
+  state.routeSegments = result?.segments ?? [];
   state.activeRouteIndex = -1;
   els.steps.innerHTML = "";
 
@@ -526,6 +561,8 @@ function renderRoute(result) {
     return;
   }
 
+  const via = parseSystem(els.via.value);
+  const routeLength = result.path.length;
   let totalDistance = 0;
   let gateCount = 0;
   let jumpCount = 0;
@@ -538,15 +575,23 @@ function renderRoute(result) {
         jumpCount++;
       }
     }
+    const isWaypoint = Boolean(via) && index > 0 && index < routeLength - 1 && system.id === via.id;
     const li = document.createElement("li");
     const safeName = escapeHtml(system.name);
+    const detail = isWaypoint
+      ? " - waypoint"
+      : edge?.gate
+        ? ` - ${edge.kind === "game" ? "Game Gate" : "Smart Gate"}`
+        : edge
+          ? ` - ${edge.distance.toFixed(1)} LY`
+          : " - depart";
     li.innerHTML = `
       <span class="step-index">${index + 1}</span>
       <div>
         <strong>${safeName}</strong>
-        <small>Region ${system.regionId}${edge?.gate ? ` - ${edge.kind === "game" ? "Game Gate" : "Smart Gate"}` : edge ? ` - ${edge.distance.toFixed(1)} LY` : " - depart"}</small>
+        <small>Region ${system.regionId}${detail}</small>
       </div>
-      ${routeChip(edge, index)}
+      ${routeChip(edge, index, routeLength, isWaypoint)}
     `;
     li.dataset.systemId = String(system.id);
     li.addEventListener("mouseenter", () => {
@@ -564,12 +609,13 @@ function renderRoute(result) {
     els.steps.append(li);
   });
 
+  const legCount = Math.max(1, state.routeSegments.length || 1);
   els.metrics.innerHTML = `
     <div><span>Systems</span><strong>${result.path.length}</strong></div>
     <div><span>Jump distance</span><strong>${totalDistance.toFixed(1)} LY</strong></div>
     <div><span>Fuel efficiency score</span><strong>${result.fuelScore ?? 100}/100</strong></div>
   `;
-  setStatus(`${result.path.length} systems - ${jumpCount} jumps - ${gateCount} gates - ${totalDistance.toFixed(1)} jump LY`);
+  setStatus(`${result.path.length} systems - ${jumpCount} jumps - ${gateCount} gates - ${legCount} leg${legCount === 1 ? "" : "s"} - ${totalDistance.toFixed(1)} jump LY`);
   updateRouteActions();
   updateSelectedRouteStep();
   draw();
@@ -998,12 +1044,15 @@ async function copyRouteToClipboard() {
 function routeShareUrl() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
+  const via = parseSystem(els.via.value);
   if (!origin || !destination) return "";
   const params = new URLSearchParams();
   params.set("system1", String(origin.id));
   params.set("system2", String(destination.id));
+  if (via) params.set("via", String(via.id));
   params.set("jumpDistance", String(Number(els.jumpRange.value || 120)));
   params.set("optimize", new FormData(els.form).get("optimize") || "fuel");
+  params.set("useGates", els.useGates.checked ? "1" : "0");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1035,14 +1084,72 @@ function loadUrlParams() {
   const params = new URLSearchParams(location.search);
   const origin = params.get("system1");
   const destination = params.get("system2");
+  const via = params.get("via");
   const jump = params.get("jumpDistance");
   const optimize = params.get("optimize");
+  const useGates = params.get("useGates");
   if (origin) els.origin.value = origin;
   if (destination) els.destination.value = destination;
+  if (via) els.via.value = via;
   if (jump) els.jumpRange.value = jump;
   if (["fuel", "jumps"].includes(optimize)) {
     document.querySelector(`[name="optimize"][value="${optimize}"]`).checked = true;
   }
+  if (["0", "false", "off", "no"].includes(String(useGates).toLowerCase())) {
+    els.useGates.checked = false;
+  }
+}
+
+function resolveWaypoint() {
+  const raw = String(els.via.value || "").trim();
+  if (!raw) return { system: null, valid: true };
+  const system = parseSystem(raw);
+  return { system, valid: Boolean(system) };
+}
+
+async function calculateLegRoute(origin, destination, mode, range, token) {
+  let result = await calculateRoute(origin, destination, mode, range);
+  for (let pass = 0; pass < 4 && result; pass++) {
+    const added = await discoverGateLinksForRoute(result);
+    if (token !== state.routeToken) return undefined;
+    if (!added) break;
+    result = await calculateRoute(origin, destination, mode, range);
+  }
+  if (!result) return null;
+  const fuelBest = mode === "fuel" ? result : await calculateRoute(origin, destination, "fuel", range);
+  if (token !== state.routeToken) return undefined;
+  if (fuelBest) result.fuelScore = RouteCore.fuelScore(result, fuelBest);
+  return { result, fuelBest };
+}
+
+async function calculateJourney(origin, destination, waypoint, mode, range, token) {
+  const stops = waypoint ? [origin, waypoint, destination] : [origin, destination];
+  const segments = [];
+  const fuelSegments = [];
+
+  for (let index = 0; index < stops.length - 1; index++) {
+    const leg = await calculateLegRoute(stops[index], stops[index + 1], mode, range, token);
+    if (leg === undefined) return undefined;
+    if (!leg) return null;
+    segments.push({
+      origin: stops[index],
+      destination: stops[index + 1],
+      path: leg.result.path,
+      edges: leg.result.edges,
+      cost: leg.result.cost,
+    });
+    fuelSegments.push(leg.fuelBest || leg.result);
+  }
+
+  const stitched = RouteCore.stitchRoutes(segments);
+  if (!stitched) return null;
+  const fuelBest = RouteCore.stitchRoutes(fuelSegments);
+  if (fuelBest) stitched.fuelScore = RouteCore.fuelScore(stitched, fuelBest);
+  stitched.segments = segments.map((segment) => ({
+    origin: segment.origin,
+    destination: segment.destination,
+  }));
+  return stitched;
 }
 
 function hydrateWorkerRouteResult(result) {
@@ -1103,16 +1210,28 @@ async function calculate() {
   }
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
+  const waypoint = resolveWaypoint();
   if (!origin || !destination) {
     renderRouteState("Pick an origin and destination", "Use search or click stars on the map.", "", "Pick");
     setStatus("Choose a valid origin and destination");
     setCalculating(false);
     return;
   }
+  if (!waypoint.valid) {
+    renderRouteState("Waypoint not found", "Choose a valid via system or clear the field.", "danger", "Via");
+    setStatus("Choose a valid waypoint system");
+    setCalculating(false);
+    return;
+  }
   resolveRouteFieldsToNames();
   selectSystem(origin);
   setStatus("Calculating route");
-  renderRouteState("Calculating route", "Checking jump range and available gates.", "", "Wait");
+  renderRouteState(
+    waypoint.system ? "Calculating multi-leg route" : "Calculating route",
+    waypoint.system ? "Checking both route legs and available gates." : "Checking jump range and available gates.",
+    "",
+    "Wait",
+  );
   await new Promise((resolve) => setTimeout(resolve, 20));
   if (token !== state.routeToken) {
     setCalculating(false);
@@ -1121,13 +1240,8 @@ async function calculate() {
   const mode = new FormData(els.form).get("optimize") || "fuel";
   const range = Number(els.jumpRange.value || 120);
   try {
-    let result = await calculateRoute(origin, destination, mode, range);
-    for (let pass = 0; pass < 4 && result; pass++) {
-      const added = await discoverGateLinksForRoute(result);
-      if (token !== state.routeToken) return;
-      if (!added) break;
-      result = await calculateRoute(origin, destination, mode, range);
-    }
+    const result = await calculateJourney(origin, destination, waypoint.system, mode, range, token);
+    if (token !== state.routeToken || result === undefined) return;
     renderRoute(result);
     if (result) fitSystems(result.path);
   } finally {
@@ -1139,6 +1253,7 @@ function bindEvents() {
   window.addEventListener("resize", resizeCanvas);
   setupSystemSearch(els.origin, els.originSuggestions);
   setupSystemSearch(els.destination, els.destinationSuggestions);
+  setupSystemSearch(els.via, els.viaSuggestions);
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
     calculate();
@@ -1149,7 +1264,7 @@ function bindEvents() {
       if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
     }, 250);
   };
-  [els.origin, els.destination, els.jumpRange].forEach((field) => {
+  [els.origin, els.destination, els.via, els.jumpRange].forEach((field) => {
     field.addEventListener("input", scheduleRouteUpdate);
     field.addEventListener("change", scheduleRouteUpdate);
   });
@@ -1195,6 +1310,7 @@ function bindEvents() {
   els.shareLink.addEventListener("click", copyShareLinkToClipboard);
   els.setOrigin.addEventListener("click", () => setSelectedRouteField(els.origin));
   els.setDestination.addEventListener("click", () => setSelectedRouteField(els.destination));
+  els.setVia.addEventListener("click", () => setSelectedRouteField(els.via));
   els.centerSystem.addEventListener("click", () => centerOnSystem(state.selected));
 
   els.canvas.addEventListener("pointerdown", (event) => {
@@ -1254,8 +1370,399 @@ function bindEvents() {
   });
 }
 
+// ── Overlay: Kill Feed ─────────────────────────────────────────────────────
+
+async function fetchKillFeed() {
+  // Killmails are on-chain Sui events — query via suix_queryEvents
+  const eventType = `${EVE_WORLD_PACKAGE_ID}::killmail::KillmailCreatedEvent`;
+  const kills = [];
+  let cursor = null;
+  let pages = 0;
+  const MAX_PAGES = 10; // up to ~1 000 events
+  do {
+    const data = await suiRpc("suix_queryEvents", [
+      { MoveEventType: eventType },
+      cursor,
+      100,
+      true, // descending — newest first
+    ]);
+    for (const event of data.data || []) {
+      const p = event.parsedJson;
+      const systemId = Number(p.solar_system_id?.item_id ?? 0);
+      const timestamp = Number(event.timestampMs ?? 0);
+      if (!systemId || !timestamp) continue;
+      kills.push({
+        systemId,
+        timestamp,
+        lossType: p.loss_type?.variant ?? "",
+        killerId: p.killer_id?.item_id ?? "",
+        victimId: p.victim_id?.item_id ?? "",
+      });
+    }
+    cursor = data.nextCursor ?? null;
+    pages++;
+  } while (cursor && pages < MAX_PAGES);
+  return { kills, source: "sui-events" };
+}
+
+function buildKillSystemMap() {
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 60 * 60 * 1000;
+  const map = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    if (!map.has(kill.systemId)) map.set(kill.systemId, []);
+    map.get(kill.systemId).push(kill);
+  }
+  return map;
+}
+
+function drawKillOverlay() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  ctx.save();
+  for (const [systemId, kills] of killsBySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    const rect = cachedRect || els.canvas.getBoundingClientRect();
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    const count = kills.length;
+    const radius = Math.min(12, 4 + Math.log2(count + 1) * 2);
+    // Glow
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius * 2.5);
+    grd.addColorStop(0, "rgba(255, 60, 60, 0.35)");
+    grd.addColorStop(1, "rgba(255, 60, 60, 0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Core dot
+    ctx.fillStyle = "rgba(255, 80, 80, 0.90)";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    // Count label for 2+
+    if (count > 1 && state.camera.zoom > 0.5) {
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.font = `bold ${Math.max(8, Math.min(11, radius + 1))}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(count > 99 ? "99+" : String(count), p.x, p.y);
+    }
+  }
+  ctx.restore();
+}
+
+async function ensureKillFeed() {
+  if (state.overlayKillsLoaded) return;
+  if (state.overlayKillsLoading) return state.overlayKillsLoading;
+  state.overlayKillsLoading = (async () => {
+    setOverlayStatus("Loading kill feed...");
+    try {
+      const { kills } = await fetchKillFeed();
+      state.overlayKills = kills;
+      if (kills.length) {
+        setOverlayStatus(`${kills.length} kills loaded (last ${state.overlayKillsTimeWindow}h shown)`);
+      } else {
+        setOverlayStatus("No kills found on-chain");
+      }
+    } catch (err) {
+      state.overlayKills = [];
+      setOverlayStatus(`Kill feed error: ${err.message ?? err}`);
+    } finally {
+      state.overlayKillsLoaded = true;
+      state.overlayKillsLoading = null;
+      draw();
+    }
+  })();
+  return state.overlayKillsLoading;
+}
+
+// ── Overlay: Smart Assemblies ──────────────────────────────────────────────
+
+// Correct module paths from world-contracts source
+// (github.com/evefrontier/world-contracts/tree/main/contracts/world/sources)
+const ASSEMBLY_TYPE_DEFS = [
+  { fragment: "network_node::NetworkNode", label: "Network Node", color: "#00b4d8" },
+  { fragment: "storage_unit::StorageUnit", label: "Storage Unit", color: "#61d5c7" },
+  { fragment: "assembly::Assembly",         label: "Assembly",    color: "#9b8dff" },
+  { fragment: "turret::Turret",            label: "Turret",      color: "#ff9f40" },
+];
+
+async function fetchAssembliesOfType(typeFragment) {
+  const query = `
+    query Assemblies($type: String!, $after: String) {
+      objects(filter: { type: $type }, first: 50, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          address
+          asMoveObject { contents { json } }
+        }
+      }
+    }
+  `;
+  const type = `${EVE_WORLD_PACKAGE_ID}::${typeFragment}`;
+  const items = [];
+  let after = null;
+  let pages = 0;
+  do {
+    const data = await suiGraphql(query, { type, after });
+    const page = data.objects;
+    items.push(...page.nodes.map((n) => ({ id: n.address, ...n.asMoveObject?.contents?.json })).filter((n) => n.id));
+    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    pages++;
+    if (pages > 20) break; // safety cap
+  } while (after);
+  return items;
+}
+
+async function fetchAssemblyOverlay() {
+  const allItems = [];
+  for (const typeDef of ASSEMBLY_TYPE_DEFS) {
+    try {
+      const items = await fetchAssembliesOfType(typeDef.fragment);
+      for (const item of items) {
+        allItems.push({ ...item, _typeLabel: typeDef.label, _typeColor: typeDef.color });
+      }
+    } catch {
+      // type might not exist; continue
+    }
+  }
+  // Locate assemblies via LocationRegistry
+  const ids = new Set(allItems.map((a) => a.id).filter(Boolean));
+  const located = await fetchLocatedGateSystems(ids).catch(() => new Map());
+
+  return allItems
+    .map((a) => {
+      const systemId = located.get(a.id) ?? Number(a.solar_system_id ?? a.solarsystem ?? 0);
+      const online = String(a?.status?.status?.["@variant"] ?? a?.status?.["@variant"] ?? a?.status ?? "").toUpperCase() === "ONLINE";
+      // NetworkNode exposes connected_assembly_ids — use for player-base detection
+      const connectedCount = Array.isArray(a.connected_assembly_ids) ? a.connected_assembly_ids.length : 0;
+      return {
+        id: a.id,
+        systemId,
+        label: a._typeLabel,
+        color: a._typeColor,
+        online,
+        name: a.metadata?.name || a._typeLabel,
+        connectedCount,
+      };
+    })
+    .filter((a) => a.systemId);
+}
+
+function drawAssemblyOverlay() {
+  if (!state.overlayAssemblies.length) return;
+  ctx.save();
+  // Group by system
+  const bySystem = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
+    bySystem.get(asm.systemId).push(asm);
+  }
+  for (const [systemId, assemblies] of bySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    const rect = cachedRect || els.canvas.getBoundingClientRect();
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    const onlineCount = assemblies.filter((a) => a.online).length;
+    const anyOnline = onlineCount > 0;
+    const radius = 5 + Math.min(4, Math.log2(assemblies.length + 1));
+    // Use dominant type color
+    const colors = assemblies.filter((a) => a.online).map((a) => a.color);
+    const dominantColor = colors[0] ?? assemblies[0]?.color ?? "#00b4d8";
+    ctx.strokeStyle = anyOnline ? dominantColor : "rgba(100,120,140,0.4)";
+    ctx.lineWidth = anyOnline ? 1.5 : 1;
+    ctx.beginPath();
+    // Diamond shape for assemblies
+    ctx.moveTo(p.x, p.y - radius);
+    ctx.lineTo(p.x + radius, p.y);
+    ctx.lineTo(p.x, p.y + radius);
+    ctx.lineTo(p.x - radius, p.y);
+    ctx.closePath();
+    ctx.stroke();
+    if (anyOnline) {
+      ctx.fillStyle = dominantColor.replace(")", ", 0.20)").replace("rgb", "rgba").replace("#", "rgba(").replace("rgba(", "rgba(0,180,216,0.12)");
+      // Simpler fill
+      ctx.fillStyle = `${dominantColor}22`;
+      ctx.fill();
+    }
+    if (assemblies.length > 1 && state.camera.zoom > 0.6) {
+      ctx.fillStyle = anyOnline ? dominantColor : "rgba(150,170,190,0.7)";
+      ctx.font = `bold ${Math.max(7, Math.min(10, radius))}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(assemblies.length), p.x, p.y);
+    }
+  }
+  ctx.restore();
+}
+
+async function ensureAssemblyOverlay() {
+  if (state.overlayAssembliesLoaded) return;
+  if (state.overlayAssembliesLoading) return state.overlayAssembliesLoading;
+  state.overlayAssembliesLoading = (async () => {
+    setOverlayStatus("Loading smart assemblies...");
+    try {
+      const assemblies = await fetchAssemblyOverlay();
+      state.overlayAssemblies = assemblies;
+      state.overlayPlayerBases = derivePlayerBases(assemblies);
+      if (assemblies.length) {
+        setOverlayStatus(`${assemblies.length} assemblies loaded, ${state.overlayPlayerBases.length} potential bases`);
+      } else {
+        setOverlayStatus("No assembly data found");
+      }
+    } catch (err) {
+      state.overlayAssemblies = [];
+      state.overlayPlayerBases = [];
+      setOverlayStatus("Assembly data unavailable");
+    } finally {
+      state.overlayAssembliesLoaded = true;
+      state.overlayAssembliesLoading = null;
+      draw();
+    }
+  })();
+  return state.overlayAssembliesLoading;
+}
+
+// ── Overlay: Player Bases ──────────────────────────────────────────────────
+
+function derivePlayerBases(assemblies) {
+  const bySystem = new Map();
+  for (const asm of assemblies) {
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
+    bySystem.get(asm.systemId).push(asm);
+  }
+  const bases = [];
+  for (const [systemId, list] of bySystem) {
+    // Criteria A: 4+ smart assemblies in the same system
+    const qualifyByCount = list.length >= 4;
+    // Criteria B: any NetworkNode with 4+ connected assemblies
+    const maxConnected = Math.max(0, ...list.map((a) => a.connectedCount || 0));
+    const qualifyByNode = maxConnected >= 4;
+    if (qualifyByCount || qualifyByNode) {
+      bases.push({
+        systemId,
+        assemblyCount: list.length,
+        onlineCount: list.filter((a) => a.online).length,
+        maxConnected,
+        types: [...new Set(list.map((a) => a.label))],
+      });
+    }
+  }
+  return bases;
+}
+
+function drawPlayerBaseOverlay() {
+  if (!state.overlayPlayerBases.length) return;
+  ctx.save();
+  for (const base of state.overlayPlayerBases) {
+    const system = state.systemsById.get(base.systemId);
+    if (!system) continue;
+    const p = project(system);
+    const rect = cachedRect || els.canvas.getBoundingClientRect();
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = 10 + Math.min(6, base.assemblyCount);
+    const active = base.onlineCount > 0;
+    // Outer ring
+    ctx.strokeStyle = active ? "rgba(241, 184, 75, 0.80)" : "rgba(241, 184, 75, 0.25)";
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner fill
+    ctx.setLineDash([]);
+    if (active) {
+      const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      grd.addColorStop(0, "rgba(241, 184, 75, 0.18)");
+      grd.addColorStop(1, "rgba(241, 184, 75, 0)");
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Base label at higher zoom
+    if (state.camera.zoom > 1.2) {
+      ctx.fillStyle = active ? "rgba(241, 184, 75, 0.90)" : "rgba(241, 184, 75, 0.40)";
+      ctx.font = "bold 8px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const label = base.maxConnected >= 4
+        ? `node+${base.maxConnected}`
+        : `${base.assemblyCount} asm`;
+      ctx.fillText(label, p.x, p.y + r + 3);
+    }
+  }
+  ctx.restore();
+}
+
+// ── Overlay UI helpers ─────────────────────────────────────────────────────
+
+function setOverlayStatus(text) {
+  els.overlayStatus.textContent = text;
+}
+
+function updateOverlayLegend() {
+  els.legendKill.style.display = state.showKills ? "" : "none";
+  els.legendAssembly.style.display = state.showAssemblies ? "" : "none";
+  els.legendBase.style.display = state.showPlayerBases ? "" : "none";
+}
+
+function updateTimePresets() {
+  els.timePresets.forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.hours) === state.overlayKillsTimeWindow);
+  });
+}
+
+async function toggleOverlay(name, enabled) {
+  if (name === "kills") {
+    state.showKills = enabled;
+    els.killTimePanel.style.display = enabled ? "" : "none";
+    if (enabled) await ensureKillFeed();
+  } else if (name === "assemblies") {
+    state.showAssemblies = enabled;
+    if (enabled) await ensureAssemblyOverlay();
+  } else if (name === "playerBases") {
+    state.showPlayerBases = enabled;
+    if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
+  }
+  updateOverlayLegend();
+  draw();
+}
+
+function bindOverlayEvents() {
+  els.killsToggle.addEventListener("change", () => toggleOverlay("kills", els.killsToggle.checked));
+  els.assembliesToggle.addEventListener("change", () => toggleOverlay("assemblies", els.assembliesToggle.checked));
+  els.playerBasesToggle.addEventListener("change", () => toggleOverlay("playerBases", els.playerBasesToggle.checked));
+  els.timePresets.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.overlayKillsTimeWindow = Number(btn.dataset.hours);
+      updateTimePresets();
+      draw();
+    });
+  });
+  els.refreshOverlays.addEventListener("click", () => {
+    state.overlayKillsLoaded = false;
+    state.overlayKillsLoading = null;
+    state.overlayAssembliesLoaded = false;
+    state.overlayAssembliesLoading = null;
+    state.overlayKills = [];
+    state.overlayAssemblies = [];
+    state.overlayPlayerBases = [];
+    const reloadTasks = [];
+    if (state.showKills) reloadTasks.push(ensureKillFeed());
+    if (state.showAssemblies || state.showPlayerBases) reloadTasks.push(ensureAssemblyOverlay());
+    if (!reloadTasks.length) setOverlayStatus("Enable an overlay to load data");
+    Promise.all(reloadTasks);
+  });
+}
+
 async function init() {
   bindEvents();
+  bindOverlayEvents();
+  updateTimePresets();
   loadUrlParams();
   updateRangePresets();
   updateRouteActions();
