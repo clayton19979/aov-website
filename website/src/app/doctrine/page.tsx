@@ -133,11 +133,39 @@ export default async function DoctrinePage() {
           <p className="font-mono text-xs text-white/20 tracking-wide mb-6">
             Doctrine in compressed form. A member who uses them unselfconsciously has internalized the doctrine.
           </p>
-          <ul className="flex flex-col gap-3">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {doctrine.commonPhrases.map((phrase, i) => (
-              <li key={i} className="flex items-center gap-4">
-                <span className="text-void-teal/30 text-xs">◈</span>
-                <span className="font-mono text-sm text-white/60 tracking-wide">{phrase}</span>
+              <li
+                key={i}
+                className="group relative flex items-center gap-3 overflow-hidden pl-4 pr-3 py-2.5 transition-colors duration-300"
+              >
+                {/* left accent bar — dim by default, brightens on hover */}
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 bottom-0 w-0.5 opacity-40 transition-opacity duration-300 group-hover:opacity-100"
+                  style={{
+                    background:
+                      'linear-gradient(to bottom, var(--accent), color-mix(in srgb, var(--accent) 20%, transparent))',
+                  }}
+                />
+                {/* hover wash */}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                  style={{ background: 'color-mix(in srgb, var(--accent) 5%, transparent)' }}
+                />
+                <span className="relative font-mono text-[10px] tracking-wider text-void-teal/40 transition-colors duration-300 group-hover:text-void-teal">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <span className="relative font-mono text-sm text-white/55 tracking-wide transition-colors duration-300 group-hover:text-white/85">
+                  {phrase}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="relative ml-auto -translate-x-1 font-mono text-xs text-void-teal opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
+                >
+                  ◂
+                </span>
               </li>
             ))}
           </ul>
