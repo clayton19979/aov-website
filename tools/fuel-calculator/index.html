@@ -13,6 +13,7 @@
         <h1>Network Node Fuel Calculator</h1>
         <p class="lede">
           Paste node fuel snapshots, set a reserve window, and turn a limited fuel cache into an actionable dispatch brief.
+          Critical nodes are now stabilized to a 12-hour floor before the planner spends remaining fuel on the broader reserve target.
         </p>
       </header>
 
@@ -74,11 +75,13 @@
                   <th>Max</th>
                   <th>Burn / hr</th>
                   <th>Runtime</th>
+                  <th>To 12h</th>
+                  <th>12h Gap</th>
                   <th>To Reserve</th>
                   <th>Cap Gap</th>
                   <th>Allocated</th>
                   <th>Reserve Gap</th>
-                  <th>To Full</th>
+                  <th>After Dispatch</th>
                 </tr>
               </thead>
               <tbody data-table-body></tbody>
