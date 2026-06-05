@@ -97,7 +97,9 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
       : node.currentFuel / node.burnRatePerHour;
+    const reachableReserveFuel = Math.min(node.maxFuel, reserveFuel);
     const fuelToReserve = Math.max(0, reserveFuel - node.currentFuel);
+    const fuelToDeliver = Math.max(0, reachableReserveFuel - node.currentFuel);
     const fuelToFull = Math.max(0, node.maxFuel - node.currentFuel);
     const projectedShortfall = Math.max(0, reserveFuel - node.maxFuel);
     const status = node.burnRatePerHour === 0
@@ -114,6 +116,7 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
       reserveFuel: roundTo(reserveFuel),
       hoursRemaining: Number.isFinite(hoursRemaining) ? roundTo(hoursRemaining) : Infinity,
       fuelToReserve: roundTo(fuelToReserve),
+      fuelToDeliver: roundTo(fuelToDeliver),
       fuelToFull: roundTo(fuelToFull),
       projectedShortfall: roundTo(projectedShortfall),
       status,
@@ -124,16 +127,21 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
   const dispatchOrder = [...perNode]
     .sort(compareDispatchPriority)
     .map((node) => {
-      const allocatedFuel = Math.min(node.fuelToReserve, remainingDispatchFuel);
+      const allocatedFuel = Math.min(node.fuelToDeliver, remainingDispatchFuel);
       remainingDispatchFuel = roundTo(remainingDispatchFuel - allocatedFuel);
-      const remainingReserveGap = roundTo(Math.max(0, node.fuelToReserve - allocatedFuel));
+      const remainingSupplyGap = roundTo(Math.max(0, node.fuelToDeliver - allocatedFuel));
+      const remainingReserveGap = roundTo(node.projectedShortfall + remainingSupplyGap);
 
       return {
         name: node.name,
         status: node.status,
         hoursRemaining: node.hoursRemaining,
         fuelToReserve: node.fuelToReserve,
+        fuelToDeliver: node.fuelToDeliver,
         allocatedFuel: roundTo(allocatedFuel),
+        projectedShortfall: node.projectedShortfall,
+        capacityLimited: node.projectedShortfall > 0,
+        remainingSupplyGap,
         remainingReserveGap,
         canReachReserve: remainingReserveGap === 0,
       };
@@ -145,6 +153,7 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
       maxFuel: roundTo(accumulator.maxFuel + node.maxFuel),
       reserveFuel: roundTo(accumulator.reserveFuel + node.reserveFuel),
       fuelToReserve: roundTo(accumulator.fuelToReserve + node.fuelToReserve),
+      fuelToDeliver: roundTo(accumulator.fuelToDeliver + node.fuelToDeliver),
       fuelToFull: roundTo(accumulator.fuelToFull + node.fuelToFull),
       projectedShortfall: roundTo(accumulator.projectedShortfall + node.projectedShortfall),
     }),
@@ -153,6 +162,7 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
       maxFuel: 0,
       reserveFuel: 0,
       fuelToReserve: 0,
+      fuelToDeliver: 0,
       fuelToFull: 0,
       projectedShortfall: 0,
     },
@@ -161,12 +171,16 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
   const counts = perNode.reduce(
     (accumulator, node) => {
       accumulator[node.status] += 1;
+      if (node.projectedShortfall > 0) {
+        accumulator.capacityLimited += 1;
+      }
       return accumulator;
     },
     {
       critical: 0,
       warning: 0,
       stable: 0,
+      capacityLimited: 0,
     },
   );
 

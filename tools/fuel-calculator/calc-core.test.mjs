@@ -47,18 +47,21 @@ test('planFuel computes reserve, refill, and alert status', () => {
   assert.equal(plan.counts.critical, 1);
   assert.equal(plan.counts.warning, 0);
   assert.equal(plan.counts.stable, 2);
+  assert.equal(plan.counts.capacityLimited, 0);
   assert.equal(plan.totals.fuelToReserve, 150);
+  assert.equal(plan.totals.fuelToDeliver, 150);
   assert.equal(plan.totals.fuelToFull, 440);
   assert.deepEqual(
     plan.perNode.map((node) => ({
       name: node.name,
       fuelToReserve: node.fuelToReserve,
+      fuelToDeliver: node.fuelToDeliver,
       status: node.status,
     })),
     [
-      { name: 'North Gate', fuelToReserve: 150, status: 'critical' },
-      { name: 'South Relay', fuelToReserve: 0, status: 'stable' },
-      { name: 'Idle Node', fuelToReserve: 0, status: 'stable' },
+      { name: 'North Gate', fuelToReserve: 150, fuelToDeliver: 150, status: 'critical' },
+      { name: 'South Relay', fuelToReserve: 0, fuelToDeliver: 0, status: 'stable' },
+      { name: 'Idle Node', fuelToReserve: 0, fuelToDeliver: 0, status: 'stable' },
     ],
   );
 });
@@ -79,7 +82,11 @@ test('planFuel allocates limited stockpile by urgency and time remaining', () =>
       status: 'critical',
       hoursRemaining: 9,
       fuelToReserve: 150,
+      fuelToDeliver: 150,
       allocatedFuel: 150,
+      projectedShortfall: 0,
+      capacityLimited: false,
+      remainingSupplyGap: 0,
       remainingReserveGap: 0,
       canReachReserve: true,
     },
@@ -88,7 +95,11 @@ test('planFuel allocates limited stockpile by urgency and time remaining', () =>
       status: 'warning',
       hoursRemaining: 12,
       fuelToReserve: 60,
+      fuelToDeliver: 60,
       allocatedFuel: 60,
+      projectedShortfall: 0,
+      capacityLimited: false,
+      remainingSupplyGap: 0,
       remainingReserveGap: 0,
       canReachReserve: true,
     },
@@ -97,8 +108,39 @@ test('planFuel allocates limited stockpile by urgency and time remaining', () =>
       status: 'warning',
       hoursRemaining: 13.8,
       fuelToReserve: 82,
+      fuelToDeliver: 82,
       allocatedFuel: 10,
+      projectedShortfall: 0,
+      capacityLimited: false,
+      remainingSupplyGap: 72,
       remainingReserveGap: 72,
+      canReachReserve: false,
+    },
+  ]);
+});
+
+test('planFuel caps dispatch at node max capacity and tracks structural reserve gaps', () => {
+  const plan = planFuel([
+    { name: 'Forward Tower', currentFuel: 10, maxFuel: 100, burnRatePerHour: 10 },
+  ], 24, 500);
+
+  assert.equal(plan.counts.capacityLimited, 1);
+  assert.equal(plan.totals.fuelToReserve, 230);
+  assert.equal(plan.totals.fuelToDeliver, 90);
+  assert.equal(plan.dispatch.allocatedFuel, 90);
+  assert.equal(plan.dispatch.uncoveredReserve, 140);
+  assert.deepEqual(plan.dispatch.order, [
+    {
+      name: 'Forward Tower',
+      status: 'critical',
+      hoursRemaining: 1,
+      fuelToReserve: 230,
+      fuelToDeliver: 90,
+      allocatedFuel: 90,
+      projectedShortfall: 140,
+      capacityLimited: true,
+      remainingSupplyGap: 0,
+      remainingReserveGap: 140,
       canReachReserve: false,
     },
   ]);

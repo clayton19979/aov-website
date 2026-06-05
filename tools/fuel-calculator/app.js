@@ -43,6 +43,8 @@ function createSummaryMarkup(plan) {
     ['Reserve Target', `${plan.reserveHours}h`],
     ['Fuel On Hand', formatFuelBudget(plan.availableFuel)],
     ['Fuel To Reserve', formatNumber(plan.totals.fuelToReserve)],
+    ['Fuel To Dispatch', formatNumber(plan.totals.fuelToDeliver)],
+    ['Capacity-Limited', plan.counts.capacityLimited],
     ['Reserve Gap', formatNumber(plan.dispatch.uncoveredReserve)],
     ['Fuel Remaining', formatFuelBudget(plan.dispatch.remainingFuel)],
   ];
@@ -69,6 +71,7 @@ function createDispatchMarkup(plan) {
       <div class="dispatch-metrics">
         <span>Send ${escapeHtml(formatNumber(node.allocatedFuel))}</span>
         <span>${node.remainingReserveGap > 0 ? `Gap ${escapeHtml(formatNumber(node.remainingReserveGap))}` : 'Reserve covered'}</span>
+        ${node.capacityLimited ? `<span>Max capacity leaves ${escapeHtml(formatNumber(node.projectedShortfall))} uncovered</span>` : ''}
       </div>
     </li>
   `).join('');
@@ -88,6 +91,7 @@ function createTableMarkup(plan) {
         <td>${escapeHtml(formatNumber(node.burnRatePerHour))}</td>
         <td>${escapeHtml(formatHours(node.hoursRemaining))}</td>
         <td>${escapeHtml(formatNumber(node.fuelToReserve))}</td>
+        <td>${escapeHtml(formatNumber(node.projectedShortfall))}</td>
         <td>${escapeHtml(formatNumber(dispatch?.allocatedFuel ?? 0))}</td>
         <td>${escapeHtml(formatNumber(dispatch?.remainingReserveGap ?? 0))}</td>
         <td>${escapeHtml(formatNumber(node.fuelToFull))}</td>
@@ -101,8 +105,9 @@ function createReport(plan) {
     `Reserve target: ${plan.reserveHours}h`,
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
     `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
+    `Fuel that can actually be dispatched: ${formatNumber(plan.totals.fuelToDeliver)}`,
     `Uncovered reserve gap: ${formatNumber(plan.dispatch.uncoveredReserve)}`,
-    `Critical: ${plan.counts.critical}, Warning: ${plan.counts.warning}, Stable: ${plan.counts.stable}`,
+    `Critical: ${plan.counts.critical}, Warning: ${plan.counts.warning}, Stable: ${plan.counts.stable}, Capacity-limited: ${plan.counts.capacityLimited}`,
   ];
 
   const rows = plan.dispatch.order.map((node) => [
@@ -110,6 +115,7 @@ function createReport(plan) {
     node.status.toUpperCase(),
     `remaining ${formatHours(node.hoursRemaining)}`,
     `send ${formatNumber(node.allocatedFuel)}`,
+    node.capacityLimited ? `capacity gap ${formatNumber(node.projectedShortfall)}` : 'capacity ok',
     node.remainingReserveGap > 0 ? `gap ${formatNumber(node.remainingReserveGap)}` : 'reserve covered',
   ].join(' | '));
 
@@ -129,7 +135,10 @@ function renderPlan(plan) {
   copyReportButton.dataset.report = createReport(plan);
 
   if (plan.dispatch.uncoveredReserve > 0) {
-    setFeedback(`Dispatch is short ${formatNumber(plan.dispatch.uncoveredReserve)} fuel to cover every reserve target.`, 'critical');
+    const reason = plan.counts.capacityLimited > 0
+      ? `${plan.counts.capacityLimited} node(s) cannot physically hold the full reserve target.`
+      : 'Available dispatch fuel is below the reserve requirement.';
+    setFeedback(`Dispatch is short ${formatNumber(plan.dispatch.uncoveredReserve)} fuel to cover every reserve target. ${reason}`, 'critical');
   } else if (plan.counts.critical > 0) {
     setFeedback(`${plan.counts.critical} node(s) will burn dry inside 12 hours. Dispatch in listed priority order.`, 'warning');
   } else if (plan.counts.warning > 0) {
