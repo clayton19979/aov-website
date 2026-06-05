@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AoV Fuel Calculator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">Architects of the Void</p>
+        <h1>Network Node Fuel Calculator</h1>
+        <p class="lede">
+          Paste node fuel snapshots, set a reserve window, and generate a refill brief for the next logistics run.
+        </p>
+      </header>
+
+      <section class="workspace">
+        <form class="panel input-panel" data-fuel-form>
+          <div class="panel-heading">
+            <h2>Fuel Snapshot</h2>
+            <button type="button" class="ghost-button" data-fill-sample>Load Sample</button>
+          </div>
+
+          <label class="field">
+            <span>Reserve Window (hours)</span>
+            <input data-reserve-hours type="number" min="0" step="1" />
+          </label>
+
+          <label class="field">
+            <span>CSV Rows</span>
+            <textarea
+              data-node-input
+              rows="10"
+              spellcheck="false"
+              placeholder="North Gate,90,400,10"
+            ></textarea>
+          </label>
+
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code></p>
+
+          <div class="actions">
+            <button type="submit" class="primary-button">Calculate Fuel Plan</button>
+            <button type="button" class="ghost-button" data-copy-report disabled>Copy Dispatch Report</button>
+          </div>
+
+          <p class="feedback" data-feedback data-tone="info"></p>
+        </form>
+
+        <section class="panel output-panel">
+          <div class="panel-heading">
+            <h2>Plan Summary</h2>
+          </div>
+
+          <div class="summary-grid" data-summary></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Node</th>
+                  <th>Current</th>
+                  <th>Max</th>
+                  <th>Burn / hr</th>
+                  <th>Runtime</th>
+                  <th>To Reserve</th>
+                  <th>To Full</th>
+                </tr>
+              </thead>
+              <tbody data-table-body></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
