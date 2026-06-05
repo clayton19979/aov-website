@@ -57,6 +57,8 @@ const state = {
   showKills: false,
   showAssemblies: false,
   showPlayerBases: false,
+  showGameGates: true,
+  showSmartGateLinks: true,
 };
 
 const els = {
@@ -96,6 +98,8 @@ const els = {
   legendKill: document.getElementById("legendKill"),
   legendAssembly: document.getElementById("legendAssembly"),
   legendBase: document.getElementById("legendBase"),
+  showGameGatesToggle: document.getElementById("showGameGates"),
+  showSmartGateLinksToggle: document.getElementById("showSmartGateLinks"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -249,6 +253,94 @@ function indexSystems(systems) {
   });
 }
 
+// ── Background: ambient star field ────────────────────────────────────────
+// Pre-generated once on resize; these are decorative background stars, not
+// game systems.
+
+let bgStars = [];
+
+function generateBgStars(rect) {
+  bgStars = [];
+  let seed = 0xdeadbeef;
+  const rng = () => {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    return ((seed >>> 0) / 0xffffffff);
+  };
+  const count = Math.floor((rect.width * rect.height) / 2800);
+  for (let i = 0; i < count; i++) {
+    const roll = rng();
+    bgStars.push({
+      x: rng() * rect.width,
+      y: rng() * rect.height,
+      // ~5 % bright, ~20 % medium, rest tiny
+      r: roll < 0.05 ? rng() * 1.0 + 0.8
+        : roll < 0.25 ? rng() * 0.4 + 0.4
+        : rng() * 0.3 + 0.15,
+      a: rng() * 0.45 + 0.12,
+      // subtle colour tint: mostly white-blue, rare warm
+      warm: rng() < 0.08,
+    });
+  }
+}
+
+function drawBackground(rect) {
+  // Deep-space void gradient
+  const bg = ctx.createLinearGradient(0, 0, rect.width * 0.6, rect.height);
+  bg.addColorStop(0,   '#03060f');
+  bg.addColorStop(0.5, '#020408');
+  bg.addColorStop(1,   '#040712');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, rect.width, rect.height);
+
+  // Nebula layer — overlapping soft clouds
+  const nebulae = [
+    { cx: 0.22, cy: 0.28, r: 0.52, c0: 'rgba(12,28,78,0.22)',  c1: 'rgba(6,14,40,0.06)' },
+    { cx: 0.68, cy: 0.58, r: 0.42, c0: 'rgba(38,8,62,0.18)',   c1: 'rgba(20,4,32,0.04)' },
+    { cx: 0.48, cy: 0.82, r: 0.35, c0: 'rgba(6,28,58,0.15)',   c1: 'rgba(3,14,30,0.03)' },
+    { cx: 0.82, cy: 0.14, r: 0.30, c0: 'rgba(22,6,46,0.14)',   c1: 'rgba(11,3,24,0.03)' },
+    { cx: 0.10, cy: 0.72, r: 0.28, c0: 'rgba(4,20,52,0.12)',   c1: 'rgba(2,10,28,0.02)' },
+    // Faint galactic-arm hint across the middle
+    { cx: 0.50, cy: 0.45, r: 0.75, c0: 'rgba(8,18,44,0.09)',   c1: 'rgba(0,0,0,0)' },
+  ];
+  for (const n of nebulae) {
+    const cx = n.cx * rect.width;
+    const cy = n.cy * rect.height;
+    const r  = n.r  * Math.min(rect.width, rect.height);
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grd.addColorStop(0,   n.c0);
+    grd.addColorStop(0.5, n.c1);
+    grd.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBgStars(rect) {
+  if (!bgStars.length) return;
+  ctx.save();
+  for (const s of bgStars) {
+    ctx.globalAlpha = s.a;
+    ctx.fillStyle = s.warm ? '#ffe8c8' : '#ddeeff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny cross-spike on the brightest bg stars
+    if (s.r > 1.4) {
+      ctx.globalAlpha = s.a * 0.5;
+      ctx.strokeStyle = s.warm ? '#ffe8c8' : '#ddeeff';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(s.x - s.r * 2.5, s.y); ctx.lineTo(s.x + s.r * 2.5, s.y);
+      ctx.moveTo(s.x, s.y - s.r * 2.5); ctx.lineTo(s.x, s.y + s.r * 2.5);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function resizeCanvas() {
   cachedRect = els.canvas.getBoundingClientRect();
   const rect = cachedRect;
@@ -256,6 +348,7 @@ function resizeCanvas() {
   els.canvas.width = Math.max(1, Math.floor(rect.width * scale));
   els.canvas.height = Math.max(1, Math.floor(rect.height * scale));
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  generateBgStars(rect);
   draw();
 }
 
@@ -290,44 +383,129 @@ function project(system) {
   return { x: px, y: py };
 }
 
+// Star spectral colours across 10 depth buckets (blue-white near, warm-dim far)
+const STAR_PALETTE = [
+  [70,  100, 180, 0.22],  // far — deep navy
+  [85,  120, 195, 0.27],
+  [105, 145, 210, 0.32],
+  [130, 165, 215, 0.38],
+  [155, 185, 220, 0.44],
+  [175, 200, 228, 0.50],
+  [195, 210, 235, 0.56],
+  [215, 222, 240, 0.62],
+  [230, 232, 248, 0.70],
+  [240, 240, 255, 0.80],  // near — bright blue-white
+];
+
 function draw() {
   const rect = els.canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
+
+  // ── Background ───────────────────────────────────────
+  drawBackground(rect);
+  drawBgStars(rect);
+
   if (!state.systems.length) return;
 
-  ctx.fillStyle = "#05070c";
-  ctx.fillRect(0, 0, rect.width, rect.height);
-
+  // ── Game systems (stars) ─────────────────────────────
   const z = state.camera.zoom;
   const n = state.systems.length;
   const visibleStep = n > 10000 ? (z < 0.4 ? 5 : z < 0.7 ? 3 : z < 1.1 ? 2 : 1) : 1;
-  const radius = z > 1.4 ? 1.45 : 0.85;
+
   const depthRange = Math.max(1, state.bounds.maxY - state.bounds.minY);
   const minY = state.bounds.minY;
-  const BUCKETS = 6;
-  const buckets = [[], [], [], [], [], []];
+  const BUCKETS = STAR_PALETTE.length;
+
+  // Three size tiers: tiny (most), medium, bright (rare glow)
+  // Bucket layout: [tinyX, tinyY, ...] per palette bucket
+  const tinyBuckets   = Array.from({ length: BUCKETS }, () => []);
+  const medBuckets    = Array.from({ length: BUCKETS }, () => []);
+  const glowBuckets   = Array.from({ length: BUCKETS }, () => []);
 
   for (let i = 0; i < n; i += visibleStep) {
     const system = state.systems[i];
     const p = project(system);
     if (p.x < -4 || p.y < -4 || p.x > rect.width + 4 || p.y > rect.height + 4) continue;
-    const b = Math.min(BUCKETS - 1, Math.floor(((system.y - minY) / depthRange) * BUCKETS));
-    buckets[b].push(p.x, p.y);
+    const bucket = Math.min(BUCKETS - 1, Math.floor(((system.y - minY) / depthRange) * BUCKETS));
+    // Deterministic size tier from system id
+    const tier = (system.id * 2654435761) >>> 0;
+    if ((tier % 100) < 3) {
+      glowBuckets[bucket].push(p.x, p.y);
+    } else if ((tier % 100) < 18) {
+      medBuckets[bucket].push(p.x, p.y);
+    } else {
+      tinyBuckets[bucket].push(p.x, p.y);
+    }
   }
 
+  const tinyR = z > 1.4 ? 0.9  : 0.5;
+  const medR  = z > 1.4 ? 1.5  : 0.95;
+  const glowR = z > 1.4 ? 2.2  : 1.4;
+
+  // Tiny stars
   for (let b = 0; b < BUCKETS; b++) {
-    const pts = buckets[b];
+    const pts = tinyBuckets[b];
     if (!pts.length) continue;
-    const t = b / (BUCKETS - 1);
-    ctx.fillStyle = `rgba(${Math.round(140 + t * 90)},${Math.round(175 + t * 55)},210,${(0.28 + t * 0.35).toFixed(2)})`;
+    const [r, g, bl, a] = STAR_PALETTE[b];
+    ctx.fillStyle = `rgba(${r},${g},${bl},${a})`;
     ctx.beginPath();
     for (let i = 0; i < pts.length; i += 2) {
-      ctx.moveTo(pts[i] + radius, pts[i + 1]);
-      ctx.arc(pts[i], pts[i + 1], radius, 0, Math.PI * 2);
+      ctx.moveTo(pts[i] + tinyR, pts[i + 1]);
+      ctx.arc(pts[i], pts[i + 1], tinyR, 0, Math.PI * 2);
     }
     ctx.fill();
   }
 
+  // Medium stars
+  for (let b = 0; b < BUCKETS; b++) {
+    const pts = medBuckets[b];
+    if (!pts.length) continue;
+    const [r, g, bl, a] = STAR_PALETTE[b];
+    ctx.fillStyle = `rgba(${r},${g},${bl},${Math.min(1, a + 0.15)})`;
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i += 2) {
+      ctx.moveTo(pts[i] + medR, pts[i + 1]);
+      ctx.arc(pts[i], pts[i + 1], medR, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+
+  // Bright / glow stars — drawn individually with radial gradient
+  for (let b = 0; b < BUCKETS; b++) {
+    const pts = glowBuckets[b];
+    if (!pts.length) continue;
+    const [r, g, bl] = STAR_PALETTE[b];
+    for (let i = 0; i < pts.length; i += 2) {
+      const sx = pts[i], sy = pts[i + 1];
+      // Outer halo
+      const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR * 3);
+      grd.addColorStop(0,   `rgba(${r},${g},${bl},0.6)`);
+      grd.addColorStop(0.3, `rgba(${r},${g},${bl},0.15)`);
+      grd.addColorStop(1,   `rgba(${r},${g},${bl},0)`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(sx, sy, glowR * 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Core
+      ctx.fillStyle = `rgba(${Math.min(255,r+30)},${Math.min(255,g+20)},255,0.95)`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      // Cross diffraction spike (only at mid-high zoom to avoid clutter)
+      if (z > 0.6) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(${r},${g},${bl},0.25)`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(sx - glowR * 5, sy); ctx.lineTo(sx + glowR * 5, sy);
+        ctx.moveTo(sx, sy - glowR * 5); ctx.lineTo(sx, sy + glowR * 5);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // ── Gate links ───────────────────────────────────────
   drawGateLinks();
   if (state.showKills) drawKillOverlay();
   if (state.showAssemblies) drawAssemblyOverlay();
@@ -348,21 +526,101 @@ function drawSystemMarker(system, color, size) {
 }
 
 function drawGateLinks() {
-  if (!state.gates.length || !els.useGates.checked) return;
+  if (!state.gates.length) return;
+  const showGame  = state.showGameGates;
+  const showSmart = state.showSmartGateLinks;
+  if (!showGame && !showSmart) return;
+
   ctx.save();
-  ctx.strokeStyle = "rgba(241, 184, 75, 0.28)";
-  ctx.lineWidth = 1;
-  state.gates.forEach((gate) => {
-    const from = state.systemsById.get(gate.from);
-    const to = state.systemsById.get(gate.to);
-    if (!from || !to) return;
-    const a = project(from);
-    const b = project(to);
+  const z = state.camera.zoom;
+
+  // Separate passes so we can use different styles without repeated save/restore
+  if (showGame) {
+    // Game gates — warm amber, solid, slightly thicker at high zoom
+    ctx.strokeStyle = `rgba(220, 130, 60, ${Math.min(0.55, 0.18 + z * 0.14)})`;
+    ctx.lineWidth = z > 1.5 ? 1.2 : 0.8;
+    ctx.setLineDash([]);
     ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+    for (const gate of state.gates) {
+      if (gate.kind !== "game") continue;
+      const from = state.systemsById.get(gate.from);
+      const to   = state.systemsById.get(gate.to);
+      if (!from || !to) continue;
+      const a = project(from);
+      const b = project(to);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
     ctx.stroke();
-  });
+
+    // Highlight system dots at gate endpoints when zoomed in
+    if (z > 1.8) {
+      const seen = new Set();
+      ctx.fillStyle = "rgba(220, 130, 60, 0.55)";
+      ctx.beginPath();
+      for (const gate of state.gates) {
+        if (gate.kind !== "game") continue;
+        for (const id of [gate.from, gate.to]) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const sys = state.systemsById.get(id);
+          if (!sys) continue;
+          const p = project(sys);
+          ctx.moveTo(p.x + 2, p.y);
+          ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        }
+      }
+      ctx.fill();
+    }
+  }
+
+  if (showSmart) {
+    // Smart gates — cyan, dashed
+    ctx.strokeStyle = `rgba(0, 190, 220, ${Math.min(0.65, 0.22 + z * 0.16)})`;
+    ctx.lineWidth = z > 1.5 ? 1.4 : 0.9;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    for (const gate of state.gates) {
+      if (gate.kind !== "smart") continue;
+      const from = state.systemsById.get(gate.from);
+      const to   = state.systemsById.get(gate.to);
+      if (!from || !to) continue;
+      const a = project(from);
+      const b = project(to);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Glow dots at smart gate endpoints
+    if (z > 0.9) {
+      const seen = new Set();
+      for (const gate of state.gates) {
+        if (gate.kind !== "smart") continue;
+        for (const id of [gate.from, gate.to]) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const sys = state.systemsById.get(id);
+          if (!sys) continue;
+          const p = project(sys);
+          const r = z > 1.5 ? 4 : 2.5;
+          const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.5);
+          grd.addColorStop(0,   "rgba(0,200,230,0.45)");
+          grd.addColorStop(1,   "rgba(0,200,230,0)");
+          ctx.fillStyle = grd;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r * 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(0,220,255,0.90)";
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, z > 1.5 ? 1.8 : 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
   ctx.restore();
 }
 
@@ -1280,6 +1538,14 @@ function bindEvents() {
   els.useGates.addEventListener("change", () => {
     if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
   });
+  els.showGameGatesToggle?.addEventListener("change", () => {
+    state.showGameGates = els.showGameGatesToggle.checked;
+    draw();
+  });
+  els.showSmartGateLinksToggle?.addEventListener("change", () => {
+    state.showSmartGateLinks = els.showSmartGateLinksToggle.checked;
+    draw();
+  });
   document.querySelectorAll('input[name="optimize"]').forEach((field) => {
     field.addEventListener("change", () => {
       if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
@@ -1781,6 +2047,8 @@ async function init() {
   }
   resolveRouteFieldsToNames();
   fitSystems(state.systems);
+  // Load gate network eagerly so links appear on the map immediately
+  ensureGateNetwork().catch(() => {});
   if (els.origin.value && els.destination.value) calculate();
 }
 

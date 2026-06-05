@@ -148,9 +148,9 @@ button:disabled {
   height: 2px;
 }
 
-.legend-jump  { background: var(--accent); }
-.legend-smart { background: rgba(0, 180, 216, 0.50); }
-.legend-game  { background: var(--danger); }
+.legend-jump       { background: var(--accent); }
+.legend-smart-gate { background: rgba(0, 190, 220, 0.75); border-top: 1px dashed rgba(0,200,255,0.6); height: 0; }
+.legend-game-gate  { background: rgba(220, 130, 60, 0.75); }
 
 /* ── System card ───────────────────────────────── */
 
@@ -680,9 +680,9 @@ input:focus, textarea:focus {
   display: contents;
 }
 
-.legend-kill  { background: rgba(255, 109, 122, 0.85); }
-.legend-assembly { background: rgba(0, 180, 216, 0.85); }
-.legend-base  { background: rgba(241, 184, 75, 0.85); border-radius: 50%; }
+.legend-kill     { background: rgba(255, 80, 80, 0.90); }
+.legend-assembly { background: rgba(0, 180, 216, 0.85); transform: rotate(45deg); }
+.legend-base     { background: transparent; border: 2px dashed rgba(241, 184, 75, 0.85); border-radius: 50%; width: 10px; height: 10px; }
 
 /* ── Responsive ────────────────────────────────── */
 
