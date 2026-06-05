@@ -1373,30 +1373,36 @@ function bindEvents() {
 // ── Overlay: Kill Feed ─────────────────────────────────────────────────────
 
 async function fetchKillFeed() {
-  const endpoints = [
-    `${API_BASE}/kills?limit=500`,
-    `${API_BASE}/killmails?limit=500`,
-    `${API_BASE}/kill_reports?limit=500`,
-  ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) continue;
-      const payload = await res.json();
-      const rows = Array.isArray(payload) ? payload : (payload.data || payload.kills || payload.killmails || []);
-      if (!Array.isArray(rows)) continue;
-      const kills = rows.map((k) => ({
-        systemId: Number(k.solar_system_id ?? k.solarSystemId ?? k.system_id ?? 0),
-        timestamp: new Date(k.timestamp ?? k.time ?? k.kill_time ?? k.killTime ?? 0).getTime(),
-        victimName: k.victim?.character_name ?? k.victim_name ?? k.victimName ?? "Unknown",
-        shipType: k.victim?.ship_type_id ?? k.ship_type_id ?? 0,
-      })).filter((k) => k.systemId && k.timestamp);
-      if (kills.length > 0) return { kills, source: url };
-    } catch {
-      // try next endpoint
+  // Killmails are on-chain Sui events — query via suix_queryEvents
+  const eventType = `${EVE_WORLD_PACKAGE_ID}::killmail::KillmailCreatedEvent`;
+  const kills = [];
+  let cursor = null;
+  let pages = 0;
+  const MAX_PAGES = 10; // up to ~1 000 events
+  do {
+    const data = await suiRpc("suix_queryEvents", [
+      { MoveEventType: eventType },
+      cursor,
+      100,
+      true, // descending — newest first
+    ]);
+    for (const event of data.data || []) {
+      const p = event.parsedJson;
+      const systemId = Number(p.solar_system_id?.item_id ?? 0);
+      const timestamp = Number(event.timestampMs ?? 0);
+      if (!systemId || !timestamp) continue;
+      kills.push({
+        systemId,
+        timestamp,
+        lossType: p.loss_type?.variant ?? "",
+        killerId: p.killer_id?.item_id ?? "",
+        victimId: p.victim_id?.item_id ?? "",
+      });
     }
-  }
-  return { kills: [], source: null };
+    cursor = data.nextCursor ?? null;
+    pages++;
+  } while (cursor && pages < MAX_PAGES);
+  return { kills, source: "sui-events" };
 }
 
 function buildKillSystemMap() {
@@ -1453,16 +1459,16 @@ async function ensureKillFeed() {
   state.overlayKillsLoading = (async () => {
     setOverlayStatus("Loading kill feed...");
     try {
-      const { kills, source } = await fetchKillFeed();
+      const { kills } = await fetchKillFeed();
       state.overlayKills = kills;
       if (kills.length) {
-        setOverlayStatus(`${kills.length} kills loaded`);
+        setOverlayStatus(`${kills.length} kills loaded (last ${state.overlayKillsTimeWindow}h shown)`);
       } else {
-        setOverlayStatus("Kill data not available from current API");
+        setOverlayStatus("No kills found on-chain");
       }
-    } catch {
+    } catch (err) {
       state.overlayKills = [];
-      setOverlayStatus("Kill feed unavailable");
+      setOverlayStatus(`Kill feed error: ${err.message ?? err}`);
     } finally {
       state.overlayKillsLoaded = true;
       state.overlayKillsLoading = null;
@@ -1474,11 +1480,13 @@ async function ensureKillFeed() {
 
 // ── Overlay: Smart Assemblies ──────────────────────────────────────────────
 
+// Correct module paths from world-contracts source
+// (github.com/evefrontier/world-contracts/tree/main/contracts/world/sources)
 const ASSEMBLY_TYPE_DEFS = [
   { fragment: "network_node::NetworkNode", label: "Network Node", color: "#00b4d8" },
   { fragment: "storage_unit::StorageUnit", label: "Storage Unit", color: "#61d5c7" },
-  { fragment: "smart_gate::SmartGate",     label: "Smart Gate",   color: "#f1b84b" },
-  { fragment: "smart_assembly::SmartAssembly", label: "Assembly", color: "#9b8dff" },
+  { fragment: "assembly::Assembly",         label: "Assembly",    color: "#9b8dff" },
+  { fragment: "turret::Turret",            label: "Turret",      color: "#ff9f40" },
 ];
 
 async function fetchAssembliesOfType(typeFragment) {
@@ -1528,7 +1536,17 @@ async function fetchAssemblyOverlay() {
     .map((a) => {
       const systemId = located.get(a.id) ?? Number(a.solar_system_id ?? a.solarsystem ?? 0);
       const online = String(a?.status?.status?.["@variant"] ?? a?.status?.["@variant"] ?? a?.status ?? "").toUpperCase() === "ONLINE";
-      return { id: a.id, systemId, label: a._typeLabel, color: a._typeColor, online, name: a.metadata?.name || a._typeLabel };
+      // NetworkNode exposes connected_assembly_ids — use for player-base detection
+      const connectedCount = Array.isArray(a.connected_assembly_ids) ? a.connected_assembly_ids.length : 0;
+      return {
+        id: a.id,
+        systemId,
+        label: a._typeLabel,
+        color: a._typeColor,
+        online,
+        name: a.metadata?.name || a._typeLabel,
+        connectedCount,
+      };
     })
     .filter((a) => a.systemId);
 }
@@ -1618,11 +1636,17 @@ function derivePlayerBases(assemblies) {
   }
   const bases = [];
   for (const [systemId, list] of bySystem) {
-    if (list.length >= 4) {
+    // Criteria A: 4+ smart assemblies in the same system
+    const qualifyByCount = list.length >= 4;
+    // Criteria B: any NetworkNode with 4+ connected assemblies
+    const maxConnected = Math.max(0, ...list.map((a) => a.connectedCount || 0));
+    const qualifyByNode = maxConnected >= 4;
+    if (qualifyByCount || qualifyByNode) {
       bases.push({
         systemId,
         assemblyCount: list.length,
         onlineCount: list.filter((a) => a.online).length,
+        maxConnected,
         types: [...new Set(list.map((a) => a.label))],
       });
     }
@@ -1665,7 +1689,10 @@ function drawPlayerBaseOverlay() {
       ctx.font = "bold 8px ui-monospace, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(`${base.assemblyCount} asm`, p.x, p.y + r + 3);
+      const label = base.maxConnected >= 4
+        ? `node+${base.maxConnected}`
+        : `${base.assemblyCount} asm`;
+      ctx.fillText(label, p.x, p.y + r + 3);
     }
   }
   ctx.restore();
