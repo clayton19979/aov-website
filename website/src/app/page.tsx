@@ -17,6 +17,16 @@ function fadeUp(delay: number) {
   }
 }
 
+// HUD targeting frame — L-shaped brackets anchored at the four hero corners.
+// Each draws from two borders; the top pair sits below the gutter, the bottom
+// pair rides above the footer strip so the whole hero reads as a cockpit display.
+const FRAME_CORNERS = [
+  { key: 'tl', pos: 'top-4 left-4 md:top-6 md:left-6', borders: 'border-t border-l' },
+  { key: 'tr', pos: 'top-4 right-4 md:top-6 md:right-6', borders: 'border-t border-r' },
+  { key: 'bl', pos: 'bottom-16 left-4 md:bottom-16 md:left-6', borders: 'border-b border-l' },
+  { key: 'br', pos: 'bottom-16 right-4 md:bottom-16 md:right-6', borders: 'border-b border-r' },
+] as const
+
 export default function LandingPage() {
   const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
   const [memberHovered, setMemberHovered] = useState(false)
@@ -36,6 +46,23 @@ export default function LandingPage() {
         }}
         aria-hidden="true"
       />
+
+      {/* HUD targeting frame — corner brackets locking onto the hero */}
+      <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
+        {FRAME_CORNERS.map((c, i) => (
+          <motion.span
+            key={c.key}
+            className={`absolute h-6 w-6 md:h-8 md:w-8 ${c.pos} ${c.borders}`}
+            style={{
+              borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
+              filter: 'drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 18%, transparent))',
+            }}
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.6 + i * 0.1 }}
+          />
+        ))}
+      </div>
 
       {/* Center content */}
       <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
