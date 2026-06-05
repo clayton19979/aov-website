@@ -245,6 +245,35 @@ textarea {
   [style*="status-pulse"] { animation: none !important; }
 }
 
+/* ── TopBar: live brand glyph (accent-aware breathing glow) ─────── */
+.brand-glyph {
+  text-shadow: 0 0 5px color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: brand-glyph-pulse 4.5s ease-in-out infinite;
+}
+
+.group:hover .brand-glyph {
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--accent) 70%, transparent),
+    0 0 16px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+@keyframes brand-glyph-pulse {
+  0%, 100% {
+    opacity: 0.85;
+    text-shadow: 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 9px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-glyph {
+    animation: none;
+  }
+}
+
 /* ── ToolShell header: one-shot scan spot sweeping the HUD underline ─ */
 .tool-shell-header-scan {
   position: absolute;
