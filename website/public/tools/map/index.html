@@ -25,6 +25,11 @@
           <span><i class="legend-jump"></i>Jump</span>
           <span><i class="legend-smart"></i>Smart Gate</span>
           <span><i class="legend-game"></i>Game Gate</span>
+          <span class="legend-overlay-items">
+            <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
+            <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
+            <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
+          </span>
         </div>
         <aside class="system-card" id="systemCard" aria-live="polite">
           <div>
@@ -45,6 +50,40 @@
           <p class="eyebrow">Navigation Console</p>
           <h2>Plot a Route</h2>
         </div>
+
+        <section class="overlay-section" aria-label="Map overlays">
+          <div class="section-title">
+            <h3>Map Overlays</h3>
+            <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
+          </div>
+          <div class="overlay-toggles">
+            <label class="overlay-toggle" id="killsToggleLabel">
+              <input type="checkbox" id="killsToggle" />
+              <span class="overlay-dot kills-dot"></span>
+              Kills
+            </label>
+            <label class="overlay-toggle" id="assembliesToggleLabel">
+              <input type="checkbox" id="assembliesToggle" />
+              <span class="overlay-dot assemblies-dot"></span>
+              Smart Assemblies
+            </label>
+            <label class="overlay-toggle" id="playerBasesToggleLabel">
+              <input type="checkbox" id="playerBasesToggle" />
+              <span class="overlay-dot bases-dot"></span>
+              Player Bases
+            </label>
+          </div>
+          <div id="killTimePanel" class="kill-time-panel" style="display:none">
+            <label class="overlay-sublabel">Time window</label>
+            <div class="time-presets">
+              <button type="button" class="time-preset" data-hours="1">1h</button>
+              <button type="button" class="time-preset" data-hours="6">6h</button>
+              <button type="button" class="time-preset active" data-hours="24">24h</button>
+              <button type="button" class="time-preset" data-hours="168">7d</button>
+            </div>
+          </div>
+          <div id="overlayStatus" class="overlay-status"></div>
+        </section>
 
         <form id="routeForm" class="route-form">
           <label>

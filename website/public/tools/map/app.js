@@ -46,6 +46,17 @@ const state = {
   dragMode: 'rotate',
   routeToken: 0,
   workerReady: false,
+  overlayKills: [],
+  overlayKillsLoaded: false,
+  overlayKillsLoading: null,
+  overlayKillsTimeWindow: 24,
+  overlayAssemblies: [],
+  overlayAssembliesLoaded: false,
+  overlayAssembliesLoading: null,
+  overlayPlayerBases: [],
+  showKills: false,
+  showAssemblies: false,
+  showPlayerBases: false,
 };
 
 const els = {
@@ -75,6 +86,16 @@ const els = {
   setVia: document.getElementById("setVia"),
   centerSystem: document.getElementById("centerSystem"),
   rangePresets: document.querySelectorAll(".range-presets button"),
+  killsToggle: document.getElementById("killsToggle"),
+  assembliesToggle: document.getElementById("assembliesToggle"),
+  playerBasesToggle: document.getElementById("playerBasesToggle"),
+  killTimePanel: document.getElementById("killTimePanel"),
+  overlayStatus: document.getElementById("overlayStatus"),
+  refreshOverlays: document.getElementById("refreshOverlays"),
+  timePresets: document.querySelectorAll(".time-preset"),
+  legendKill: document.getElementById("legendKill"),
+  legendAssembly: document.getElementById("legendAssembly"),
+  legendBase: document.getElementById("legendBase"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -308,6 +329,9 @@ function draw() {
   }
 
   drawGateLinks();
+  if (state.showKills) drawKillOverlay();
+  if (state.showAssemblies) drawAssemblyOverlay();
+  if (state.showPlayerBases) drawPlayerBaseOverlay();
   drawRoute();
 
   if (state.selected) drawSystemMarker(state.selected, "#61d5c7", 7);
@@ -1346,8 +1370,372 @@ function bindEvents() {
   });
 }
 
+// ── Overlay: Kill Feed ─────────────────────────────────────────────────────
+
+async function fetchKillFeed() {
+  const endpoints = [
+    `${API_BASE}/kills?limit=500`,
+    `${API_BASE}/killmails?limit=500`,
+    `${API_BASE}/kill_reports?limit=500`,
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) continue;
+      const payload = await res.json();
+      const rows = Array.isArray(payload) ? payload : (payload.data || payload.kills || payload.killmails || []);
+      if (!Array.isArray(rows)) continue;
+      const kills = rows.map((k) => ({
+        systemId: Number(k.solar_system_id ?? k.solarSystemId ?? k.system_id ?? 0),
+        timestamp: new Date(k.timestamp ?? k.time ?? k.kill_time ?? k.killTime ?? 0).getTime(),
+        victimName: k.victim?.character_name ?? k.victim_name ?? k.victimName ?? "Unknown",
+        shipType: k.victim?.ship_type_id ?? k.ship_type_id ?? 0,
+      })).filter((k) => k.systemId && k.timestamp);
+      if (kills.length > 0) return { kills, source: url };
+    } catch {
+      // try next endpoint
+    }
+  }
+  return { kills: [], source: null };
+}
+
+function buildKillSystemMap() {
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 60 * 60 * 1000;
+  const map = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    if (!map.has(kill.systemId)) map.set(kill.systemId, []);
+    map.get(kill.systemId).push(kill);
+  }
+  return map;
+}
+
+function drawKillOverlay() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  ctx.save();
+  for (const [systemId, kills] of killsBySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    const rect = cachedRect || els.canvas.getBoundingClientRect();
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    const count = kills.length;
+    const radius = Math.min(12, 4 + Math.log2(count + 1) * 2);
+    // Glow
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius * 2.5);
+    grd.addColorStop(0, "rgba(255, 60, 60, 0.35)");
+    grd.addColorStop(1, "rgba(255, 60, 60, 0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Core dot
+    ctx.fillStyle = "rgba(255, 80, 80, 0.90)";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    // Count label for 2+
+    if (count > 1 && state.camera.zoom > 0.5) {
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.font = `bold ${Math.max(8, Math.min(11, radius + 1))}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(count > 99 ? "99+" : String(count), p.x, p.y);
+    }
+  }
+  ctx.restore();
+}
+
+async function ensureKillFeed() {
+  if (state.overlayKillsLoaded) return;
+  if (state.overlayKillsLoading) return state.overlayKillsLoading;
+  state.overlayKillsLoading = (async () => {
+    setOverlayStatus("Loading kill feed...");
+    try {
+      const { kills, source } = await fetchKillFeed();
+      state.overlayKills = kills;
+      if (kills.length) {
+        setOverlayStatus(`${kills.length} kills loaded`);
+      } else {
+        setOverlayStatus("Kill data not available from current API");
+      }
+    } catch {
+      state.overlayKills = [];
+      setOverlayStatus("Kill feed unavailable");
+    } finally {
+      state.overlayKillsLoaded = true;
+      state.overlayKillsLoading = null;
+      draw();
+    }
+  })();
+  return state.overlayKillsLoading;
+}
+
+// ── Overlay: Smart Assemblies ──────────────────────────────────────────────
+
+const ASSEMBLY_TYPE_DEFS = [
+  { fragment: "network_node::NetworkNode", label: "Network Node", color: "#00b4d8" },
+  { fragment: "storage_unit::StorageUnit", label: "Storage Unit", color: "#61d5c7" },
+  { fragment: "smart_gate::SmartGate",     label: "Smart Gate",   color: "#f1b84b" },
+  { fragment: "smart_assembly::SmartAssembly", label: "Assembly", color: "#9b8dff" },
+];
+
+async function fetchAssembliesOfType(typeFragment) {
+  const query = `
+    query Assemblies($type: String!, $after: String) {
+      objects(filter: { type: $type }, first: 50, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          address
+          asMoveObject { contents { json } }
+        }
+      }
+    }
+  `;
+  const type = `${EVE_WORLD_PACKAGE_ID}::${typeFragment}`;
+  const items = [];
+  let after = null;
+  let pages = 0;
+  do {
+    const data = await suiGraphql(query, { type, after });
+    const page = data.objects;
+    items.push(...page.nodes.map((n) => ({ id: n.address, ...n.asMoveObject?.contents?.json })).filter((n) => n.id));
+    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    pages++;
+    if (pages > 20) break; // safety cap
+  } while (after);
+  return items;
+}
+
+async function fetchAssemblyOverlay() {
+  const allItems = [];
+  for (const typeDef of ASSEMBLY_TYPE_DEFS) {
+    try {
+      const items = await fetchAssembliesOfType(typeDef.fragment);
+      for (const item of items) {
+        allItems.push({ ...item, _typeLabel: typeDef.label, _typeColor: typeDef.color });
+      }
+    } catch {
+      // type might not exist; continue
+    }
+  }
+  // Locate assemblies via LocationRegistry
+  const ids = new Set(allItems.map((a) => a.id).filter(Boolean));
+  const located = await fetchLocatedGateSystems(ids).catch(() => new Map());
+
+  return allItems
+    .map((a) => {
+      const systemId = located.get(a.id) ?? Number(a.solar_system_id ?? a.solarsystem ?? 0);
+      const online = String(a?.status?.status?.["@variant"] ?? a?.status?.["@variant"] ?? a?.status ?? "").toUpperCase() === "ONLINE";
+      return { id: a.id, systemId, label: a._typeLabel, color: a._typeColor, online, name: a.metadata?.name || a._typeLabel };
+    })
+    .filter((a) => a.systemId);
+}
+
+function drawAssemblyOverlay() {
+  if (!state.overlayAssemblies.length) return;
+  ctx.save();
+  // Group by system
+  const bySystem = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
+    bySystem.get(asm.systemId).push(asm);
+  }
+  for (const [systemId, assemblies] of bySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    const rect = cachedRect || els.canvas.getBoundingClientRect();
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    const onlineCount = assemblies.filter((a) => a.online).length;
+    const anyOnline = onlineCount > 0;
+    const radius = 5 + Math.min(4, Math.log2(assemblies.length + 1));
+    // Use dominant type color
+    const colors = assemblies.filter((a) => a.online).map((a) => a.color);
+    const dominantColor = colors[0] ?? assemblies[0]?.color ?? "#00b4d8";
+    ctx.strokeStyle = anyOnline ? dominantColor : "rgba(100,120,140,0.4)";
+    ctx.lineWidth = anyOnline ? 1.5 : 1;
+    ctx.beginPath();
+    // Diamond shape for assemblies
+    ctx.moveTo(p.x, p.y - radius);
+    ctx.lineTo(p.x + radius, p.y);
+    ctx.lineTo(p.x, p.y + radius);
+    ctx.lineTo(p.x - radius, p.y);
+    ctx.closePath();
+    ctx.stroke();
+    if (anyOnline) {
+      ctx.fillStyle = dominantColor.replace(")", ", 0.20)").replace("rgb", "rgba").replace("#", "rgba(").replace("rgba(", "rgba(0,180,216,0.12)");
+      // Simpler fill
+      ctx.fillStyle = `${dominantColor}22`;
+      ctx.fill();
+    }
+    if (assemblies.length > 1 && state.camera.zoom > 0.6) {
+      ctx.fillStyle = anyOnline ? dominantColor : "rgba(150,170,190,0.7)";
+      ctx.font = `bold ${Math.max(7, Math.min(10, radius))}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(assemblies.length), p.x, p.y);
+    }
+  }
+  ctx.restore();
+}
+
+async function ensureAssemblyOverlay() {
+  if (state.overlayAssembliesLoaded) return;
+  if (state.overlayAssembliesLoading) return state.overlayAssembliesLoading;
+  state.overlayAssembliesLoading = (async () => {
+    setOverlayStatus("Loading smart assemblies...");
+    try {
+      const assemblies = await fetchAssemblyOverlay();
+      state.overlayAssemblies = assemblies;
+      state.overlayPlayerBases = derivePlayerBases(assemblies);
+      if (assemblies.length) {
+        setOverlayStatus(`${assemblies.length} assemblies loaded, ${state.overlayPlayerBases.length} potential bases`);
+      } else {
+        setOverlayStatus("No assembly data found");
+      }
+    } catch (err) {
+      state.overlayAssemblies = [];
+      state.overlayPlayerBases = [];
+      setOverlayStatus("Assembly data unavailable");
+    } finally {
+      state.overlayAssembliesLoaded = true;
+      state.overlayAssembliesLoading = null;
+      draw();
+    }
+  })();
+  return state.overlayAssembliesLoading;
+}
+
+// ── Overlay: Player Bases ──────────────────────────────────────────────────
+
+function derivePlayerBases(assemblies) {
+  const bySystem = new Map();
+  for (const asm of assemblies) {
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
+    bySystem.get(asm.systemId).push(asm);
+  }
+  const bases = [];
+  for (const [systemId, list] of bySystem) {
+    if (list.length >= 4) {
+      bases.push({
+        systemId,
+        assemblyCount: list.length,
+        onlineCount: list.filter((a) => a.online).length,
+        types: [...new Set(list.map((a) => a.label))],
+      });
+    }
+  }
+  return bases;
+}
+
+function drawPlayerBaseOverlay() {
+  if (!state.overlayPlayerBases.length) return;
+  ctx.save();
+  for (const base of state.overlayPlayerBases) {
+    const system = state.systemsById.get(base.systemId);
+    if (!system) continue;
+    const p = project(system);
+    const rect = cachedRect || els.canvas.getBoundingClientRect();
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = 10 + Math.min(6, base.assemblyCount);
+    const active = base.onlineCount > 0;
+    // Outer ring
+    ctx.strokeStyle = active ? "rgba(241, 184, 75, 0.80)" : "rgba(241, 184, 75, 0.25)";
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner fill
+    ctx.setLineDash([]);
+    if (active) {
+      const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      grd.addColorStop(0, "rgba(241, 184, 75, 0.18)");
+      grd.addColorStop(1, "rgba(241, 184, 75, 0)");
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Base label at higher zoom
+    if (state.camera.zoom > 1.2) {
+      ctx.fillStyle = active ? "rgba(241, 184, 75, 0.90)" : "rgba(241, 184, 75, 0.40)";
+      ctx.font = "bold 8px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(`${base.assemblyCount} asm`, p.x, p.y + r + 3);
+    }
+  }
+  ctx.restore();
+}
+
+// ── Overlay UI helpers ─────────────────────────────────────────────────────
+
+function setOverlayStatus(text) {
+  els.overlayStatus.textContent = text;
+}
+
+function updateOverlayLegend() {
+  els.legendKill.style.display = state.showKills ? "" : "none";
+  els.legendAssembly.style.display = state.showAssemblies ? "" : "none";
+  els.legendBase.style.display = state.showPlayerBases ? "" : "none";
+}
+
+function updateTimePresets() {
+  els.timePresets.forEach((btn) => {
+    btn.classList.toggle("active", Number(btn.dataset.hours) === state.overlayKillsTimeWindow);
+  });
+}
+
+async function toggleOverlay(name, enabled) {
+  if (name === "kills") {
+    state.showKills = enabled;
+    els.killTimePanel.style.display = enabled ? "" : "none";
+    if (enabled) await ensureKillFeed();
+  } else if (name === "assemblies") {
+    state.showAssemblies = enabled;
+    if (enabled) await ensureAssemblyOverlay();
+  } else if (name === "playerBases") {
+    state.showPlayerBases = enabled;
+    if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
+  }
+  updateOverlayLegend();
+  draw();
+}
+
+function bindOverlayEvents() {
+  els.killsToggle.addEventListener("change", () => toggleOverlay("kills", els.killsToggle.checked));
+  els.assembliesToggle.addEventListener("change", () => toggleOverlay("assemblies", els.assembliesToggle.checked));
+  els.playerBasesToggle.addEventListener("change", () => toggleOverlay("playerBases", els.playerBasesToggle.checked));
+  els.timePresets.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.overlayKillsTimeWindow = Number(btn.dataset.hours);
+      updateTimePresets();
+      draw();
+    });
+  });
+  els.refreshOverlays.addEventListener("click", () => {
+    state.overlayKillsLoaded = false;
+    state.overlayKillsLoading = null;
+    state.overlayAssembliesLoaded = false;
+    state.overlayAssembliesLoading = null;
+    state.overlayKills = [];
+    state.overlayAssemblies = [];
+    state.overlayPlayerBases = [];
+    const reloadTasks = [];
+    if (state.showKills) reloadTasks.push(ensureKillFeed());
+    if (state.showAssemblies || state.showPlayerBases) reloadTasks.push(ensureAssemblyOverlay());
+    if (!reloadTasks.length) setOverlayStatus("Enable an overlay to load data");
+    Promise.all(reloadTasks);
+  });
+}
+
 async function init() {
   bindEvents();
+  bindOverlayEvents();
+  updateTimePresets();
   loadUrlParams();
   updateRangePresets();
   updateRouteActions();
