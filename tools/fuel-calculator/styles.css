@@ -79,7 +79,8 @@ body {
   gap: 12px;
 }
 
-.panel-heading h2 {
+.panel-heading h2,
+.dispatch-block h3 {
   margin: 0;
   font-size: 1rem;
   letter-spacing: 0.04em;
@@ -95,7 +96,8 @@ body {
 .field span,
 .hint,
 th,
-td span {
+td span,
+.dispatch-item span {
   color: var(--muted);
 }
 
@@ -169,10 +171,14 @@ textarea {
   gap: 14px;
 }
 
-.summary-card {
+.summary-card,
+.dispatch-block {
   border: 1px solid rgba(135, 211, 255, 0.16);
   border-radius: 18px;
   background: rgba(4, 13, 20, 0.5);
+}
+
+.summary-card {
   padding: 16px;
 }
 
@@ -188,6 +194,39 @@ td span {
   display: block;
   margin-top: 8px;
   font-size: 1.4rem;
+}
+
+.dispatch-block {
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.dispatch-list {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.dispatch-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dispatch-item strong,
+td strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.dispatch-metrics {
+  display: grid;
+  gap: 6px;
+  text-align: right;
 }
 
 .table-wrap {
@@ -207,20 +246,15 @@ td {
   text-align: left;
 }
 
-td strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
-tr.tone-critical td:first-child strong {
+.tone-critical strong {
   color: var(--critical);
 }
 
-tr.tone-warning td:first-child strong {
+.tone-warning strong {
   color: var(--warning);
 }
 
-tr.tone-stable td:first-child strong {
+.tone-stable strong {
   color: var(--stable);
 }
 
@@ -235,6 +269,16 @@ code {
 
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .dispatch-item {
+    flex-direction: column;
+  }
+
+  .dispatch-metrics {
+    text-align: left;
   }
 }
 

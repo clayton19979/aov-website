@@ -12,7 +12,7 @@
         <p class="eyebrow">Architects of the Void</p>
         <h1>Network Node Fuel Calculator</h1>
         <p class="lede">
-          Paste node fuel snapshots, set a reserve window, and generate a refill brief for the next logistics run.
+          Paste node fuel snapshots, set a reserve window, and turn a limited fuel cache into an actionable dispatch brief.
         </p>
       </header>
 
@@ -29,7 +29,12 @@
           </label>
 
           <label class="field">
-            <span>CSV Rows</span>
+            <span>Fuel On Hand for This Run</span>
+            <input data-available-fuel type="number" min="0" step="1" placeholder="Leave blank for unlimited" />
+          </label>
+
+          <label class="field">
+            <span>CSV or TSV Rows</span>
             <textarea
               data-node-input
               rows="10"
@@ -38,7 +43,7 @@
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code></p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code>. Header rows, tab-separated exports, and <code># comments</code> are accepted.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>
@@ -55,6 +60,11 @@
 
           <div class="summary-grid" data-summary></div>
 
+          <div class="dispatch-block">
+            <h3>Dispatch Priority</h3>
+            <ol class="dispatch-list" data-dispatch-list></ol>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead>
@@ -65,6 +75,8 @@
                   <th>Burn / hr</th>
                   <th>Runtime</th>
                   <th>To Reserve</th>
+                  <th>Allocated</th>
+                  <th>Reserve Gap</th>
                   <th>To Full</th>
                 </tr>
               </thead>

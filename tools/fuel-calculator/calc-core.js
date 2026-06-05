@@ -1,4 +1,5 @@
 export const DEFAULT_RESERVE_HOURS = 24;
+const HEADER_TOKENS = ['name', 'currentfuel', 'maxfuel', 'burnperhour'];
 
 function toFiniteNumber(value) {
   const normalized = typeof value === 'string' ? value.trim() : value;
@@ -15,12 +16,21 @@ export function parseNodeRows(input) {
   const lines = input
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean);
+    .filter((line) => line && !line.startsWith('#'));
 
-  return lines.map((line, index) => {
-    const parts = line.split(',').map((part) => part.trim());
+  return lines.flatMap((line, index) => {
+    const parts = line.split(/[\t,]/).map((part) => part.trim());
     if (parts.length < 4) {
       throw new Error(`Row ${index + 1} must include name,currentFuel,maxFuel,burnPerHour`);
+    }
+
+    if (index === 0) {
+      const normalizedHeader = parts
+        .slice(0, 4)
+        .map((part) => part.toLowerCase().replaceAll(/\s+/g, ''));
+      if (normalizedHeader.every((part, headerIndex) => part === HEADER_TOKENS[headerIndex])) {
+        return [];
+      }
     }
 
     const [name, currentFuelRaw, maxFuelRaw, burnRateRaw] = parts;
@@ -44,17 +54,43 @@ export function parseNodeRows(input) {
       throw new Error(`Row ${index + 1} current fuel cannot exceed max fuel`);
     }
 
-    return {
+    return [{
       name,
       currentFuel,
       maxFuel,
       burnRatePerHour,
-    };
+    }];
   });
 }
 
-export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS) {
+function getStatusPriority(status) {
+  switch (status) {
+    case 'critical':
+      return 0;
+    case 'warning':
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+function compareDispatchPriority(left, right) {
+  const statusDelta = getStatusPriority(left.status) - getStatusPriority(right.status);
+  if (statusDelta !== 0) {
+    return statusDelta;
+  }
+
+  const hoursDelta = left.hoursRemaining - right.hoursRemaining;
+  if (hoursDelta !== 0) {
+    return hoursDelta;
+  }
+
+  return right.fuelToReserve - left.fuelToReserve;
+}
+
+export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableFuel = Infinity) {
   const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
+  const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
 
   const perNode = nodes.map((node) => {
     const reserveFuel = node.burnRatePerHour * normalizedReserveHours;
@@ -83,6 +119,25 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS) {
       status,
     };
   });
+
+  let remainingDispatchFuel = normalizedAvailableFuel;
+  const dispatchOrder = [...perNode]
+    .sort(compareDispatchPriority)
+    .map((node) => {
+      const allocatedFuel = Math.min(node.fuelToReserve, remainingDispatchFuel);
+      remainingDispatchFuel = roundTo(remainingDispatchFuel - allocatedFuel);
+      const remainingReserveGap = roundTo(Math.max(0, node.fuelToReserve - allocatedFuel));
+
+      return {
+        name: node.name,
+        status: node.status,
+        hoursRemaining: node.hoursRemaining,
+        fuelToReserve: node.fuelToReserve,
+        allocatedFuel: roundTo(allocatedFuel),
+        remainingReserveGap,
+        canReachReserve: remainingReserveGap === 0,
+      };
+    });
 
   const totals = perNode.reduce(
     (accumulator, node) => ({
@@ -115,11 +170,30 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS) {
     },
   );
 
+  const dispatch = dispatchOrder.reduce(
+    (accumulator, node) => ({
+      allocatedFuel: roundTo(accumulator.allocatedFuel + node.allocatedFuel),
+      uncoveredReserve: roundTo(accumulator.uncoveredReserve + node.remainingReserveGap),
+    }),
+    {
+      allocatedFuel: 0,
+      uncoveredReserve: 0,
+    },
+  );
+
   return {
     reserveHours: normalizedReserveHours,
+    availableFuel: Number.isFinite(normalizedAvailableFuel) ? normalizedAvailableFuel : null,
     perNode,
     totals,
     counts,
+    dispatch: {
+      ...dispatch,
+      remainingFuel: Number.isFinite(normalizedAvailableFuel)
+        ? roundTo(Math.max(0, normalizedAvailableFuel - dispatch.allocatedFuel))
+        : null,
+      order: dispatchOrder,
+    },
   };
 }
 
