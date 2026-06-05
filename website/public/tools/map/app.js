@@ -39,9 +39,10 @@ const state = {
   selected: null,
   hovered: null,
   activeRouteIndex: -1,
-  camera: { x: 0, y: 0, zoom: 1 },
+  camera: { x: 0, y: 0, zoom: 1, rotX: 0, rotY: 0 },
   dragging: false,
   dragStart: null,
+  dragMode: 'rotate',
   routeToken: 0,
   workerReady: false,
 };
@@ -62,6 +63,7 @@ const els = {
   gateStatus: document.getElementById("gateStatus"),
   calculateButton: document.querySelector(".primary"),
   fitRoute: document.getElementById("fitRoute"),
+  resetView: document.getElementById("resetView"),
   copyRoute: document.getElementById("copyRoute"),
   shareRoute: document.getElementById("shareRoute"),
   shareLink: document.getElementById("shareLink"),
@@ -231,15 +233,34 @@ function resizeCanvas() {
   draw();
 }
 
+function applyRotation(x, y, z) {
+  const { rotX, rotY } = state.camera;
+  if (rotX === 0 && rotY === 0) return { x, y, z };
+  const b = state.bounds;
+  if (!b) return { x, y, z };
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  const cz = (b.minZ + b.maxZ) / 2;
+  const lx = x - cx, ly = y - cy, lz = z - cz;
+  const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  const rx = lx * cosY + lz * sinY;
+  const rz1 = -lx * sinY + lz * cosY;
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+  const ry = ly * cosX - rz1 * sinX;
+  const rz = ly * sinX + rz1 * cosX;
+  return { x: rx + cx, y: ry + cy, z: rz + cz };
+}
+
 function project(system) {
   const rect = cachedRect || els.canvas.getBoundingClientRect();
   const b = state.bounds;
   if (!b) return { x: 0, y: 0 };
+  const rot = applyRotation(system.x, system.y, system.z);
   const width = Math.max(1, b.maxX - b.minX);
   const height = Math.max(1, b.maxZ - b.minZ);
   const base = Math.min(rect.width / width, rect.height / height) * 0.84;
-  const px = (system.x - (b.minX + width / 2)) * base * state.camera.zoom + rect.width / 2 + state.camera.x;
-  const py = (system.z - (b.minZ + height / 2)) * base * state.camera.zoom + rect.height / 2 + state.camera.y;
+  const px = (rot.x - (b.minX + width / 2)) * base * state.camera.zoom + rect.width / 2 + state.camera.x;
+  const py = (rot.z - (b.minZ + height / 2)) * base * state.camera.zoom + rect.height / 2 + state.camera.y;
   return { x: px, y: py };
 }
 
@@ -1163,6 +1184,12 @@ function bindEvents() {
     draw();
   });
   document.getElementById("fitRoute").addEventListener("click", () => fitSystems());
+  els.resetView.addEventListener("click", () => {
+    state.camera.rotX = 0;
+    state.camera.rotY = 0;
+    draw();
+  });
+  els.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
   els.copyRoute.addEventListener("click", copyRouteToClipboard);
   els.shareRoute.addEventListener("click", copyShareLinkToClipboard);
   els.shareLink.addEventListener("click", copyShareLinkToClipboard);
@@ -1172,7 +1199,9 @@ function bindEvents() {
 
   els.canvas.addEventListener("pointerdown", (event) => {
     state.dragging = true;
-    state.dragStart = { x: event.clientX, y: event.clientY, cameraX: state.camera.x, cameraY: state.camera.y };
+    state.dragMode = (event.button === 2 || event.shiftKey) ? 'pan' : 'rotate';
+    state.dragStart = { x: event.clientX, y: event.clientY, cameraX: state.camera.x, cameraY: state.camera.y, rotX: state.camera.rotX, rotY: state.camera.rotY };
+    if (event.button === 2) event.preventDefault();
   });
   window.addEventListener("pointerup", () => {
     state.dragging = false;
@@ -1180,8 +1209,15 @@ function bindEvents() {
   window.addEventListener("pointermove", (event) => {
     const rect = cachedRect || els.canvas.getBoundingClientRect();
     if (state.dragging && state.dragStart) {
-      state.camera.x = state.dragStart.cameraX + event.clientX - state.dragStart.x;
-      state.camera.y = state.dragStart.cameraY + event.clientY - state.dragStart.y;
+      const dx = event.clientX - state.dragStart.x;
+      const dy = event.clientY - state.dragStart.y;
+      if (state.dragMode === 'pan') {
+        state.camera.x = state.dragStart.cameraX + dx;
+        state.camera.y = state.dragStart.cameraY + dy;
+      } else {
+        state.camera.rotY = state.dragStart.rotY + (dx / rect.width) * Math.PI * 2;
+        state.camera.rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, state.dragStart.rotX + (dy / rect.height) * Math.PI));
+      }
       scheduleDraw();
       return;
     }
@@ -1210,6 +1246,8 @@ function bindEvents() {
     else if (event.key === "+" || event.key === "=") state.camera.zoom = Math.min(12, state.camera.zoom * 1.12);
     else if (event.key === "-" || event.key === "_") state.camera.zoom = Math.max(0.18, state.camera.zoom * 0.89);
     else if (event.key.toLowerCase() === "f") fitSystems();
+    else if (event.key.toLowerCase() === "q") state.camera.rotY -= 0.05;
+    else if (event.key.toLowerCase() === "e") state.camera.rotY += 0.05;
     else return;
     event.preventDefault();
     draw();
