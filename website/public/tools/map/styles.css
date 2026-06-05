@@ -186,7 +186,7 @@ button:disabled {
 
 .system-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 

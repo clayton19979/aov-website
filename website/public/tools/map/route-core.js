@@ -250,6 +250,23 @@
     return Math.max(1, Math.min(100, Math.round((bestFuel / Math.max(selectedFuel, 0.001)) * 100)));
   }
 
+  function stitchRoutes(routes) {
+    const validRoutes = (routes || []).filter((route) => Array.isArray(route?.path) && route.path.length);
+    if (!validRoutes.length) return null;
+
+    const path = [];
+    const edges = [];
+    let cost = 0;
+
+    validRoutes.forEach((route, index) => {
+      path.push(...(index ? route.path.slice(1) : route.path));
+      edges.push(...(route.edges || []));
+      cost += Number(route.cost || 0);
+    });
+
+    return { path, edges, cost };
+  }
+
   return {
     buildGateAdjacency,
     distance,
@@ -258,6 +275,7 @@
     firstNumber,
     fuelScore,
     isGateOnline,
+    stitchRoutes,
     makeSpatialIndex,
     nearbySystems,
     normalizeGateRows,

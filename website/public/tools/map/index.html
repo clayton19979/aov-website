@@ -34,6 +34,7 @@
           <div class="system-actions">
             <button id="setOrigin" type="button" disabled>Set Origin</button>
             <button id="setDestination" type="button" disabled>Set Destination</button>
+            <button id="setVia" type="button" disabled>Set Via</button>
             <button id="centerSystem" type="button" disabled>Center</button>
           </div>
         </aside>
@@ -55,6 +56,11 @@
             Destination
             <input id="destination" autocomplete="off" placeholder="System name or ID" aria-controls="destinationSuggestions" aria-autocomplete="list" />
             <div id="destinationSuggestions" class="suggestions" role="listbox"></div>
+          </label>
+          <label>
+            Via (optional)
+            <input id="via" autocomplete="off" placeholder="Waypoint system name or ID" aria-controls="viaSuggestions" aria-autocomplete="list" />
+            <div id="viaSuggestions" class="suggestions" role="listbox"></div>
           </label>
 
           <label>

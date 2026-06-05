@@ -26,6 +26,7 @@ const state = {
   bounds: null,
   route: [],
   routeEdges: [],
+  routeSegments: [],
   gates: [],
   gateAdjacency: new Map(),
   gatesLoaded: false,
@@ -53,8 +54,10 @@ const els = {
   form: document.getElementById("routeForm"),
   origin: document.getElementById("origin"),
   destination: document.getElementById("destination"),
+  via: document.getElementById("via"),
   originSuggestions: document.getElementById("originSuggestions"),
   destinationSuggestions: document.getElementById("destinationSuggestions"),
+  viaSuggestions: document.getElementById("viaSuggestions"),
   jumpRange: document.getElementById("jumpRange"),
   useGates: document.getElementById("useGates"),
   metrics: document.getElementById("metrics"),
@@ -69,6 +72,7 @@ const els = {
   shareLink: document.getElementById("shareLink"),
   setOrigin: document.getElementById("setOrigin"),
   setDestination: document.getElementById("setDestination"),
+  setVia: document.getElementById("setVia"),
   centerSystem: document.getElementById("centerSystem"),
   rangePresets: document.querySelectorAll(".range-presets button"),
 };
@@ -124,6 +128,7 @@ function updateSystemActions() {
   const hasSelection = Boolean(state.selected);
   els.setOrigin.disabled = !hasSelection;
   els.setDestination.disabled = !hasSelection;
+  els.setVia.disabled = !hasSelection;
   els.centerSystem.disabled = !hasSelection;
 }
 
@@ -485,8 +490,10 @@ function setupSystemSearch(input, container) {
 function resolveRouteFieldsToNames() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
+  const via = parseSystem(els.via.value);
   if (origin) els.origin.value = formatSystem(origin);
   if (destination) els.destination.value = formatSystem(destination);
+  if (via) els.via.value = formatSystem(via);
 }
 
 function escapeHtml(value) {
@@ -501,6 +508,7 @@ function escapeHtml(value) {
 function renderRouteState(title, detail, tone = "", chip = "Idle") {
   state.route = [];
   state.routeEdges = [];
+  state.routeSegments = [];
   state.activeRouteIndex = -1;
   els.steps.innerHTML = `<li><span class="step-index ${tone}">${tone === "danger" ? "!" : "-"}</span><div><strong class="${tone}">${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></div><span class="route-chip">${escapeHtml(chip)}</span></li>`;
   els.metrics.innerHTML = `<div><span>Systems</span><strong>--</strong></div><div><span>Jump distance</span><strong>--</strong></div><div><span>Fuel efficiency score</span><strong>--</strong></div>`;
@@ -508,8 +516,10 @@ function renderRouteState(title, detail, tone = "", chip = "Idle") {
   draw();
 }
 
-function routeChip(edge, index) {
+function routeChip(edge, index, routeLength, isWaypoint) {
   if (!index) return `<span class="route-chip">Start</span>`;
+  if (isWaypoint) return `<span class="route-chip smart">Via</span>`;
+  if (index === routeLength - 1) return `<span class="route-chip">End</span>`;
   if (edge?.gate && edge.kind === "game") return `<span class="route-chip game">Game ${edge.count || 1}</span>`;
   if (edge?.gate) return `<span class="route-chip smart">Smart</span>`;
   return `<span class="route-chip jump">Jump</span>`;
@@ -518,6 +528,7 @@ function routeChip(edge, index) {
 function renderRoute(result) {
   state.route = result?.path ?? [];
   state.routeEdges = result?.edges ?? [];
+  state.routeSegments = result?.segments ?? [];
   state.activeRouteIndex = -1;
   els.steps.innerHTML = "";
 
@@ -526,6 +537,8 @@ function renderRoute(result) {
     return;
   }
 
+  const via = parseSystem(els.via.value);
+  const routeLength = result.path.length;
   let totalDistance = 0;
   let gateCount = 0;
   let jumpCount = 0;
@@ -538,15 +551,23 @@ function renderRoute(result) {
         jumpCount++;
       }
     }
+    const isWaypoint = Boolean(via) && index > 0 && index < routeLength - 1 && system.id === via.id;
     const li = document.createElement("li");
     const safeName = escapeHtml(system.name);
+    const detail = isWaypoint
+      ? " - waypoint"
+      : edge?.gate
+        ? ` - ${edge.kind === "game" ? "Game Gate" : "Smart Gate"}`
+        : edge
+          ? ` - ${edge.distance.toFixed(1)} LY`
+          : " - depart";
     li.innerHTML = `
       <span class="step-index">${index + 1}</span>
       <div>
         <strong>${safeName}</strong>
-        <small>Region ${system.regionId}${edge?.gate ? ` - ${edge.kind === "game" ? "Game Gate" : "Smart Gate"}` : edge ? ` - ${edge.distance.toFixed(1)} LY` : " - depart"}</small>
+        <small>Region ${system.regionId}${detail}</small>
       </div>
-      ${routeChip(edge, index)}
+      ${routeChip(edge, index, routeLength, isWaypoint)}
     `;
     li.dataset.systemId = String(system.id);
     li.addEventListener("mouseenter", () => {
@@ -564,12 +585,13 @@ function renderRoute(result) {
     els.steps.append(li);
   });
 
+  const legCount = Math.max(1, state.routeSegments.length || 1);
   els.metrics.innerHTML = `
     <div><span>Systems</span><strong>${result.path.length}</strong></div>
     <div><span>Jump distance</span><strong>${totalDistance.toFixed(1)} LY</strong></div>
     <div><span>Fuel efficiency score</span><strong>${result.fuelScore ?? 100}/100</strong></div>
   `;
-  setStatus(`${result.path.length} systems - ${jumpCount} jumps - ${gateCount} gates - ${totalDistance.toFixed(1)} jump LY`);
+  setStatus(`${result.path.length} systems - ${jumpCount} jumps - ${gateCount} gates - ${legCount} leg${legCount === 1 ? "" : "s"} - ${totalDistance.toFixed(1)} jump LY`);
   updateRouteActions();
   updateSelectedRouteStep();
   draw();
@@ -998,12 +1020,15 @@ async function copyRouteToClipboard() {
 function routeShareUrl() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
+  const via = parseSystem(els.via.value);
   if (!origin || !destination) return "";
   const params = new URLSearchParams();
   params.set("system1", String(origin.id));
   params.set("system2", String(destination.id));
+  if (via) params.set("via", String(via.id));
   params.set("jumpDistance", String(Number(els.jumpRange.value || 120)));
   params.set("optimize", new FormData(els.form).get("optimize") || "fuel");
+  params.set("useGates", els.useGates.checked ? "1" : "0");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1035,14 +1060,72 @@ function loadUrlParams() {
   const params = new URLSearchParams(location.search);
   const origin = params.get("system1");
   const destination = params.get("system2");
+  const via = params.get("via");
   const jump = params.get("jumpDistance");
   const optimize = params.get("optimize");
+  const useGates = params.get("useGates");
   if (origin) els.origin.value = origin;
   if (destination) els.destination.value = destination;
+  if (via) els.via.value = via;
   if (jump) els.jumpRange.value = jump;
   if (["fuel", "jumps"].includes(optimize)) {
     document.querySelector(`[name="optimize"][value="${optimize}"]`).checked = true;
   }
+  if (["0", "false", "off", "no"].includes(String(useGates).toLowerCase())) {
+    els.useGates.checked = false;
+  }
+}
+
+function resolveWaypoint() {
+  const raw = String(els.via.value || "").trim();
+  if (!raw) return { system: null, valid: true };
+  const system = parseSystem(raw);
+  return { system, valid: Boolean(system) };
+}
+
+async function calculateLegRoute(origin, destination, mode, range, token) {
+  let result = await calculateRoute(origin, destination, mode, range);
+  for (let pass = 0; pass < 4 && result; pass++) {
+    const added = await discoverGateLinksForRoute(result);
+    if (token !== state.routeToken) return undefined;
+    if (!added) break;
+    result = await calculateRoute(origin, destination, mode, range);
+  }
+  if (!result) return null;
+  const fuelBest = mode === "fuel" ? result : await calculateRoute(origin, destination, "fuel", range);
+  if (token !== state.routeToken) return undefined;
+  if (fuelBest) result.fuelScore = RouteCore.fuelScore(result, fuelBest);
+  return { result, fuelBest };
+}
+
+async function calculateJourney(origin, destination, waypoint, mode, range, token) {
+  const stops = waypoint ? [origin, waypoint, destination] : [origin, destination];
+  const segments = [];
+  const fuelSegments = [];
+
+  for (let index = 0; index < stops.length - 1; index++) {
+    const leg = await calculateLegRoute(stops[index], stops[index + 1], mode, range, token);
+    if (leg === undefined) return undefined;
+    if (!leg) return null;
+    segments.push({
+      origin: stops[index],
+      destination: stops[index + 1],
+      path: leg.result.path,
+      edges: leg.result.edges,
+      cost: leg.result.cost,
+    });
+    fuelSegments.push(leg.fuelBest || leg.result);
+  }
+
+  const stitched = RouteCore.stitchRoutes(segments);
+  if (!stitched) return null;
+  const fuelBest = RouteCore.stitchRoutes(fuelSegments);
+  if (fuelBest) stitched.fuelScore = RouteCore.fuelScore(stitched, fuelBest);
+  stitched.segments = segments.map((segment) => ({
+    origin: segment.origin,
+    destination: segment.destination,
+  }));
+  return stitched;
 }
 
 function hydrateWorkerRouteResult(result) {
@@ -1103,16 +1186,28 @@ async function calculate() {
   }
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
+  const waypoint = resolveWaypoint();
   if (!origin || !destination) {
     renderRouteState("Pick an origin and destination", "Use search or click stars on the map.", "", "Pick");
     setStatus("Choose a valid origin and destination");
     setCalculating(false);
     return;
   }
+  if (!waypoint.valid) {
+    renderRouteState("Waypoint not found", "Choose a valid via system or clear the field.", "danger", "Via");
+    setStatus("Choose a valid waypoint system");
+    setCalculating(false);
+    return;
+  }
   resolveRouteFieldsToNames();
   selectSystem(origin);
   setStatus("Calculating route");
-  renderRouteState("Calculating route", "Checking jump range and available gates.", "", "Wait");
+  renderRouteState(
+    waypoint.system ? "Calculating multi-leg route" : "Calculating route",
+    waypoint.system ? "Checking both route legs and available gates." : "Checking jump range and available gates.",
+    "",
+    "Wait",
+  );
   await new Promise((resolve) => setTimeout(resolve, 20));
   if (token !== state.routeToken) {
     setCalculating(false);
@@ -1121,13 +1216,8 @@ async function calculate() {
   const mode = new FormData(els.form).get("optimize") || "fuel";
   const range = Number(els.jumpRange.value || 120);
   try {
-    let result = await calculateRoute(origin, destination, mode, range);
-    for (let pass = 0; pass < 4 && result; pass++) {
-      const added = await discoverGateLinksForRoute(result);
-      if (token !== state.routeToken) return;
-      if (!added) break;
-      result = await calculateRoute(origin, destination, mode, range);
-    }
+    const result = await calculateJourney(origin, destination, waypoint.system, mode, range, token);
+    if (token !== state.routeToken || result === undefined) return;
     renderRoute(result);
     if (result) fitSystems(result.path);
   } finally {
@@ -1139,6 +1229,7 @@ function bindEvents() {
   window.addEventListener("resize", resizeCanvas);
   setupSystemSearch(els.origin, els.originSuggestions);
   setupSystemSearch(els.destination, els.destinationSuggestions);
+  setupSystemSearch(els.via, els.viaSuggestions);
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
     calculate();
@@ -1149,7 +1240,7 @@ function bindEvents() {
       if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
     }, 250);
   };
-  [els.origin, els.destination, els.jumpRange].forEach((field) => {
+  [els.origin, els.destination, els.via, els.jumpRange].forEach((field) => {
     field.addEventListener("input", scheduleRouteUpdate);
     field.addEventListener("change", scheduleRouteUpdate);
   });
@@ -1195,6 +1286,7 @@ function bindEvents() {
   els.shareLink.addEventListener("click", copyShareLinkToClipboard);
   els.setOrigin.addEventListener("click", () => setSelectedRouteField(els.origin));
   els.setDestination.addEventListener("click", () => setSelectedRouteField(els.destination));
+  els.setVia.addEventListener("click", () => setSelectedRouteField(els.via));
   els.centerSystem.addEventListener("click", () => centerOnSystem(state.selected));
 
   els.canvas.addEventListener("pointerdown", (event) => {
