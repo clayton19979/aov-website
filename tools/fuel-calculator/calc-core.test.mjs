@@ -14,6 +14,8 @@ function pickDispatchFields(plan) {
   return plan.dispatch.order.map((node) => ({
     name: node.name,
     status: node.status,
+    deliveryDelayHours: node.deliveryDelayHours,
+    usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
     hoursRemaining: node.hoursRemaining,
     hoursAtArrival: node.hoursAtArrival,
     projectedHoursAfterDispatch: node.projectedHoursAfterDispatch,
@@ -88,6 +90,33 @@ test('parseNodeRows accepts quoted CSV fields and formatted numeric values', () 
   ]);
 });
 
+test('parseNodeRows accepts optional delivery-delay columns in headers and trailing positional fields', () => {
+  const rows = parseNodeRows([
+    'node,current fuel,max fuel,burn rate,travel hours',
+    'North Gate,120,400,10,2.5',
+    'South Relay,60,240,5,',
+    'Refinery Spine,110,500,8,4',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 2.5 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, deliveryDelayHours: 4 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows('Forward Tower,90,300,6,1.5'),
+    [{ name: 'Forward Tower', currentFuel: 90, maxFuel: 300, burnRatePerHour: 6, deliveryDelayHours: 1.5 }],
+  );
+});
+
+test('parseNodeRows rejects invalid delivery delays', () => {
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,-1'),
+    /Row 1 has an invalid delivery delay value/,
+  );
+});
+
 test('parseNodeRows treats unmatched first-row labels as invalid data rather than a header', () => {
   assert.throws(
     () => parseNodeRows([
@@ -148,6 +177,7 @@ test('planFuel computes reserve, refill, and alert status', () => {
   assert.equal(plan.counts.stable, 2);
   assert.equal(plan.counts.arrivalRisk, 0);
   assert.equal(plan.counts.capacityLimited, 0);
+  assert.equal(plan.counts.customDeliveryDelay, 0);
   assert.equal(plan.totals.fuelConsumedBeforeArrival, 0);
   assert.equal(plan.totals.fuelAtArrival, 300);
   assert.equal(plan.totals.fuelToStability, 30);
@@ -212,6 +242,8 @@ test('planFuel stabilizes all critical nodes before spending fuel on reserve fil
     {
       name: 'North Gate',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 4,
       hoursAtArrival: 4,
       projectedHoursAfterDispatch: 12,
@@ -235,6 +267,8 @@ test('planFuel stabilizes all critical nodes before spending fuel on reserve fil
     {
       name: 'South Relay',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 6,
       hoursAtArrival: 6,
       projectedHoursAfterDispatch: 12,
@@ -258,6 +292,8 @@ test('planFuel stabilizes all critical nodes before spending fuel on reserve fil
     {
       name: 'Refinery Spine',
       status: 'warning',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 16,
       hoursAtArrival: 16,
       projectedHoursAfterDispatch: 16,
@@ -297,6 +333,8 @@ test('planFuel allocates limited stockpile by urgency and time remaining after s
     {
       name: 'North Gate',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 9,
       hoursAtArrival: 9,
       projectedHoursAfterDispatch: 24,
@@ -320,6 +358,8 @@ test('planFuel allocates limited stockpile by urgency and time remaining after s
     {
       name: 'South Relay',
       status: 'warning',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 12,
       hoursAtArrival: 12,
       projectedHoursAfterDispatch: 24,
@@ -343,6 +383,8 @@ test('planFuel allocates limited stockpile by urgency and time remaining after s
     {
       name: 'Refinery Spine',
       status: 'warning',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 13.8,
       hoursAtArrival: 13.8,
       projectedHoursAfterDispatch: 15,
@@ -384,6 +426,8 @@ test('planFuel caps dispatch at node max capacity and tracks structural stabilit
     {
       name: 'Forward Tower',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 1,
       hoursAtArrival: 1,
       projectedHoursAfterDispatch: 10,
@@ -493,6 +537,85 @@ test('planFuel flags nodes that run dry before arrival', () => {
   );
 });
 
+test('planFuel applies per-node delivery delays ahead of the global default', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 1 },
+    { name: 'South Relay', currentFuel: 100, maxFuel: 240, burnRatePerHour: 5 },
+    { name: 'Forward Tower', currentFuel: 45, maxFuel: 160, burnRatePerHour: 10, deliveryDelayHours: 5 },
+  ], 24, 250, 12, 3);
+
+  assert.equal(plan.counts.customDeliveryDelay, 2);
+  assert.equal(plan.totals.fuelConsumedBeforeArrival, 70);
+  assert.deepEqual(
+    plan.perNode.map((node) => ({
+      name: node.name,
+      deliveryDelayHours: node.deliveryDelayHours,
+      usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
+      hoursAtArrival: node.hoursAtArrival,
+      fuelAtArrival: node.fuelAtArrival,
+      status: node.status,
+    })),
+    [
+      {
+        name: 'North Gate',
+        deliveryDelayHours: 1,
+        usesCustomDeliveryDelay: true,
+        hoursAtArrival: 11,
+        fuelAtArrival: 110,
+        status: 'critical',
+      },
+      {
+        name: 'South Relay',
+        deliveryDelayHours: 3,
+        usesCustomDeliveryDelay: false,
+        hoursAtArrival: 17,
+        fuelAtArrival: 85,
+        status: 'warning',
+      },
+      {
+        name: 'Forward Tower',
+        deliveryDelayHours: 5,
+        usesCustomDeliveryDelay: true,
+        hoursAtArrival: 0,
+        fuelAtArrival: 0,
+        status: 'critical',
+      },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      deliveryDelayHours: node.deliveryDelayHours,
+      runsDryBeforeArrival: node.runsDryBeforeArrival,
+      allocatedFuel: node.allocatedFuel,
+      projectedHoursAfterDispatch: node.projectedHoursAfterDispatch,
+    })),
+    [
+      {
+        name: 'Forward Tower',
+        deliveryDelayHours: 5,
+        runsDryBeforeArrival: true,
+        allocatedFuel: 160,
+        projectedHoursAfterDispatch: 21,
+      },
+      {
+        name: 'North Gate',
+        deliveryDelayHours: 1,
+        runsDryBeforeArrival: false,
+        allocatedFuel: 90,
+        projectedHoursAfterDispatch: 21,
+      },
+      {
+        name: 'South Relay',
+        deliveryDelayHours: 3,
+        runsDryBeforeArrival: false,
+        allocatedFuel: 0,
+        projectedHoursAfterDispatch: 20,
+      },
+    ],
+  );
+});
+
 test('planFuel falls back to the default reserve window and zero delivery delay', () => {
   const plan = planFuel([
     { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10 },
@@ -507,3 +630,4 @@ test('formatHours renders human-readable durations', () => {
   assert.equal(formatHours(48), '2d');
   assert.equal(formatHours(Infinity), 'Unlimited');
 });
+

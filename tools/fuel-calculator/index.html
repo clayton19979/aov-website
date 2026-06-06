@@ -35,7 +35,7 @@
           </label>
 
           <label class="field">
-            <span>Delivery Delay (hours)</span>
+            <span>Default Delivery Delay (hours)</span>
             <input data-delivery-delay-hours type="number" min="0" step="1" />
           </label>
 
@@ -50,11 +50,11 @@
               data-node-input
               rows="10"
               spellcheck="false"
-              placeholder="North Gate,90,400,10"
+              placeholder="North Gate,90,400,10[,2]"
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. Each node name must appear only once per run. Delivery delay applies burn before any dispatched fuel lands.</p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. Each node name must appear only once per run.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>
@@ -84,6 +84,7 @@
                   <th>Current</th>
                   <th>Max</th>
                   <th>Burn / hr</th>
+                  <th>Delay</th>
                   <th>Runtime Now</th>
                   <th>At Arrival</th>
                   <th data-floor-need-label>To Floor</th>

@@ -6,6 +6,7 @@ const HEADER_ALIASES = {
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
   maxFuel: ['maxfuel', 'capacity', 'fuelcapacity', 'maximumfuel'],
   burnPerHour: ['burnperhour', 'burnrate', 'burnrateperhour', 'usageperhour', 'consumptionperhour'],
+  deliveryDelayHours: ['deliverydelayhours', 'delayhours', 'deliverydelay', 'travelhours', 'transithours'],
 };
 
 function parseDelimitedLine(line) {
@@ -52,13 +53,19 @@ function normalizeHeaderToken(value) {
 function getHeaderColumnIndexes(parts) {
   const normalizedParts = parts.map((part) => normalizeHeaderToken(part));
   const indexes = {};
+  const requiredFields = ['name', 'currentFuel', 'maxFuel', 'burnPerHour'];
 
-  for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
-    const columnIndex = normalizedParts.findIndex((part) => aliases.includes(part));
+  for (const field of requiredFields) {
+    const columnIndex = normalizedParts.findIndex((part) => HEADER_ALIASES[field].includes(part));
     if (columnIndex === -1) {
       return null;
     }
     indexes[field] = columnIndex;
+  }
+
+  const deliveryDelayIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.deliveryDelayHours.includes(part));
+  if (deliveryDelayIndex !== -1) {
+    indexes.deliveryDelayHours = deliveryDelayIndex;
   }
 
   return indexes;
@@ -103,9 +110,16 @@ export function parseNodeRows(input) {
     const currentFuelRaw = headerColumnIndexes ? parts[headerColumnIndexes.currentFuel] : parts[1];
     const maxFuelRaw = headerColumnIndexes ? parts[headerColumnIndexes.maxFuel] : parts[2];
     const burnRateRaw = headerColumnIndexes ? parts[headerColumnIndexes.burnPerHour] : parts[3];
+    const deliveryDelayRaw = headerColumnIndexes
+      ? (headerColumnIndexes.deliveryDelayHours !== undefined ? parts[headerColumnIndexes.deliveryDelayHours] : '')
+      : (parts[4] ?? '');
     const currentFuel = toFiniteNumber(currentFuelRaw);
     const maxFuel = toFiniteNumber(maxFuelRaw);
     const burnRatePerHour = toFiniteNumber(burnRateRaw);
+    const hasDeliveryDelayValue = typeof deliveryDelayRaw === 'string'
+      ? deliveryDelayRaw.trim() !== ''
+      : deliveryDelayRaw !== undefined && deliveryDelayRaw !== null;
+    const deliveryDelayHours = hasDeliveryDelayValue ? toFiniteNumber(deliveryDelayRaw) : null;
 
     if (!name) {
       throw new Error(`Row ${index + 1} is missing a node name`);
@@ -124,6 +138,9 @@ export function parseNodeRows(input) {
     if (burnRatePerHour === null || burnRatePerHour < 0) {
       throw new Error(`Row ${index + 1} has an invalid burn-per-hour value`);
     }
+    if (hasDeliveryDelayValue && (deliveryDelayHours === null || deliveryDelayHours < 0)) {
+      throw new Error(`Row ${index + 1} has an invalid delivery delay value`);
+    }
     if (currentFuel > maxFuel) {
       throw new Error(`Row ${index + 1} current fuel cannot exceed max fuel`);
     }
@@ -135,6 +152,7 @@ export function parseNodeRows(input) {
       currentFuel,
       maxFuel,
       burnRatePerHour,
+      ...(deliveryDelayHours !== null ? { deliveryDelayHours } : {}),
     }];
   });
 }
@@ -177,17 +195,21 @@ export function planFuel(
   const normalizedDeliveryDelayHours = Math.max(0, toFiniteNumber(deliveryDelayHours) ?? DEFAULT_DELIVERY_DELAY_HOURS);
 
   const perNode = nodes.map((node) => {
+    const nodeDeliveryDelayHours = Math.max(
+      0,
+      toFiniteNumber(node.deliveryDelayHours) ?? normalizedDeliveryDelayHours,
+    );
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
       : node.currentFuel / node.burnRatePerHour;
     const fuelConsumedBeforeArrival = Math.min(
       node.currentFuel,
-      node.burnRatePerHour * normalizedDeliveryDelayHours,
+      node.burnRatePerHour * nodeDeliveryDelayHours,
     );
     const fuelAtArrival = Math.max(0, node.currentFuel - fuelConsumedBeforeArrival);
     const hoursAtArrival = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
-      : Math.max(0, hoursRemaining - normalizedDeliveryDelayHours);
+      : Math.max(0, hoursRemaining - nodeDeliveryDelayHours);
     const stabilityFuel = node.burnRatePerHour * normalizedStabilityHours;
     const reserveFuel = node.burnRatePerHour * normalizedReserveHours;
     const reachableStabilityFuel = Math.min(node.maxFuel, stabilityFuel);
@@ -198,7 +220,7 @@ export function planFuel(
     const fuelToFull = Math.max(0, node.maxFuel - node.currentFuel);
     const projectedStabilityShortfall = Math.max(0, stabilityFuel - node.maxFuel);
     const projectedShortfall = Math.max(0, reserveFuel - node.maxFuel);
-    const runsDryBeforeArrival = node.burnRatePerHour > 0 && hoursRemaining < normalizedDeliveryDelayHours;
+    const runsDryBeforeArrival = node.burnRatePerHour > 0 && hoursRemaining < nodeDeliveryDelayHours;
     const status = node.burnRatePerHour === 0
       ? 'stable'
       : hoursAtArrival < normalizedStabilityHours
@@ -211,7 +233,8 @@ export function planFuel(
       ...node,
       stabilityHours: normalizedStabilityHours,
       reserveHours: normalizedReserveHours,
-      deliveryDelayHours: normalizedDeliveryDelayHours,
+      deliveryDelayHours: roundTo(nodeDeliveryDelayHours),
+      usesCustomDeliveryDelay: roundTo(nodeDeliveryDelayHours) !== normalizedDeliveryDelayHours,
       stabilityFuel: roundTo(stabilityFuel),
       reserveFuel: roundTo(reserveFuel),
       hoursRemaining: Number.isFinite(hoursRemaining) ? roundTo(hoursRemaining) : Infinity,
@@ -269,11 +292,13 @@ export function planFuel(
         : roundTo((node.fuelAtArrival + allocatedFuel) / node.burnRatePerHour);
       const projectedHoursAfterDispatch = node.burnRatePerHour === 0
         ? Number.POSITIVE_INFINITY
-        : roundTo(normalizedDeliveryDelayHours + projectedHoursAfterArrival);
+        : roundTo(node.deliveryDelayHours + projectedHoursAfterArrival);
 
       return {
         name: node.name,
         status: node.status,
+        deliveryDelayHours: node.deliveryDelayHours,
+        usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
         hoursRemaining: node.hoursRemaining,
         hoursAtArrival: node.hoursAtArrival,
         projectedHoursAfterDispatch,
@@ -343,6 +368,9 @@ export function planFuel(
       if (node.projectedStabilityShortfall > 0) {
         accumulator.stabilityCapacityLimited += 1;
       }
+      if (node.usesCustomDeliveryDelay) {
+        accumulator.customDeliveryDelay += 1;
+      }
       return accumulator;
     },
     {
@@ -352,6 +380,7 @@ export function planFuel(
       arrivalRisk: 0,
       capacityLimited: 0,
       stabilityCapacityLimited: 0,
+      customDeliveryDelay: 0,
     },
   );
 
