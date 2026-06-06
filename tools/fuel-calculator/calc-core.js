@@ -83,6 +83,7 @@ export function parseNodeRows(input) {
     .filter((line) => line && !line.startsWith('#'));
 
   let headerColumnIndexes = null;
+  const seenNames = new Map();
 
   return lines.flatMap((line, index) => {
     const parts = parseDelimitedLine(line);
@@ -108,6 +109,11 @@ export function parseNodeRows(input) {
     if (!name) {
       throw new Error(`Row ${index + 1} is missing a node name`);
     }
+    const normalizedName = name.trim().toLowerCase();
+    const firstSeenRow = seenNames.get(normalizedName);
+    if (firstSeenRow !== undefined) {
+      throw new Error(`Row ${index + 1} duplicates node "${name}" from row ${firstSeenRow}`);
+    }
     if (currentFuel === null || currentFuel < 0) {
       throw new Error(`Row ${index + 1} has an invalid current fuel value`);
     }
@@ -121,6 +127,8 @@ export function parseNodeRows(input) {
       throw new Error(`Row ${index + 1} current fuel cannot exceed max fuel`);
     }
 
+    seenNames.set(normalizedName, index + 1);
+
     return [{
       name,
       currentFuel,
@@ -129,7 +137,6 @@ export function parseNodeRows(input) {
     }];
   });
 }
-
 function getStatusPriority(status) {
   switch (status) {
     case 'critical':

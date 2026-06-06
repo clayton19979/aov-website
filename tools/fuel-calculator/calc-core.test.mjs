@@ -85,6 +85,27 @@ test('parseNodeRows rejects malformed input', () => {
   );
 });
 
+test('parseNodeRows rejects duplicate node names', () => {
+  assert.throws(
+    () => parseNodeRows([
+      'name,currentFuel,maxFuel,burnPerHour',
+      'North Gate,120,400,10',
+      'North Gate,80,400,10',
+    ].join('\n')),
+    /Row 3 duplicates node "North Gate" from row 2/,
+  );
+});
+
+test('parseNodeRows rejects duplicate node names regardless of case', () => {
+  assert.throws(
+    () => parseNodeRows([
+      'North Gate,120,400,10',
+      'north gate,80,400,10',
+    ].join('\n')),
+    /Row 2 duplicates node "north gate" from row 1/,
+  );
+});
+
 test('planFuel computes reserve, refill, and alert status', () => {
   const plan = planFuel([
     { name: 'North Gate', currentFuel: 90, maxFuel: 400, burnRatePerHour: 10 },
