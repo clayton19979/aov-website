@@ -59,6 +59,8 @@ const state = {
   showPlayerBases: false,
   showGameGates: true,
   showSmartGateLinks: true,
+  avoidKills: false,
+  overlayAssembliesOnlineOnly: false,
 };
 
 const els = {
@@ -100,6 +102,8 @@ const els = {
   legendBase: document.getElementById("legendBase"),
   showGameGatesToggle: document.getElementById("showGameGates"),
   showSmartGateLinksToggle: document.getElementById("showSmartGateLinks"),
+  avoidKillsToggle: document.getElementById("avoidKills"),
+  assembliesOnlineOnlyToggle: document.getElementById("assembliesOnlineOnly"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -514,6 +518,7 @@ function draw() {
 
   if (state.selected) drawSystemMarker(state.selected, "#61d5c7", 7);
   if (state.hovered && state.hovered !== state.selected) drawSystemMarker(state.hovered, "#f1b84b", 5);
+  if (state.hovered) drawHoverTooltip();
 }
 
 function drawSystemMarker(system, color, size) {
@@ -824,6 +829,9 @@ function renderRoute(result) {
   let totalDistance = 0;
   let gateCount = 0;
   let jumpCount = 0;
+  let hotSystems = 0;
+  const killCutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+
   result.path.forEach((system, index) => {
     const edge = result.edges[index - 1];
     if (edge) {
@@ -834,6 +842,12 @@ function renderRoute(result) {
       }
     }
     const isWaypoint = Boolean(via) && index > 0 && index < routeLength - 1 && system.id === via.id;
+
+    const killCount = state.overlayKillsLoaded
+      ? state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= killCutoff).length
+      : 0;
+    if (killCount > 0) hotSystems++;
+
     const li = document.createElement("li");
     const safeName = escapeHtml(system.name);
     const detail = isWaypoint
@@ -843,15 +857,17 @@ function renderRoute(result) {
         : edge
           ? ` - ${edge.distance.toFixed(1)} LY`
           : " - depart";
+    const killBadge = killCount > 0 ? `<span class="kill-badge">${killCount}⚠</span>` : "";
     li.innerHTML = `
       <span class="step-index">${index + 1}</span>
       <div>
-        <strong>${safeName}</strong>
+        <strong>${safeName}${killBadge}</strong>
         <small>Region ${system.regionId}${detail}</small>
       </div>
       ${routeChip(edge, index, routeLength, isWaypoint)}
     `;
     li.dataset.systemId = String(system.id);
+    if (killCount > 0) li.classList.add("hot-system");
     li.addEventListener("mouseenter", () => {
       state.activeRouteIndex = index;
       draw();
@@ -868,10 +884,14 @@ function renderRoute(result) {
   });
 
   const legCount = Math.max(1, state.routeSegments.length || 1);
+  const dangerCell = hotSystems > 0
+    ? `<div class="metric-danger"><span>Hot systems</span><strong>${hotSystems}</strong></div>`
+    : "";
   els.metrics.innerHTML = `
     <div><span>Systems</span><strong>${result.path.length}</strong></div>
     <div><span>Jump distance</span><strong>${totalDistance.toFixed(1)} LY</strong></div>
-    <div><span>Fuel efficiency score</span><strong>${result.fuelScore ?? 100}/100</strong></div>
+    <div><span>Fuel score</span><strong>${result.fuelScore ?? 100}/100</strong></div>
+    ${dangerCell}
   `;
   setStatus(`${result.path.length} systems - ${jumpCount} jumps - ${gateCount} gates - ${legCount} leg${legCount === 1 ? "" : "s"} - ${totalDistance.toFixed(1)} jump LY`);
   updateRouteActions();
@@ -888,7 +908,25 @@ function updateSelectedRouteStep() {
 function selectSystem(system) {
   state.selected = system;
   const safeName = escapeHtml(system.name);
-  els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>`;
+
+  const stats = [];
+  if (state.overlayKillsLoaded) {
+    const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+    const n = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff).length;
+    if (n > 0) stats.push(`<span class="sys-stat sys-stat--danger">${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h</span>`);
+  }
+  if (state.overlayAssembliesLoaded) {
+    const asms = state.overlayAssemblies.filter((a) => a.systemId === system.id);
+    if (asms.length) {
+      const online = asms.filter((a) => a.online).length;
+      stats.push(`<span class="sys-stat sys-stat--assembly">${online}/${asms.length} assembl${asms.length > 1 ? "ies" : "y"}</span>`);
+    }
+  }
+  const base = state.overlayPlayerBases.find((b) => b.systemId === system.id);
+  if (base) stats.push(`<span class="sys-stat sys-stat--base">Player Base · ${base.assemblyCount} asm</span>`);
+
+  const statsHtml = stats.length ? `<div class="sys-stats">${stats.join("")}</div>` : "";
+  els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>${statsHtml}`;
   updateSystemActions();
   updateSelectedRouteStep();
   draw();
@@ -1420,21 +1458,48 @@ function hydrateWorkerRouteResult(result) {
   };
 }
 
-function findRouteInMain(origin, destination, mode, range) {
-  const systemsById = state.systemsById;
-  const gateAdjacency = RouteCore.buildGateAdjacency(systemsById, state.gates);
-  if (!state.spatialIndexes.has(range)) {
-    state.spatialIndexes.set(range, RouteCore.makeSpatialIndex(state.systems, range));
+function getAvoidSystemIds() {
+  if (!state.avoidKills || !state.overlayKillsLoaded) return new Set();
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+  const ids = new Set();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp >= cutoff) ids.add(kill.systemId);
   }
+  return ids;
+}
+
+function findRouteInMain(origin, destination, mode, range) {
+  const avoidIds = getAvoidSystemIds();
+  avoidIds.delete(origin.id);
+  avoidIds.delete(destination.id);
+
+  let systems = state.systems;
+  let systemsById = state.systemsById;
+  let gateAdjacency;
+  let spatialIndex;
+
+  if (avoidIds.size > 0) {
+    systems = state.systems.filter((s) => !avoidIds.has(s.id));
+    systemsById = new Map(systems.map((s) => [s.id, s]));
+    gateAdjacency = RouteCore.buildGateAdjacency(systemsById, state.gates);
+    spatialIndex = RouteCore.makeSpatialIndex(systems, range);
+  } else {
+    gateAdjacency = RouteCore.buildGateAdjacency(systemsById, state.gates);
+    if (!state.spatialIndexes.has(range)) {
+      state.spatialIndexes.set(range, RouteCore.makeSpatialIndex(state.systems, range));
+    }
+    spatialIndex = state.spatialIndexes.get(range);
+  }
+
   const base = {
-    systems: state.systems,
+    systems,
     systemsById,
     gateAdjacency,
     origin,
     destination,
     range,
     useGates: els.useGates.checked,
-    spatialIndex: state.spatialIndexes.get(range),
+    spatialIndex,
   };
   const result = RouteCore.findRoute({ ...base, mode });
   const fuelBest = mode === "fuel" ? result : RouteCore.findRoute({ ...base, mode: "fuel" });
@@ -1445,6 +1510,9 @@ function findRouteInMain(origin, destination, mode, range) {
 async function calculateRoute(origin, destination, mode, range) {
   if (routeWorker) {
     await syncRouteWorker();
+    const avoidIds = getAvoidSystemIds();
+    avoidIds.delete(origin.id);
+    avoidIds.delete(destination.id);
     const message = await workerMessage({
       type: "route",
       originId: origin.id,
@@ -1452,6 +1520,7 @@ async function calculateRoute(origin, destination, mode, range) {
       range,
       mode,
       useGates: els.useGates.checked,
+      avoidSystemIds: [...avoidIds],
     });
     return hydrateWorkerRouteResult(message.result);
   }
@@ -1544,6 +1613,17 @@ function bindEvents() {
   });
   els.showSmartGateLinksToggle?.addEventListener("change", () => {
     state.showSmartGateLinks = els.showSmartGateLinksToggle.checked;
+    draw();
+  });
+  els.avoidKillsToggle?.addEventListener("change", async () => {
+    state.avoidKills = els.avoidKillsToggle.checked;
+    if (state.avoidKills && !state.overlayKillsLoaded) {
+      await ensureKillFeed();
+    }
+    if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
+  });
+  els.assembliesOnlineOnlyToggle?.addEventListener("change", () => {
+    state.overlayAssembliesOnlineOnly = els.assembliesOnlineOnlyToggle.checked;
     draw();
   });
   document.querySelectorAll('input[name="optimize"]').forEach((field) => {

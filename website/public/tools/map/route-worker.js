@@ -52,11 +52,28 @@ self.addEventListener("message", (event) => {
       return;
     }
 
-    if (!spatialIndexes.has(range)) {
-      spatialIndexes.set(range, RouteCore.makeSpatialIndex(systems, range));
+    const avoidSet = new Set(message.avoidSystemIds || []);
+    avoidSet.delete(message.originId);
+    avoidSet.delete(message.destinationId);
+
+    let effSystems = systems;
+    let effSystemsById = systemsById;
+    let effGateAdjacency = gateAdjacency;
+    let effSpatialIndex;
+
+    if (avoidSet.size > 0) {
+      effSystems = systems.filter((s) => !avoidSet.has(s.id));
+      effSystemsById = new Map(effSystems.map((s) => [s.id, s]));
+      effGateAdjacency = new Map([...gateAdjacency].filter(([id]) => !avoidSet.has(id)));
+      effSpatialIndex = RouteCore.makeSpatialIndex(effSystems, range);
+    } else {
+      if (!spatialIndexes.has(range)) {
+        spatialIndexes.set(range, RouteCore.makeSpatialIndex(systems, range));
+      }
+      effSpatialIndex = spatialIndexes.get(range);
     }
-    const spatialIndex = spatialIndexes.get(range);
-    const base = { systems, systemsById, gateAdjacency, origin, destination, range, useGates: message.useGates, spatialIndex };
+
+    const base = { systems: effSystems, systemsById: effSystemsById, gateAdjacency: effGateAdjacency, origin, destination, range, useGates: message.useGates, spatialIndex: effSpatialIndex };
     const result = RouteCore.findRoute({ ...base, mode });
     const fuelBest = mode === "fuel" ? result : RouteCore.findRoute({ ...base, mode: "fuel" });
     self.postMessage({ type: "route", requestId: message.requestId, result: resultForMessage(result, fuelBest) });

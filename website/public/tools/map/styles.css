@@ -684,6 +684,84 @@ input:focus, textarea:focus {
 .legend-assembly { background: rgba(0, 180, 216, 0.85); transform: rotate(45deg); }
 .legend-base     { background: transparent; border: 2px dashed rgba(241, 184, 75, 0.85); border-radius: 50%; width: 10px; height: 10px; }
 
+/* ── Kill badge in route steps ─────────────────── */
+
+.kill-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(255, 80, 80, 0.18);
+  border: 1px solid rgba(255, 80, 80, 0.35);
+  color: rgba(255, 100, 100, 0.95);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+#routeSteps li.hot-system {
+  border-color: rgba(255, 80, 80, 0.20);
+}
+
+/* ── Danger metric cell ────────────────────────── */
+
+.metric-danger {
+  border: 1px solid rgba(255, 80, 80, 0.30) !important;
+  background: rgba(255, 50, 50, 0.06) !important;
+}
+
+.metric-danger span { color: rgba(255, 100, 100, 0.70) !important; }
+.metric-danger strong { color: rgba(255, 100, 100, 0.95) !important; }
+
+/* ── System card overlay stats ─────────────────── */
+
+.sys-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.sys-stat {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sys-stat--danger {
+  background: rgba(255, 80, 80, 0.15);
+  border: 1px solid rgba(255, 80, 80, 0.30);
+  color: rgba(255, 100, 100, 0.95);
+}
+
+.sys-stat--assembly {
+  background: rgba(0, 180, 216, 0.12);
+  border: 1px solid rgba(0, 180, 216, 0.30);
+  color: rgba(0, 180, 216, 0.90);
+}
+
+.sys-stat--base {
+  background: rgba(241, 184, 75, 0.12);
+  border: 1px solid rgba(241, 184, 75, 0.30);
+  color: rgba(241, 184, 75, 0.90);
+}
+
+/* ── Assembly sub-toggle ───────────────────────── */
+
+.overlay-toggle--subsub {
+  margin-left: 20px;
+  min-height: 28px;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.overlay-toggle--subsub:has(input:checked) { opacity: 1; }
+
 /* ── Responsive ────────────────────────────────── */
 
 @media (max-width: 900px) {
