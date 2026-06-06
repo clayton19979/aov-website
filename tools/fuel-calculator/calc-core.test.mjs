@@ -35,6 +35,29 @@ test('parseNodeRows accepts header rows, comments, and tab-separated exports', (
   ]);
 });
 
+test('parseNodeRows maps aliased headers in any order and ignores extra columns', () => {
+  const rows = parseNodeRows([
+    'system,max fuel,node,burn rate,notes,current fuel',
+    'ignored,400,North Gate,10,critical lane,120',
+    'ignored,240,South Relay,5,quiet,60',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ]);
+});
+
+test('parseNodeRows treats unmatched first-row labels as invalid data rather than a header', () => {
+  assert.throws(
+    () => parseNodeRows([
+      'label,currentFuel,maxFuel,burnPerHour',
+      'North Gate,120,400,10',
+    ].join('\n')),
+    /Row 1 has an invalid current fuel value/,
+  );
+});
+
 test('parseNodeRows rejects malformed input', () => {
   assert.throws(
     () => parseNodeRows('Bad Row,12,40'),

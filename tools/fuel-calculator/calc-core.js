@@ -1,6 +1,30 @@
 export const DEFAULT_RESERVE_HOURS = 24;
 export const CRITICAL_STABILITY_HOURS = 12;
-const HEADER_TOKENS = ['name', 'currentfuel', 'maxfuel', 'burnperhour'];
+const HEADER_ALIASES = {
+  name: ['name', 'node', 'nodename'],
+  currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
+  maxFuel: ['maxfuel', 'capacity', 'fuelcapacity', 'maximumfuel'],
+  burnPerHour: ['burnperhour', 'burnrate', 'burnrateperhour', 'usageperhour', 'consumptionperhour'],
+};
+
+function normalizeHeaderToken(value) {
+  return value.toLowerCase().replaceAll(/[^a-z0-9]/g, '');
+}
+
+function getHeaderColumnIndexes(parts) {
+  const normalizedParts = parts.map((part) => normalizeHeaderToken(part));
+  const indexes = {};
+
+  for (const [field, aliases] of Object.entries(HEADER_ALIASES)) {
+    const columnIndex = normalizedParts.findIndex((part) => aliases.includes(part));
+    if (columnIndex === -1) {
+      return null;
+    }
+    indexes[field] = columnIndex;
+  }
+
+  return indexes;
+}
 
 function toFiniteNumber(value) {
   const normalized = typeof value === 'string' ? value.trim() : value;
@@ -19,6 +43,8 @@ export function parseNodeRows(input) {
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('#'));
 
+  let headerColumnIndexes = null;
+
   return lines.flatMap((line, index) => {
     const parts = line.split(/[\t,]/).map((part) => part.trim());
     if (parts.length < 4) {
@@ -26,15 +52,16 @@ export function parseNodeRows(input) {
     }
 
     if (index === 0) {
-      const normalizedHeader = parts
-        .slice(0, 4)
-        .map((part) => part.toLowerCase().replaceAll(/\s+/g, ''));
-      if (normalizedHeader.every((part, headerIndex) => part === HEADER_TOKENS[headerIndex])) {
+      headerColumnIndexes = getHeaderColumnIndexes(parts);
+      if (headerColumnIndexes) {
         return [];
       }
     }
 
-    const [name, currentFuelRaw, maxFuelRaw, burnRateRaw] = parts;
+    const name = headerColumnIndexes ? parts[headerColumnIndexes.name] : parts[0];
+    const currentFuelRaw = headerColumnIndexes ? parts[headerColumnIndexes.currentFuel] : parts[1];
+    const maxFuelRaw = headerColumnIndexes ? parts[headerColumnIndexes.maxFuel] : parts[2];
+    const burnRateRaw = headerColumnIndexes ? parts[headerColumnIndexes.burnPerHour] : parts[3];
     const currentFuel = toFiniteNumber(currentFuelRaw);
     const maxFuel = toFiniteNumber(maxFuelRaw);
     const burnRatePerHour = toFiniteNumber(burnRateRaw);
