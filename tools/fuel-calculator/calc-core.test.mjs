@@ -10,6 +10,22 @@ import {
   planFuel,
 } from './calc-core.js';
 
+function pickTripFields(plan) {
+  return plan.dispatch.trips.map((trip) => ({
+    tripNumber: trip.tripNumber,
+    capacity: trip.capacity,
+    fuel: trip.fuel,
+    remainingCapacity: trip.remainingCapacity,
+    stops: trip.stops.map((stop) => ({
+      name: stop.name,
+      status: stop.status,
+      fuel: stop.fuel,
+      forStability: stop.forStability,
+      forReserve: stop.forReserve,
+    })),
+  }));
+}
+
 function pickDispatchFields(plan) {
   return plan.dispatch.order.map((node) => ({
     name: node.name,
@@ -631,3 +647,54 @@ test('formatHours renders human-readable durations', () => {
   assert.equal(formatHours(Infinity), 'Unlimited');
 });
 
+
+
+test('planFuel builds trip manifests when trip capacity is provided', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'South Relay', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 80, maxFuel: 300, burnRatePerHour: 5 },
+  ], 24, 130, 12, 0, 50);
+
+  assert.equal(plan.dispatch.tripCapacity, 50);
+  assert.equal(plan.dispatch.tripCount, 3);
+  assert.deepEqual(pickTripFields(plan), [
+    {
+      tripNumber: 1,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      stops: [
+        { name: 'North Gate', status: 'critical', fuel: 50, forStability: 40, forReserve: 10 },
+      ],
+    },
+    {
+      tripNumber: 2,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      stops: [
+        { name: 'North Gate', status: 'critical', fuel: 50, forStability: 0, forReserve: 50 },
+      ],
+    },
+    {
+      tripNumber: 3,
+      capacity: 50,
+      fuel: 30,
+      remainingCapacity: 20,
+      stops: [
+        { name: 'South Relay', status: 'critical', fuel: 30, forStability: 30, forReserve: 0 },
+      ],
+    },
+  ]);
+});
+
+test('planFuel skips trip manifests when trip capacity is omitted', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 90, maxFuel: 400, burnRatePerHour: 10 },
+  ], 24, Infinity, 12, 0);
+
+  assert.equal(plan.dispatch.tripCapacity, null);
+  assert.equal(plan.dispatch.tripCount, null);
+  assert.deepEqual(plan.dispatch.trips, []);
+});

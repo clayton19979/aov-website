@@ -182,17 +182,74 @@ function compareDispatchPriority(left, right) {
   return right.fuelToReserve - left.fuelToReserve;
 }
 
+export function buildDispatchTrips(dispatchOrder, tripCapacity) {
+  const normalizedTripCapacity = toFiniteNumber(tripCapacity);
+  if (normalizedTripCapacity === null || normalizedTripCapacity <= 0) {
+    return [];
+  }
+
+  const trips = [];
+  let activeTrip = null;
+
+  function ensureTrip() {
+    if (!activeTrip || activeTrip.remainingCapacity <= 0) {
+      activeTrip = {
+        tripNumber: trips.length + 1,
+        capacity: roundTo(normalizedTripCapacity),
+        fuel: 0,
+        remainingCapacity: roundTo(normalizedTripCapacity),
+        stops: [],
+      };
+      trips.push(activeTrip);
+    }
+
+    return activeTrip;
+  }
+
+  for (const node of dispatchOrder) {
+    let remainingStability = node.allocatedForStability;
+    let remainingReserve = node.allocatedForReserve;
+
+    while (remainingStability > 0 || remainingReserve > 0) {
+      const trip = ensureTrip();
+      const amount = Math.min(trip.remainingCapacity, remainingStability + remainingReserve);
+      const forStability = Math.min(amount, remainingStability);
+      const forReserve = roundTo(amount - forStability);
+
+      trip.stops.push({
+        name: node.name,
+        status: node.status,
+        fuel: roundTo(amount),
+        forStability: roundTo(forStability),
+        forReserve,
+      });
+      trip.fuel = roundTo(trip.fuel + amount);
+      trip.remainingCapacity = roundTo(Math.max(0, trip.remainingCapacity - amount));
+
+      remainingStability = roundTo(Math.max(0, remainingStability - forStability));
+      remainingReserve = roundTo(Math.max(0, remainingReserve - forReserve));
+    }
+  }
+
+  return trips;
+}
+
 export function planFuel(
   nodes,
   reserveHours = DEFAULT_RESERVE_HOURS,
   availableFuel = Infinity,
   stabilityHours = CRITICAL_STABILITY_HOURS,
   deliveryDelayHours = DEFAULT_DELIVERY_DELAY_HOURS,
+  tripCapacity = null,
 ) {
   const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
   const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
   const normalizedStabilityHours = Math.max(0, toFiniteNumber(stabilityHours) ?? CRITICAL_STABILITY_HOURS);
   const normalizedDeliveryDelayHours = Math.max(0, toFiniteNumber(deliveryDelayHours) ?? DEFAULT_DELIVERY_DELAY_HOURS);
+  const normalizedTripCapacity = (() => {
+    const parsed = toFiniteNumber(tripCapacity);
+    return parsed !== null && parsed > 0 ? parsed : null;
+  })();
 
   const perNode = nodes.map((node) => {
     const nodeDeliveryDelayHours = Math.max(
@@ -399,6 +456,8 @@ export function planFuel(
     },
   );
 
+  const trips = buildDispatchTrips(dispatchOrder, normalizedTripCapacity);
+
   return {
     stabilityHours: normalizedStabilityHours,
     reserveHours: normalizedReserveHours,
@@ -412,6 +471,9 @@ export function planFuel(
       remainingFuel: Number.isFinite(normalizedAvailableFuel)
         ? roundTo(Math.max(0, normalizedAvailableFuel - dispatch.allocatedFuel))
         : null,
+      tripCapacity: normalizedTripCapacity,
+      tripCount: normalizedTripCapacity === null ? null : trips.length,
+      trips,
       order: dispatchOrder,
     },
   };

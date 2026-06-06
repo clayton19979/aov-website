@@ -22,8 +22,10 @@ const stabilityInput = document.querySelector('[data-stability-hours]');
 const reserveInput = document.querySelector('[data-reserve-hours]');
 const deliveryDelayInput = document.querySelector('[data-delivery-delay-hours]');
 const availableFuelInput = document.querySelector('[data-available-fuel]');
+const tripCapacityInput = document.querySelector('[data-trip-capacity]');
 const summary = document.querySelector('[data-summary]');
 const dispatchList = document.querySelector('[data-dispatch-list]');
+const tripList = document.querySelector('[data-trip-list]');
 const tableBody = document.querySelector('[data-table-body]');
 const feedback = document.querySelector('[data-feedback]');
 const fillSampleButton = document.querySelector('[data-fill-sample]');
@@ -41,6 +43,10 @@ function formatFuelBudget(value) {
 
 function formatHourLabel(value) {
   return `${formatNumber(value)}h`;
+}
+
+function formatTripCapacity(value) {
+  return value === null ? 'Direct dispatch' : `${formatNumber(value)} / trip`;
 }
 
 function escapeHtml(value) {
@@ -71,6 +77,14 @@ function describeDelayContext(plan) {
     : `current ${formatHourLabel(plan.deliveryDelayHours)} delay`;
 }
 
+function getTripSummaryLabel(plan) {
+  if (plan.dispatch.tripCapacity === null) {
+    return 'Direct dispatch';
+  }
+
+  return `${plan.dispatch.tripCount} trip${plan.dispatch.tripCount === 1 ? '' : 's'} @ ${formatTripCapacity(plan.dispatch.tripCapacity)}`;
+}
+
 function createSummaryMarkup(plan) {
   const cards = [
     ['Tracked Nodes', plan.perNode.length],
@@ -78,6 +92,7 @@ function createSummaryMarkup(plan) {
     ['Critical Floor', formatHourLabel(plan.stabilityHours)],
     ['Reserve Target', formatHourLabel(plan.reserveHours)],
     ['Fuel On Hand', formatFuelBudget(plan.availableFuel)],
+    ['Trip Manifests', getTripSummaryLabel(plan)],
     ['Fuel Burned Before Arrival', formatNumber(plan.totals.fuelConsumedBeforeArrival)],
     ['Fuel To Stabilize', formatNumber(plan.totals.fuelToStability)],
     ['Fuel To Reserve', formatNumber(plan.totals.fuelToReserve)],
@@ -129,6 +144,41 @@ function createDispatchMarkup(plan) {
   }).join('');
 }
 
+function createTripMarkup(plan) {
+  if (plan.dispatch.tripCapacity === null) {
+    return '<li class="trip-item trip-empty">Set a trip capacity to break this dispatch order into hauler-sized manifests.</li>';
+  }
+
+  return plan.dispatch.trips.map((trip) => {
+    const stopMarkup = trip.stops.map((stop) => {
+      const stopParts = [
+        `${formatNumber(stop.fuel)} fuel`,
+        stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
+        stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
+      ].filter(Boolean);
+
+      return `
+        <li>
+          <strong>${escapeHtml(stop.name)}</strong>
+          <span>${escapeHtml(stop.status.toUpperCase())}</span>
+          <small>${escapeHtml(stopParts.join(' | '))}</small>
+        </li>
+      `;
+    }).join('');
+
+    return `
+      <li class="trip-item">
+        <div class="trip-header">
+          <strong>Trip ${trip.tripNumber}</strong>
+          <span>${escapeHtml(formatNumber(trip.fuel))} / ${escapeHtml(formatNumber(trip.capacity))} fuel loaded</span>
+        </div>
+        <p>${trip.remainingCapacity > 0 ? `${escapeHtml(formatNumber(trip.remainingCapacity))} capacity remains open on this run.` : 'Hull is fully committed for this run.'}</p>
+        <ol class="trip-stops">${stopMarkup}</ol>
+      </li>
+    `;
+  }).join('');
+}
+
 function createTableMarkup(plan) {
   return plan.perNode.map((node) => {
     const dispatch = getDispatchRecord(plan, node.name);
@@ -163,6 +213,8 @@ function createReport(plan) {
     `Critical floor: ${floorLabel}`,
     `Reserve target: ${formatHourLabel(plan.reserveHours)}`,
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
+    `Trip capacity: ${formatTripCapacity(plan.dispatch.tripCapacity)}`,
+    `Trip count: ${plan.dispatch.tripCount === null ? 'Not batched' : plan.dispatch.tripCount}`,
     `Fuel burned before arrival: ${formatNumber(plan.totals.fuelConsumedBeforeArrival)}`,
     `Fuel needed to stabilize critical nodes: ${formatNumber(plan.totals.fuelToStability)}`,
     `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
@@ -186,7 +238,23 @@ function createReport(plan) {
     node.remainingReserveGap > 0 ? `reserve gap ${formatNumber(node.remainingReserveGap)}` : 'reserve covered',
   ].join(' | '));
 
-  return [...header, '', ...rows].join('\n');
+  const tripRows = plan.dispatch.tripCapacity === null
+    ? ['Trip manifests: set a trip capacity to generate them.']
+    : plan.dispatch.trips.map((trip) => {
+      const stops = trip.stops
+        .map((stop) => {
+          const parts = [
+            `${stop.name} ${formatNumber(stop.fuel)}`,
+            stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
+            stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
+          ].filter(Boolean);
+          return parts.join(' / ');
+        })
+        .join(' ; ');
+      return `Trip ${trip.tripNumber} | load ${formatNumber(trip.fuel)} / ${formatNumber(trip.capacity)} | remaining ${formatNumber(trip.remainingCapacity)} | ${stops}`;
+    });
+
+  return [...header, '', 'Dispatch order:', ...rows, '', 'Trip manifests:', ...tripRows].join('\n');
 }
 
 function setFeedback(message, tone = 'info') {
@@ -198,6 +266,7 @@ function renderPlan(plan) {
   syncFloorLabels(plan.stabilityHours);
   summary.innerHTML = createSummaryMarkup(plan);
   dispatchList.innerHTML = createDispatchMarkup(plan);
+  tripList.innerHTML = createTripMarkup(plan);
   tableBody.innerHTML = createTableMarkup(plan);
   copyReportButton.disabled = false;
   copyReportButton.dataset.report = createReport(plan);
@@ -232,11 +301,15 @@ function updatePlan() {
     const availableFuel = availableFuelInput.value.trim() === ''
       ? Infinity
       : Number(availableFuelInput.value);
-    const plan = planFuel(nodes, reserveHours, availableFuel, stabilityHours, deliveryDelayHours);
+    const tripCapacity = tripCapacityInput.value.trim() === ''
+      ? null
+      : Number(tripCapacityInput.value);
+    const plan = planFuel(nodes, reserveHours, availableFuel, stabilityHours, deliveryDelayHours, tripCapacity);
     renderPlan(plan);
   } catch (error) {
     summary.innerHTML = '';
     dispatchList.innerHTML = '';
+    tripList.innerHTML = '';
     tableBody.innerHTML = '';
     copyReportButton.disabled = true;
     copyReportButton.dataset.report = '';
@@ -250,6 +323,7 @@ fillSampleButton.addEventListener('click', () => {
   reserveInput.value = String(DEFAULT_RESERVE_HOURS);
   deliveryDelayInput.value = '3';
   availableFuelInput.value = '220';
+  tripCapacityInput.value = '90';
   updatePlan();
 });
 
@@ -277,4 +351,5 @@ stabilityInput.value = String(CRITICAL_STABILITY_HOURS);
 reserveInput.value = String(DEFAULT_RESERVE_HOURS);
 deliveryDelayInput.value = '3';
 availableFuelInput.value = '220';
+tripCapacityInput.value = '90';
 updatePlan();

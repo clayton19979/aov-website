@@ -45,6 +45,11 @@
           </label>
 
           <label class="field">
+            <span>Trip Capacity (optional)</span>
+            <input data-trip-capacity type="number" min="0" step="1" placeholder="Split dispatch into hauler-sized trips" />
+          </label>
+
+          <label class="field">
             <span>CSV or TSV Rows</span>
             <textarea
               data-node-input
@@ -54,7 +59,7 @@
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. Each node name must appear only once per run.</p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing priority. Each node name must appear only once per run.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>
@@ -74,6 +79,11 @@
           <div class="dispatch-block">
             <h3>Dispatch Priority</h3>
             <ol class="dispatch-list" data-dispatch-list></ol>
+          </div>
+
+          <div class="dispatch-block">
+            <h3>Trip Manifests</h3>
+            <ol class="trip-list" data-trip-list></ol>
           </div>
 
           <div class="table-wrap">
