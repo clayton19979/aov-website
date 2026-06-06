@@ -7,6 +7,43 @@ const HEADER_ALIASES = {
   burnPerHour: ['burnperhour', 'burnrate', 'burnrateperhour', 'usageperhour', 'consumptionperhour'],
 };
 
+function parseDelimitedLine(line) {
+  const delimiter = line.includes('\t') ? '\t' : ',';
+  const parts = [];
+  let currentPart = '';
+  let insideQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
+    if (character === '"') {
+      const isEscapedQuote = insideQuotes && line[index + 1] === '"';
+      if (isEscapedQuote) {
+        currentPart += '"';
+        index += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+      continue;
+    }
+
+    if (character === delimiter && !insideQuotes) {
+      parts.push(currentPart.trim());
+      currentPart = '';
+      continue;
+    }
+
+    currentPart += character;
+  }
+
+  if (insideQuotes) {
+    throw new Error('Input contains an unmatched quote');
+  }
+
+  parts.push(currentPart.trim());
+  return parts;
+}
+
 function normalizeHeaderToken(value) {
   return value.toLowerCase().replaceAll(/[^a-z0-9]/g, '');
 }
@@ -27,7 +64,9 @@ function getHeaderColumnIndexes(parts) {
 }
 
 function toFiniteNumber(value) {
-  const normalized = typeof value === 'string' ? value.trim() : value;
+  const normalized = typeof value === 'string'
+    ? value.trim().replaceAll(',', '').replaceAll('_', '')
+    : value;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -46,7 +85,7 @@ export function parseNodeRows(input) {
   let headerColumnIndexes = null;
 
   return lines.flatMap((line, index) => {
-    const parts = line.split(/[\t,]/).map((part) => part.trim());
+    const parts = parseDelimitedLine(line);
     if (parts.length < 4) {
       throw new Error(`Row ${index + 1} must include name,currentFuel,maxFuel,burnPerHour`);
     }

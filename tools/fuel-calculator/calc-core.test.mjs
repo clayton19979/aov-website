@@ -48,6 +48,19 @@ test('parseNodeRows maps aliased headers in any order and ignores extra columns'
   ]);
 });
 
+test('parseNodeRows accepts quoted CSV fields and formatted numeric values', () => {
+  const rows = parseNodeRows([
+    'name,currentFuel,maxFuel,burnPerHour',
+    '"North, Gate","1,200","2,400",12.5',
+    'South Relay,600,1_200,5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North, Gate', currentFuel: 1200, maxFuel: 2400, burnRatePerHour: 12.5 },
+    { name: 'South Relay', currentFuel: 600, maxFuel: 1200, burnRatePerHour: 5 },
+  ]);
+});
+
 test('parseNodeRows treats unmatched first-row labels as invalid data rather than a header', () => {
   assert.throws(
     () => parseNodeRows([
@@ -55,6 +68,13 @@ test('parseNodeRows treats unmatched first-row labels as invalid data rather tha
       'North Gate,120,400,10',
     ].join('\n')),
     /Row 1 has an invalid current fuel value/,
+  );
+});
+
+test('parseNodeRows rejects unmatched quotes', () => {
+  assert.throws(
+    () => parseNodeRows('"North Gate,120,400,10'),
+    /Input contains an unmatched quote/,
   );
 });
 
