@@ -7,6 +7,7 @@ const HEADER_ALIASES = {
   maxFuel: ['maxfuel', 'capacity', 'fuelcapacity', 'maximumfuel'],
   burnPerHour: ['burnperhour', 'burnrate', 'burnrateperhour', 'usageperhour', 'consumptionperhour'],
   deliveryDelayHours: ['deliverydelayhours', 'delayhours', 'deliverydelay', 'travelhours', 'transithours'],
+  priority: ['priority', 'dispatchpriority', 'rank', 'importance'],
 };
 
 function parseDelimitedLine(line) {
@@ -68,6 +69,11 @@ function getHeaderColumnIndexes(parts) {
     indexes.deliveryDelayHours = deliveryDelayIndex;
   }
 
+  const priorityIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.priority.includes(part));
+  if (priorityIndex !== -1) {
+    indexes.priority = priorityIndex;
+  }
+
   return indexes;
 }
 
@@ -113,6 +119,9 @@ export function parseNodeRows(input) {
     const deliveryDelayRaw = headerColumnIndexes
       ? (headerColumnIndexes.deliveryDelayHours !== undefined ? parts[headerColumnIndexes.deliveryDelayHours] : '')
       : (parts[4] ?? '');
+    const priorityRaw = headerColumnIndexes
+      ? (headerColumnIndexes.priority !== undefined ? parts[headerColumnIndexes.priority] : '')
+      : (parts[5] ?? '');
     const currentFuel = toFiniteNumber(currentFuelRaw);
     const maxFuel = toFiniteNumber(maxFuelRaw);
     const burnRatePerHour = toFiniteNumber(burnRateRaw);
@@ -120,6 +129,10 @@ export function parseNodeRows(input) {
       ? deliveryDelayRaw.trim() !== ''
       : deliveryDelayRaw !== undefined && deliveryDelayRaw !== null;
     const deliveryDelayHours = hasDeliveryDelayValue ? toFiniteNumber(deliveryDelayRaw) : null;
+    const hasPriorityValue = typeof priorityRaw === 'string'
+      ? priorityRaw.trim() !== ''
+      : priorityRaw !== undefined && priorityRaw !== null;
+    const priority = hasPriorityValue ? toFiniteNumber(priorityRaw) : null;
 
     if (!name) {
       throw new Error(`Row ${index + 1} is missing a node name`);
@@ -141,6 +154,9 @@ export function parseNodeRows(input) {
     if (hasDeliveryDelayValue && (deliveryDelayHours === null || deliveryDelayHours < 0)) {
       throw new Error(`Row ${index + 1} has an invalid delivery delay value`);
     }
+    if (hasPriorityValue && (priority === null || priority < 0)) {
+      throw new Error(`Row ${index + 1} has an invalid priority value`);
+    }
     if (currentFuel > maxFuel) {
       throw new Error(`Row ${index + 1} current fuel cannot exceed max fuel`);
     }
@@ -153,6 +169,7 @@ export function parseNodeRows(input) {
       maxFuel,
       burnRatePerHour,
       ...(deliveryDelayHours !== null ? { deliveryDelayHours } : {}),
+      ...(priority !== null ? { priority } : {}),
     }];
   });
 }
@@ -172,6 +189,11 @@ function compareDispatchPriority(left, right) {
   const statusDelta = getStatusPriority(left.status) - getStatusPriority(right.status);
   if (statusDelta !== 0) {
     return statusDelta;
+  }
+
+  const priorityDelta = right.priority - left.priority;
+  if (priorityDelta !== 0) {
+    return priorityDelta;
   }
 
   const hoursDelta = left.hoursAtArrival - right.hoursAtArrival;
@@ -256,6 +278,7 @@ export function planFuel(
       0,
       toFiniteNumber(node.deliveryDelayHours) ?? normalizedDeliveryDelayHours,
     );
+    const nodePriority = Math.max(0, toFiniteNumber(node.priority) ?? 0);
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
       : node.currentFuel / node.burnRatePerHour;
@@ -292,6 +315,8 @@ export function planFuel(
       reserveHours: normalizedReserveHours,
       deliveryDelayHours: roundTo(nodeDeliveryDelayHours),
       usesCustomDeliveryDelay: roundTo(nodeDeliveryDelayHours) !== normalizedDeliveryDelayHours,
+      priority: roundTo(nodePriority),
+      usesCustomPriority: nodePriority > 0,
       stabilityFuel: roundTo(stabilityFuel),
       reserveFuel: roundTo(reserveFuel),
       hoursRemaining: Number.isFinite(hoursRemaining) ? roundTo(hoursRemaining) : Infinity,
@@ -316,6 +341,11 @@ export function planFuel(
   const stabilityOrder = [...perNode]
     .filter((node) => node.status === 'critical' && node.fuelToStability > 0)
     .sort((left, right) => {
+      const priorityDelta = right.priority - left.priority;
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
       const hoursDelta = left.hoursAtArrival - right.hoursAtArrival;
       if (hoursDelta !== 0) {
         return hoursDelta;
@@ -356,6 +386,8 @@ export function planFuel(
         status: node.status,
         deliveryDelayHours: node.deliveryDelayHours,
         usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
+        priority: node.priority,
+        usesCustomPriority: node.usesCustomPriority,
         hoursRemaining: node.hoursRemaining,
         hoursAtArrival: node.hoursAtArrival,
         projectedHoursAfterDispatch,
@@ -428,6 +460,9 @@ export function planFuel(
       if (node.usesCustomDeliveryDelay) {
         accumulator.customDeliveryDelay += 1;
       }
+      if (node.usesCustomPriority) {
+        accumulator.customPriority += 1;
+      }
       return accumulator;
     },
     {
@@ -438,6 +473,7 @@ export function planFuel(
       capacityLimited: 0,
       stabilityCapacityLimited: 0,
       customDeliveryDelay: 0,
+      customPriority: 0,
     },
   );
 

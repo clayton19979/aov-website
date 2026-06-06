@@ -698,3 +698,73 @@ test('planFuel skips trip manifests when trip capacity is omitted', () => {
   assert.equal(plan.dispatch.tripCount, null);
   assert.deepEqual(plan.dispatch.trips, []);
 });
+
+test('parseNodeRows accepts optional priority columns in headers and trailing positional fields', () => {
+  const rows = parseNodeRows([
+    'node,current fuel,max fuel,burn rate,travel hours,rank',
+    'North Gate,120,400,10,2.5,3',
+    'South Relay,60,240,5,,0',
+    'Refinery Spine,110,500,8,4,1.5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 2.5, priority: 3 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5, priority: 0 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, deliveryDelayHours: 4, priority: 1.5 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows('Forward Tower,90,300,6,1.5,2'),
+    [{ name: 'Forward Tower', currentFuel: 90, maxFuel: 300, burnRatePerHour: 6, deliveryDelayHours: 1.5, priority: 2 }],
+  );
+});
+
+test('parseNodeRows rejects invalid priorities', () => {
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1.5,-1'),
+    /Row 1 has an invalid priority value/,
+  );
+});
+
+test('planFuel uses per-node priority to break ties inside the same alert band', () => {
+  const plan = planFuel([
+    { name: 'Forward Tower', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Command Spine', currentFuel: 50, maxFuel: 200, burnRatePerHour: 5, priority: 3 },
+    { name: 'South Relay', currentFuel: 70, maxFuel: 240, burnRatePerHour: 5 },
+  ], 24, 70);
+
+  assert.equal(plan.counts.customPriority, 1);
+  assert.equal(plan.dispatch.allocatedForStability, 40);
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      priority: node.priority,
+      allocatedFuel: node.allocatedFuel,
+      allocatedForStability: node.allocatedForStability,
+      allocatedForReserve: node.allocatedForReserve,
+    })),
+    [
+      {
+        name: 'Command Spine',
+        priority: 3,
+        allocatedFuel: 40,
+        allocatedForStability: 10,
+        allocatedForReserve: 30,
+      },
+      {
+        name: 'Forward Tower',
+        priority: 0,
+        allocatedFuel: 30,
+        allocatedForStability: 30,
+        allocatedForReserve: 0,
+      },
+      {
+        name: 'South Relay',
+        priority: 0,
+        allocatedFuel: 0,
+        allocatedForStability: 0,
+        allocatedForReserve: 0,
+      },
+    ],
+  );
+});

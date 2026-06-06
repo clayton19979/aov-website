@@ -8,12 +8,12 @@ import {
 } from './calc-core.js';
 
 const sampleRows = [
-  'name\tcurrentFuel\tmaxFuel\tburnPerHour\tdeliveryDelayHours',
+  'name\tcurrentFuel\tmaxFuel\tburnPerHour\tdeliveryDelayHours\tpriority',
   '# Pasted logistics snapshot',
-  'North Gate\t90\t400\t10\t2',
-  'South Relay\t160\t240\t5\t4',
-  'Refinery Spine\t110\t500\t8',
-  'Dormant Backup\t50\t100\t0\t0',
+  'North Gate\t90\t400\t10\t2\t2',
+  'South Relay\t160\t240\t5\t4\t0',
+  'Refinery Spine\t110\t500\t8\t\t4',
+  'Dormant Backup\t50\t100\t0\t0\t0',
 ].join('\n');
 
 const form = document.querySelector('[data-fuel-form]');
@@ -49,6 +49,10 @@ function formatTripCapacity(value) {
   return value === null ? 'Direct dispatch' : `${formatNumber(value)} / trip`;
 }
 
+function formatPriority(value) {
+  return value > 0 ? `P${formatNumber(value)}` : 'Base';
+}
+
 function escapeHtml(value) {
   return value
     .replaceAll('&', '&amp;')
@@ -71,6 +75,13 @@ function getDelayCoverageLabel(plan) {
   return `${formatHourLabel(plan.deliveryDelayHours)} default + ${plan.counts.customDeliveryDelay} override${plan.counts.customDeliveryDelay === 1 ? '' : 's'}`;
 }
 
+function getPriorityCoverageLabel(plan) {
+  if (plan.counts.customPriority === 0) {
+    return 'Base queue';
+  }
+  return `${plan.counts.customPriority} override${plan.counts.customPriority === 1 ? '' : 's'}`;
+}
+
 function describeDelayContext(plan) {
   return plan.counts.customDeliveryDelay > 0
     ? 'current delivery timings'
@@ -89,6 +100,7 @@ function createSummaryMarkup(plan) {
   const cards = [
     ['Tracked Nodes', plan.perNode.length],
     ['Delivery Timing', getDelayCoverageLabel(plan)],
+    ['Priority Overrides', getPriorityCoverageLabel(plan)],
     ['Critical Floor', formatHourLabel(plan.stabilityHours)],
     ['Reserve Target', formatHourLabel(plan.reserveHours)],
     ['Fuel On Hand', formatFuelBudget(plan.availableFuel)],
@@ -97,7 +109,6 @@ function createSummaryMarkup(plan) {
     ['Fuel To Stabilize', formatNumber(plan.totals.fuelToStability)],
     ['Fuel To Reserve', formatNumber(plan.totals.fuelToReserve)],
     ['Arrival Outage Risk', plan.counts.arrivalRisk],
-    ['Reserve Gap', formatNumber(plan.dispatch.uncoveredReserve)],
     ['Fuel Remaining', formatFuelBudget(plan.dispatch.remainingFuel)],
   ];
 
@@ -125,12 +136,15 @@ function createDispatchMarkup(plan) {
     const delayLabel = node.usesCustomDeliveryDelay
       ? `${formatHourLabel(node.deliveryDelayHours)} node delay`
       : `${formatHourLabel(node.deliveryDelayHours)} default delay`;
+    const priorityLabel = node.usesCustomPriority
+      ? `${formatPriority(node.priority)} override`
+      : `${formatPriority(node.priority)} queue`;
 
     return `
       <li class="dispatch-item tone-${node.status}">
         <div>
           <strong>${escapeHtml(node.name)}</strong>
-          <span>${escapeHtml(node.status.toUpperCase())} | ${escapeHtml(delayLabel)} | ${escapeHtml(formatHours(node.hoursRemaining))} now | ${escapeHtml(formatHours(node.hoursAtArrival))} at arrival | ${escapeHtml(formatHours(node.projectedHoursAfterDispatch))} after dispatch</span>
+          <span>${escapeHtml(node.status.toUpperCase())} | ${escapeHtml(priorityLabel)} | ${escapeHtml(delayLabel)} | ${escapeHtml(formatHours(node.hoursRemaining))} now | ${escapeHtml(formatHours(node.hoursAtArrival))} at arrival | ${escapeHtml(formatHours(node.projectedHoursAfterDispatch))} after dispatch</span>
         </div>
         <div class="dispatch-metrics">
           <span>${escapeHtml(allocationParts.join(' | '))}</span>
@@ -191,6 +205,7 @@ function createTableMarkup(plan) {
         <td>${escapeHtml(formatNumber(node.currentFuel))}</td>
         <td>${escapeHtml(formatNumber(node.maxFuel))}</td>
         <td>${escapeHtml(formatNumber(node.burnRatePerHour))}</td>
+        <td>${escapeHtml(formatPriority(node.priority))}</td>
         <td>${escapeHtml(formatHourLabel(node.deliveryDelayHours))}</td>
         <td>${escapeHtml(formatHours(node.hoursRemaining))}</td>
         <td>${escapeHtml(formatHours(node.hoursAtArrival))}</td>
@@ -210,6 +225,7 @@ function createReport(plan) {
   const floorLabel = formatHourLabel(plan.stabilityHours);
   const header = [
     `Delivery timing: ${getDelayCoverageLabel(plan)}`,
+    `Priority overrides: ${getPriorityCoverageLabel(plan)}`,
     `Critical floor: ${floorLabel}`,
     `Reserve target: ${formatHourLabel(plan.reserveHours)}`,
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
@@ -227,6 +243,7 @@ function createReport(plan) {
   const rows = plan.dispatch.order.map((node) => [
     node.name,
     node.status.toUpperCase(),
+    `priority ${formatPriority(node.priority)}`,
     `delay ${formatHourLabel(node.deliveryDelayHours)}`,
     `remaining ${formatHours(node.hoursRemaining)}`,
     `arrival ${formatHours(node.hoursAtArrival)}`,
