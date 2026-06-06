@@ -2,6 +2,7 @@ import {
   CRITICAL_STABILITY_HOURS,
   DEFAULT_DELIVERY_DELAY_HOURS,
   DEFAULT_RESERVE_HOURS,
+  DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
   parseNodeRows,
   planFuel,
@@ -23,6 +24,7 @@ const reserveInput = document.querySelector('[data-reserve-hours]');
 const deliveryDelayInput = document.querySelector('[data-delivery-delay-hours]');
 const availableFuelInput = document.querySelector('[data-available-fuel]');
 const tripCapacityInput = document.querySelector('[data-trip-capacity]');
+const tripTurnaroundInput = document.querySelector('[data-trip-turnaround-hours]');
 const summary = document.querySelector('[data-summary]');
 const dispatchList = document.querySelector('[data-dispatch-list]');
 const tripList = document.querySelector('[data-trip-list]');
@@ -43,6 +45,10 @@ function formatFuelBudget(value) {
 
 function formatHourLabel(value) {
   return `${formatNumber(value)}h`;
+}
+
+function formatOffsetLabel(value) {
+  return `+${formatHourLabel(value)}`;
 }
 
 function formatTripCapacity(value) {
@@ -114,6 +120,30 @@ function describeReserveContext(plan) {
     : `${formatHourLabel(plan.reserveHours)} reserve target`;
 }
 
+function getTripCadenceLabel(plan) {
+  if (plan.dispatch.tripCapacity === null) {
+    return 'Direct dispatch';
+  }
+  if ((plan.dispatch.tripTurnaroundHours ?? 0) === 0) {
+    return 'Back-to-back departures';
+  }
+  return `${formatHourLabel(plan.dispatch.tripTurnaroundHours)} between trips`;
+}
+
+function getTripRiskLabel(plan) {
+  if (plan.dispatch.tripCapacity === null) {
+    return 'No batching';
+  }
+
+  const tripTiming = plan.dispatch.tripTiming;
+  const issues = tripTiming.additionalArrivalRisk + tripTiming.degradedStability + tripTiming.degradedReserve;
+  if (issues === 0) {
+    return 'No extra batching risk';
+  }
+
+  return `${issues} timing impact${issues === 1 ? '' : 's'}`;
+}
+
 function getTripSummaryLabel(plan) {
   if (plan.dispatch.tripCapacity === null) {
     return 'Direct dispatch';
@@ -131,10 +161,10 @@ function createSummaryMarkup(plan) {
     ['Reserve Windows', getReserveCoverageLabel(plan)],
     ['Fuel On Hand', formatFuelBudget(plan.availableFuel)],
     ['Trip Manifests', getTripSummaryLabel(plan)],
+    ['Trip Cadence', getTripCadenceLabel(plan)],
+    ['Trip Timing Risk', getTripRiskLabel(plan)],
     ['Fuel Burned Before Arrival', formatNumber(plan.totals.fuelConsumedBeforeArrival)],
     ['Fuel To Stabilize', formatNumber(plan.totals.fuelToStability)],
-    ['Fuel To Reserve', formatNumber(plan.totals.fuelToReserve)],
-    ['Arrival Outage Risk', plan.counts.arrivalRisk],
     ['Fuel Remaining', formatFuelBudget(plan.dispatch.remainingFuel)],
   ];
 
@@ -154,8 +184,36 @@ function formatCoveragePair(node) {
   return `${formatHourLabel(node.stabilityHours)} floor | ${formatHourLabel(node.reserveHours)} reserve`;
 }
 
+function getDisplayStabilityGap(plan, node) {
+  return plan.dispatch.tripCapacity === null
+    ? node.remainingStabilityGap
+    : node.scheduledRemainingStabilityGap;
+}
+
+function getDisplayReserveGap(plan, node) {
+  return plan.dispatch.tripCapacity === null
+    ? node.remainingReserveGap
+    : node.scheduledRemainingReserveGap;
+}
+
+function getDisplayProjectedHours(plan, node) {
+  return plan.dispatch.tripCapacity === null
+    ? node.projectedHoursAfterDispatch
+    : node.scheduledProjectedHoursAfterDispatch;
+}
+
+function getDisplayRunsDry(plan, node) {
+  return plan.dispatch.tripCapacity === null
+    ? node.runsDryBeforeArrival
+    : node.scheduledRunsDryBeforeArrival;
+}
+
 function createDispatchMarkup(plan) {
   return plan.dispatch.order.map((node) => {
+    const stabilityGap = getDisplayStabilityGap(plan, node);
+    const reserveGap = getDisplayReserveGap(plan, node);
+    const projectedHours = getDisplayProjectedHours(plan, node);
+    const runsDryBeforeArrival = getDisplayRunsDry(plan, node);
     const allocationParts = [
       `Send ${formatNumber(node.allocatedFuel)}`,
       node.allocatedForStability > 0 ? `${formatNumber(node.allocatedForStability)} to ${formatHourLabel(node.stabilityHours)} floor` : null,
@@ -170,20 +228,25 @@ function createDispatchMarkup(plan) {
     const coverageLabel = (node.usesCustomStabilityHours || node.usesCustomReserveHours)
       ? `${formatCoveragePair(node)} override`
       : `${formatCoveragePair(node)} default`;
+    const cadenceLabel = plan.dispatch.tripCapacity !== null && node.allocatedFuel > 0
+      ? (node.usesTripCadence
+        ? `last drop ${formatOffsetLabel(node.scheduledArrivalOffsetHours)}`
+        : `drop ${formatOffsetLabel(node.scheduledArrivalOffsetHours)}`)
+      : 'not scheduled';
 
     return `
       <li class="dispatch-item tone-${node.status}">
         <div>
           <strong>${escapeHtml(node.name)}</strong>
-          <span>${escapeHtml(node.status.toUpperCase())} | ${escapeHtml(priorityLabel)} | ${escapeHtml(delayLabel)} | ${escapeHtml(coverageLabel)} | ${escapeHtml(formatHours(node.hoursRemaining))} now | ${escapeHtml(formatHours(node.hoursAtArrival))} at arrival | ${escapeHtml(formatHours(node.projectedHoursAfterDispatch))} after dispatch</span>
+          <span>${escapeHtml(node.status.toUpperCase())} | ${escapeHtml(priorityLabel)} | ${escapeHtml(delayLabel)} | ${escapeHtml(coverageLabel)} | ${escapeHtml(formatHours(node.hoursRemaining))} now | ${escapeHtml(formatHours(node.hoursAtArrival))} at arrival | ${escapeHtml(formatHours(projectedHours))} after dispatch</span>
         </div>
         <div class="dispatch-metrics">
           <span>${escapeHtml(allocationParts.join(' | '))}</span>
-          <span>${node.runsDryBeforeArrival ? 'Runs dry before arrival' : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before arrival`}</span>
-          <span>${node.remainingStabilityGap > 0 ? `${escapeHtml(formatHourLabel(node.stabilityHours))} gap ${escapeHtml(formatNumber(node.remainingStabilityGap))}` : `${escapeHtml(formatHourLabel(node.stabilityHours))} floor covered`}</span>
-          <span>${node.remainingReserveGap > 0 ? `Reserve gap ${escapeHtml(formatNumber(node.remainingReserveGap))}` : 'Reserve covered'}</span>
+          <span>${plan.dispatch.tripCapacity !== null ? escapeHtml(cadenceLabel) : (runsDryBeforeArrival ? 'Runs dry before arrival' : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before arrival`)}</span>
+          <span>${runsDryBeforeArrival ? 'Runs dry before scheduled drop' : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before first arrival`}</span>
+          <span>${stabilityGap > 0 ? `${escapeHtml(formatHourLabel(node.stabilityHours))} gap ${escapeHtml(formatNumber(stabilityGap))}` : `${escapeHtml(formatHourLabel(node.stabilityHours))} floor covered`}</span>
+          <span>${reserveGap > 0 ? `Reserve gap ${escapeHtml(formatNumber(reserveGap))}` : 'Reserve covered'}</span>
           ${node.capacityLimited ? `<span>Max capacity leaves ${escapeHtml(formatNumber(node.projectedShortfall))} reserve uncovered</span>` : ''}
-
         </div>
       </li>
     `;
@@ -203,12 +266,28 @@ function createTripMarkup(plan) {
         stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
         stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
       ].filter(Boolean);
+      const outcomeParts = [
+        `arrives ${formatOffsetLabel(stop.arrivalOffsetHours)}`,
+        `before ${formatNumber(stop.fuelBeforeArrival)}`,
+        `after ${formatNumber(stop.fuelAfterDelivery)}`,
+        `runtime ${formatHours(stop.projectedHoursAfterDelivery)}`,
+      ];
+      if (stop.remainingStabilityGap > 0) {
+        outcomeParts.push(`${formatNumber(stop.remainingStabilityGap)} floor gap`);
+      }
+      if (stop.remainingReserveGap > 0) {
+        outcomeParts.push(`${formatNumber(stop.remainingReserveGap)} reserve gap`);
+      }
+      if (stop.runsDryBeforeArrival) {
+        outcomeParts.push('runs dry before arrival');
+      }
 
       return `
         <li>
           <strong>${escapeHtml(stop.name)}</strong>
           <span>${escapeHtml(stop.status.toUpperCase())}${stopNode ? ` | ${escapeHtml(formatCoveragePair(stopNode))}` : ''}</span>
           <small>${escapeHtml(stopParts.join(' | '))}</small>
+          <small>${escapeHtml(outcomeParts.join(' | '))}</small>
         </li>
       `;
     }).join('');
@@ -219,7 +298,7 @@ function createTripMarkup(plan) {
           <strong>Trip ${trip.tripNumber}</strong>
           <span>${escapeHtml(formatNumber(trip.fuel))} / ${escapeHtml(formatNumber(trip.capacity))} fuel loaded</span>
         </div>
-        <p>${trip.remainingCapacity > 0 ? `${escapeHtml(formatNumber(trip.remainingCapacity))} capacity remains open on this run.` : 'Hull is fully committed for this run.'}</p>
+        <p>Departs ${escapeHtml(formatOffsetLabel(trip.departureOffsetHours))}. ${trip.remainingCapacity > 0 ? `${escapeHtml(formatNumber(trip.remainingCapacity))} capacity remains open on this run.` : 'Hull is fully committed for this run.'}</p>
         <ol class="trip-stops">${stopMarkup}</ol>
       </li>
     `;
@@ -229,6 +308,13 @@ function createTripMarkup(plan) {
 function createTableMarkup(plan) {
   return plan.perNode.map((node) => {
     const dispatch = getDispatchRecord(plan, node.name);
+    const stabilityGap = dispatch ? getDisplayStabilityGap(plan, dispatch) : 0;
+    const reserveGap = dispatch ? getDisplayReserveGap(plan, dispatch) : 0;
+    const projectedHours = dispatch ? getDisplayProjectedHours(plan, dispatch) : node.hoursRemaining;
+    const lastDrop = dispatch && dispatch.allocatedFuel > 0 && plan.dispatch.tripCapacity !== null
+      ? formatOffsetLabel(dispatch.scheduledArrivalOffsetHours)
+      : '—';
+
     return `
       <tr class="tone-${node.status}">
         <td>
@@ -243,13 +329,14 @@ function createTableMarkup(plan) {
         <td>${escapeHtml(formatHourLabel(node.stabilityHours))} / ${escapeHtml(formatHourLabel(node.reserveHours))}</td>
         <td>${escapeHtml(formatHours(node.hoursRemaining))}</td>
         <td>${escapeHtml(formatHours(node.hoursAtArrival))}</td>
+        <td>${escapeHtml(lastDrop)}</td>
         <td>${escapeHtml(formatNumber(node.fuelToStability))}</td>
-        <td>${escapeHtml(formatNumber(dispatch?.remainingStabilityGap ?? 0))}</td>
+        <td>${escapeHtml(formatNumber(stabilityGap))}</td>
         <td>${escapeHtml(formatNumber(node.fuelToReserve))}</td>
         <td>${escapeHtml(formatNumber(node.projectedShortfall))}</td>
         <td>${escapeHtml(formatNumber(dispatch?.allocatedFuel ?? 0))}</td>
-        <td>${escapeHtml(formatNumber(dispatch?.remainingReserveGap ?? 0))}</td>
-        <td>${escapeHtml(formatHours(dispatch?.projectedHoursAfterDispatch ?? node.hoursRemaining))}</td>
+        <td>${escapeHtml(formatNumber(reserveGap))}</td>
+        <td>${escapeHtml(formatHours(projectedHours))}</td>
       </tr>
     `;
   }).join('');
@@ -263,13 +350,18 @@ function createReport(plan) {
     `Reserve windows: ${getReserveCoverageLabel(plan)}`,
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
     `Trip capacity: ${formatTripCapacity(plan.dispatch.tripCapacity)}`,
+    `Trip turnaround: ${plan.dispatch.tripTurnaroundHours === null ? 'Not batched' : formatHourLabel(plan.dispatch.tripTurnaroundHours)}`,
     `Trip count: ${plan.dispatch.tripCount === null ? 'Not batched' : plan.dispatch.tripCount}`,
+    `Trip timing risk: ${getTripRiskLabel(plan)}`,
     `Fuel burned before arrival: ${formatNumber(plan.totals.fuelConsumedBeforeArrival)}`,
     `Fuel needed to stabilize: ${formatNumber(plan.totals.fuelToStability)}`,
     `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
     `Uncovered critical gap: ${formatNumber(plan.dispatch.uncoveredStability)}`,
     `Uncovered reserve gap: ${formatNumber(plan.dispatch.uncoveredReserve)}`,
     `Arrival outage risk: ${plan.counts.arrivalRisk}`,
+    `Trip-added arrival risk: ${plan.dispatch.tripTiming.additionalArrivalRisk}`,
+    `Trip-degraded floor coverage: ${plan.dispatch.tripTiming.degradedStability}`,
+    `Trip-degraded reserve coverage: ${plan.dispatch.tripTiming.degradedReserve}`,
     `Critical: ${plan.counts.critical}, Warning: ${plan.counts.warning}, Stable: ${plan.counts.stable}, Capacity-limited: ${plan.counts.capacityLimited}`,
   ];
 
@@ -281,12 +373,13 @@ function createReport(plan) {
     `coverage ${formatHourLabel(node.stabilityHours)} floor / ${formatHourLabel(node.reserveHours)} reserve`,
     `remaining ${formatHours(node.hoursRemaining)}`,
     `arrival ${formatHours(node.hoursAtArrival)}`,
-    `after ${formatHours(node.projectedHoursAfterDispatch)}`,
+    `last drop ${node.allocatedFuel > 0 && plan.dispatch.tripCapacity !== null ? formatOffsetLabel(node.scheduledArrivalOffsetHours) : 'n/a'}`,
+    `after ${formatHours(getDisplayProjectedHours(plan, node))}`,
     `send ${formatNumber(node.allocatedFuel)}`,
-    `${formatHourLabel(node.stabilityHours)} ${node.remainingStabilityGap > 0 ? `gap ${formatNumber(node.remainingStabilityGap)}` : 'covered'}`,
-    node.runsDryBeforeArrival ? 'offline before arrival' : `burns ${formatNumber(node.fuelConsumedBeforeArrival)} before arrival`,
+    `${formatHourLabel(node.stabilityHours)} ${getDisplayStabilityGap(plan, node) > 0 ? `gap ${formatNumber(getDisplayStabilityGap(plan, node))}` : 'covered'}`,
+    getDisplayRunsDry(plan, node) ? 'offline before scheduled drop' : `burns ${formatNumber(node.fuelConsumedBeforeArrival)} before arrival`,
     node.capacityLimited ? `reserve cap gap ${formatNumber(node.projectedShortfall)}` : 'reserve cap ok',
-    node.remainingReserveGap > 0 ? `reserve gap ${formatNumber(node.remainingReserveGap)}` : 'reserve covered',
+    getDisplayReserveGap(plan, node) > 0 ? `reserve gap ${formatNumber(getDisplayReserveGap(plan, node))}` : 'reserve covered',
   ].join(' | '));
 
   const tripRows = plan.dispatch.tripCapacity === null
@@ -298,13 +391,19 @@ function createReport(plan) {
           const parts = [
             `${stop.name} ${formatNumber(stop.fuel)}`,
             stopNode ? `${formatHourLabel(stopNode.stabilityHours)} floor / ${formatHourLabel(stopNode.reserveHours)} reserve` : null,
+            `arrives ${formatOffsetLabel(stop.arrivalOffsetHours)}`,
+            `before ${formatNumber(stop.fuelBeforeArrival)}`,
+            `after ${formatNumber(stop.fuelAfterDelivery)}`,
+            `runtime ${formatHours(stop.projectedHoursAfterDelivery)}`,
             stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
             stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
+            stop.remainingReserveGap > 0 ? `${formatNumber(stop.remainingReserveGap)} reserve gap` : 'reserve covered',
+            stop.runsDryBeforeArrival ? 'offline before arrival' : null,
           ].filter(Boolean);
           return parts.join(' / ');
         })
         .join(' ; ');
-      return `Trip ${trip.tripNumber} | load ${formatNumber(trip.fuel)} / ${formatNumber(trip.capacity)} | remaining ${formatNumber(trip.remainingCapacity)} | ${stops}`;
+      return `Trip ${trip.tripNumber} | depart ${formatOffsetLabel(trip.departureOffsetHours)} | load ${formatNumber(trip.fuel)} / ${formatNumber(trip.capacity)} | remaining ${formatNumber(trip.remainingCapacity)} | ${stops}`;
     });
 
   return [...header, '', 'Dispatch order:', ...rows, '', 'Trip manifests:', ...tripRows].join('\n');
@@ -324,7 +423,13 @@ function renderPlan(plan) {
   copyReportButton.disabled = false;
   copyReportButton.dataset.report = createReport(plan);
 
-  if (plan.counts.arrivalRisk > 0) {
+  if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.additionalArrivalRisk > 0) {
+    setFeedback(`${plan.dispatch.tripTiming.additionalArrivalRisk} node(s) stay online in the base plan but run dry once later trip departures are applied. Reduce trip turnaround or re-balance the manifests.`, 'critical');
+  } else if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.degradedStability > 0) {
+    setFeedback(`${plan.dispatch.tripTiming.degradedStability} node(s) lose critical-floor coverage once convoy timing is applied. Increase trip capacity, reduce turnaround, or move those drops earlier.`, 'critical');
+  } else if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.degradedReserve > 0) {
+    setFeedback(`${plan.dispatch.tripTiming.degradedReserve} node(s) lose reserve coverage once convoy timing is applied. The base allocation is valid, but later manifests land too late to preserve the full reserve window.`, 'warning');
+  } else if (plan.counts.arrivalRisk > 0) {
     setFeedback(`${plan.counts.arrivalRisk} node(s) run dry before fuel arrives with the ${describeDelayContext(plan)}. Dispatch can recover them after arrival but cannot prevent that outage.`, 'critical');
   } else if (plan.dispatch.uncoveredStability > 0) {
     const reason = plan.counts.stabilityCapacityLimited > 0
@@ -357,7 +462,18 @@ function updatePlan() {
     const tripCapacity = tripCapacityInput.value.trim() === ''
       ? null
       : Number(tripCapacityInput.value);
-    const plan = planFuel(nodes, reserveHours, availableFuel, stabilityHours, deliveryDelayHours, tripCapacity);
+    const tripTurnaroundHours = tripTurnaroundInput.value.trim() === ''
+      ? DEFAULT_TRIP_TURNAROUND_HOURS
+      : Number(tripTurnaroundInput.value);
+    const plan = planFuel(
+      nodes,
+      reserveHours,
+      availableFuel,
+      stabilityHours,
+      deliveryDelayHours,
+      tripCapacity,
+      tripTurnaroundHours,
+    );
     renderPlan(plan);
   } catch (error) {
     summary.innerHTML = '';
@@ -377,6 +493,7 @@ fillSampleButton.addEventListener('click', () => {
   deliveryDelayInput.value = '3';
   availableFuelInput.value = '220';
   tripCapacityInput.value = '90';
+  tripTurnaroundInput.value = '2';
   updatePlan();
 });
 
@@ -405,6 +522,5 @@ reserveInput.value = String(DEFAULT_RESERVE_HOURS);
 deliveryDelayInput.value = '3';
 availableFuelInput.value = '220';
 tripCapacityInput.value = '90';
+tripTurnaroundInput.value = '2';
 updatePlan();
-
-

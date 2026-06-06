@@ -50,6 +50,11 @@
           </label>
 
           <label class="field">
+            <span>Trip Turnaround (hours)</span>
+            <input data-trip-turnaround-hours type="number" min="0" step="0.5" placeholder="Delay between trip departures" />
+          </label>
+
+          <label class="field">
             <span>CSV or TSV Rows</span>
             <textarea
               data-node-input
@@ -59,7 +64,7 @@
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours][,priority][,stabilityHours][,reserveHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. If a row includes <code>priority</code>, higher values break ties inside the same alert band and critical-floor queue. If a row includes <code>stabilityHours</code> or <code>reserveHours</code>, that node carries its own coverage targets for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing alert-band precedence. Each node name must appear only once per run.</p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours][,priority][,stabilityHours][,reserveHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. If a row includes <code>priority</code>, higher values break ties inside the same alert band and critical-floor queue. If a row includes <code>stabilityHours</code> or <code>reserveHours</code>, that node carries its own coverage targets for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing alert-band precedence. Trip turnaround delays each later manifest departure so you can spot batching risk before launch. Each node name must appear only once per run.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>
@@ -99,6 +104,7 @@
                   <th>Floor / Reserve</th>
                   <th>Runtime Now</th>
                   <th>At Arrival</th>
+                  <th>Last Drop</th>
                   <th data-floor-need-label>To Floor</th>
                   <th data-floor-gap-label>Floor Gap</th>
                   <th>To Reserve</th>

@@ -1,6 +1,7 @@
 export const DEFAULT_RESERVE_HOURS = 24;
 export const CRITICAL_STABILITY_HOURS = 12;
 export const DEFAULT_DELIVERY_DELAY_HOURS = 0;
+export const DEFAULT_TRIP_TURNAROUND_HOURS = 0;
 const HEADER_ALIASES = {
   name: ['name', 'node', 'nodename'],
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
@@ -254,6 +255,7 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
         capacity: roundTo(normalizedTripCapacity),
         fuel: 0,
         remainingCapacity: roundTo(normalizedTripCapacity),
+        departureOffsetHours: 0,
         stops: [],
       };
       trips.push(activeTrip);
@@ -290,6 +292,111 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
   return trips;
 }
 
+function applyTripSchedule(dispatchOrder, trips, tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS) {
+  const normalizedTripTurnaroundHours = Math.max(
+    0,
+    toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
+  );
+  const nodeMap = new Map(dispatchOrder.map((node) => [node.name, node]));
+  const nodeStates = new Map(dispatchOrder.map((node) => [
+    node.name,
+    {
+      fuel: node.currentFuel,
+      lastArrivalOffsetHours: 0,
+      lastProjectedHoursAfterDelivery: node.projectedHoursAfterDispatch,
+      remainingStabilityGap: node.remainingStabilityGap,
+      remainingReserveGap: node.remainingReserveGap,
+      scheduledArrivalOffsetHours: node.deliveryDelayHours,
+      scheduledRunsDryBeforeArrival: node.runsDryBeforeArrival,
+      allocatedStops: 0,
+    },
+  ]));
+
+  const scheduledTrips = trips.map((trip, tripIndex) => ({
+    ...trip,
+    departureOffsetHours: roundTo(tripIndex * normalizedTripTurnaroundHours),
+    stops: trip.stops.map((stop) => {
+      const node = nodeMap.get(stop.name);
+      const state = nodeStates.get(stop.name);
+      const arrivalOffsetHours = roundTo((tripIndex * normalizedTripTurnaroundHours) + node.deliveryDelayHours);
+      const elapsedHours = Math.max(0, arrivalOffsetHours - state.lastArrivalOffsetHours);
+      const burnSinceLastStop = Math.min(state.fuel, node.burnRatePerHour * elapsedHours);
+      const fuelBeforeArrival = roundTo(Math.max(0, state.fuel - burnSinceLastStop));
+      const runsDryBeforeArrival = node.burnRatePerHour > 0
+        && state.fuel / node.burnRatePerHour < elapsedHours;
+      const fuelAfterDelivery = roundTo(Math.min(node.maxFuel, fuelBeforeArrival + stop.fuel));
+      const projectedHoursAfterDelivery = node.burnRatePerHour === 0
+        ? Number.POSITIVE_INFINITY
+        : roundTo(fuelAfterDelivery / node.burnRatePerHour);
+      const remainingStabilityGap = roundTo(Math.max(0, node.stabilityFuel - fuelAfterDelivery));
+      const remainingReserveGap = roundTo(Math.max(0, node.reserveFuel - fuelAfterDelivery));
+
+      state.fuel = fuelAfterDelivery;
+      state.lastArrivalOffsetHours = arrivalOffsetHours;
+      state.lastProjectedHoursAfterDelivery = projectedHoursAfterDelivery;
+      state.remainingStabilityGap = remainingStabilityGap;
+      state.remainingReserveGap = remainingReserveGap;
+      state.scheduledArrivalOffsetHours = arrivalOffsetHours;
+      state.scheduledRunsDryBeforeArrival = state.scheduledRunsDryBeforeArrival || runsDryBeforeArrival;
+      state.allocatedStops += 1;
+
+      return {
+        ...stop,
+        arrivalOffsetHours,
+        fuelBeforeArrival,
+        fuelAfterDelivery,
+        projectedHoursAfterDelivery,
+        remainingStabilityGap,
+        remainingReserveGap,
+        runsDryBeforeArrival,
+      };
+    }),
+  }));
+
+  const outcomes = dispatchOrder.map((node) => {
+    const state = nodeStates.get(node.name);
+    const usesTripCadence = state.allocatedStops > 0
+      && (state.allocatedStops > 1 || state.scheduledArrivalOffsetHours !== node.deliveryDelayHours);
+
+    return {
+      name: node.name,
+      scheduledArrivalOffsetHours: state.scheduledArrivalOffsetHours,
+      scheduledProjectedHoursAfterDispatch: state.lastProjectedHoursAfterDelivery,
+      scheduledRemainingStabilityGap: state.remainingStabilityGap,
+      scheduledRemainingReserveGap: state.remainingReserveGap,
+      scheduledRunsDryBeforeArrival: state.scheduledRunsDryBeforeArrival,
+      usesTripCadence,
+    };
+  });
+
+  const counts = outcomes.reduce(
+    (accumulator, outcome) => {
+      const node = nodeMap.get(outcome.name);
+      if (outcome.usesTripCadence) {
+        accumulator.nodesAffected += 1;
+      }
+      if (outcome.scheduledRunsDryBeforeArrival && !node.runsDryBeforeArrival) {
+        accumulator.additionalArrivalRisk += 1;
+      }
+      if (outcome.scheduledRemainingStabilityGap > node.remainingStabilityGap) {
+        accumulator.degradedStability += 1;
+      }
+      if (outcome.scheduledRemainingReserveGap > node.remainingReserveGap) {
+        accumulator.degradedReserve += 1;
+      }
+      return accumulator;
+    },
+    {
+      nodesAffected: 0,
+      additionalArrivalRisk: 0,
+      degradedStability: 0,
+      degradedReserve: 0,
+    },
+  );
+
+  return { trips: scheduledTrips, outcomes, counts };
+}
+
 export function planFuel(
   nodes,
   reserveHours = DEFAULT_RESERVE_HOURS,
@@ -297,6 +404,7 @@ export function planFuel(
   stabilityHours = CRITICAL_STABILITY_HOURS,
   deliveryDelayHours = DEFAULT_DELIVERY_DELAY_HOURS,
   tripCapacity = null,
+  tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
 ) {
   const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
   const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
@@ -306,6 +414,10 @@ export function planFuel(
     const parsed = toFiniteNumber(tripCapacity);
     return parsed !== null && parsed > 0 ? parsed : null;
   })();
+  const normalizedTripTurnaroundHours = Math.max(
+    0,
+    toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
+  );
 
   const perNode = nodes.map((node) => {
     const nodeDeliveryDelayHours = Math.max(
@@ -427,6 +539,11 @@ export function planFuel(
 
       return {
         name: node.name,
+        currentFuel: node.currentFuel,
+        maxFuel: node.maxFuel,
+        burnRatePerHour: node.burnRatePerHour,
+        stabilityFuel: node.stabilityFuel,
+        reserveFuel: node.reserveFuel,
         status: node.status,
         stabilityHours: node.stabilityHours,
         reserveHours: node.reserveHours,
@@ -459,6 +576,12 @@ export function planFuel(
         remainingReserveGap,
         canReachStability: remainingStabilityGap === 0,
         canReachReserve: remainingReserveGap === 0,
+        scheduledArrivalOffsetHours: node.deliveryDelayHours,
+        scheduledProjectedHoursAfterDispatch: projectedHoursAfterDispatch,
+        scheduledRemainingStabilityGap: remainingStabilityGap,
+        scheduledRemainingReserveGap: remainingReserveGap,
+        scheduledRunsDryBeforeArrival: node.runsDryBeforeArrival,
+        usesTripCadence: false,
       };
     });
 
@@ -549,11 +672,29 @@ export function planFuel(
   );
 
   const trips = buildDispatchTrips(dispatchOrder, normalizedTripCapacity);
+  const tripSchedule = normalizedTripCapacity === null
+    ? {
+      trips,
+      outcomes: [],
+      counts: {
+        nodesAffected: 0,
+        additionalArrivalRisk: 0,
+        degradedStability: 0,
+        degradedReserve: 0,
+      },
+    }
+    : applyTripSchedule(dispatchOrder, trips, normalizedTripTurnaroundHours);
+  const scheduledOutcomeMap = new Map(tripSchedule.outcomes.map((outcome) => [outcome.name, outcome]));
+  const scheduledDispatchOrder = dispatchOrder.map((node) => ({
+    ...node,
+    ...(scheduledOutcomeMap.get(node.name) ?? {}),
+  }));
 
   return {
     stabilityHours: normalizedStabilityHours,
     reserveHours: normalizedReserveHours,
     deliveryDelayHours: normalizedDeliveryDelayHours,
+    tripTurnaroundHours: normalizedTripTurnaroundHours,
     availableFuel: Number.isFinite(normalizedAvailableFuel) ? normalizedAvailableFuel : null,
     perNode,
     totals,
@@ -564,9 +705,11 @@ export function planFuel(
         ? roundTo(Math.max(0, normalizedAvailableFuel - dispatch.allocatedFuel))
         : null,
       tripCapacity: normalizedTripCapacity,
-      tripCount: normalizedTripCapacity === null ? null : trips.length,
-      trips,
-      order: dispatchOrder,
+      tripTurnaroundHours: normalizedTripCapacity === null ? null : normalizedTripTurnaroundHours,
+      tripCount: normalizedTripCapacity === null ? null : tripSchedule.trips.length,
+      tripTiming: tripSchedule.counts,
+      trips: tripSchedule.trips,
+      order: scheduledDispatchOrder,
     },
   };
 }

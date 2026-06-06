@@ -5,6 +5,7 @@ import {
   CRITICAL_STABILITY_HOURS,
   DEFAULT_DELIVERY_DELAY_HOURS,
   DEFAULT_RESERVE_HOURS,
+  DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
   parseNodeRows,
   planFuel,
@@ -16,12 +17,20 @@ function pickTripFields(plan) {
     capacity: trip.capacity,
     fuel: trip.fuel,
     remainingCapacity: trip.remainingCapacity,
+    departureOffsetHours: trip.departureOffsetHours,
     stops: trip.stops.map((stop) => ({
       name: stop.name,
       status: stop.status,
       fuel: stop.fuel,
       forStability: stop.forStability,
       forReserve: stop.forReserve,
+      arrivalOffsetHours: stop.arrivalOffsetHours,
+      fuelBeforeArrival: stop.fuelBeforeArrival,
+      fuelAfterDelivery: stop.fuelAfterDelivery,
+      projectedHoursAfterDelivery: stop.projectedHoursAfterDelivery,
+      remainingStabilityGap: stop.remainingStabilityGap,
+      remainingReserveGap: stop.remainingReserveGap,
+      runsDryBeforeArrival: stop.runsDryBeforeArrival,
     })),
   }));
 }
@@ -664,8 +673,22 @@ test('planFuel builds trip manifests when trip capacity is provided', () => {
       capacity: 50,
       fuel: 50,
       remainingCapacity: 0,
+      departureOffsetHours: 0,
       stops: [
-        { name: 'North Gate', status: 'critical', fuel: 50, forStability: 40, forReserve: 10 },
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 50,
+          forStability: 40,
+          forReserve: 10,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 20,
+          fuelAfterDelivery: 70,
+          projectedHoursAfterDelivery: 14,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 50,
+          runsDryBeforeArrival: false,
+        },
       ],
     },
     {
@@ -673,8 +696,22 @@ test('planFuel builds trip manifests when trip capacity is provided', () => {
       capacity: 50,
       fuel: 50,
       remainingCapacity: 0,
+      departureOffsetHours: 0,
       stops: [
-        { name: 'North Gate', status: 'critical', fuel: 50, forStability: 0, forReserve: 50 },
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 50,
+          forStability: 0,
+          forReserve: 50,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 70,
+          fuelAfterDelivery: 120,
+          projectedHoursAfterDelivery: 24,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 0,
+          runsDryBeforeArrival: false,
+        },
       ],
     },
     {
@@ -682,8 +719,22 @@ test('planFuel builds trip manifests when trip capacity is provided', () => {
       capacity: 50,
       fuel: 30,
       remainingCapacity: 20,
+      departureOffsetHours: 0,
       stops: [
-        { name: 'South Relay', status: 'critical', fuel: 30, forStability: 30, forReserve: 0 },
+        {
+          name: 'South Relay',
+          status: 'critical',
+          fuel: 30,
+          forStability: 30,
+          forReserve: 0,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 30,
+          fuelAfterDelivery: 60,
+          projectedHoursAfterDelivery: 12,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 60,
+          runsDryBeforeArrival: false,
+        },
       ],
     },
   ]);
@@ -695,8 +746,137 @@ test('planFuel skips trip manifests when trip capacity is omitted', () => {
   ], 24, Infinity, 12, 0);
 
   assert.equal(plan.dispatch.tripCapacity, null);
+  assert.equal(plan.dispatch.tripTurnaroundHours, null);
   assert.equal(plan.dispatch.tripCount, null);
+  assert.equal(plan.tripTurnaroundHours, DEFAULT_TRIP_TURNAROUND_HOURS);
   assert.deepEqual(plan.dispatch.trips, []);
+});
+
+test('planFuel applies trip turnaround hours to later manifests and tracks degraded outcomes', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'South Relay', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 80, maxFuel: 300, burnRatePerHour: 5 },
+  ], 24, 130, 12, 0, 50, 2);
+
+  assert.equal(plan.dispatch.tripTurnaroundHours, 2);
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 1,
+    degradedReserve: 2,
+  });
+  assert.deepEqual(pickTripFields(plan), [
+    {
+      tripNumber: 1,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      departureOffsetHours: 0,
+      stops: [
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 50,
+          forStability: 40,
+          forReserve: 10,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 20,
+          fuelAfterDelivery: 70,
+          projectedHoursAfterDelivery: 14,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 50,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+    {
+      tripNumber: 2,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      departureOffsetHours: 2,
+      stops: [
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 50,
+          forStability: 0,
+          forReserve: 50,
+          arrivalOffsetHours: 2,
+          fuelBeforeArrival: 60,
+          fuelAfterDelivery: 110,
+          projectedHoursAfterDelivery: 22,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 10,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+    {
+      tripNumber: 3,
+      capacity: 50,
+      fuel: 30,
+      remainingCapacity: 20,
+      departureOffsetHours: 4,
+      stops: [
+        {
+          name: 'South Relay',
+          status: 'critical',
+          fuel: 30,
+          forStability: 30,
+          forReserve: 0,
+          arrivalOffsetHours: 4,
+          fuelBeforeArrival: 10,
+          fuelAfterDelivery: 40,
+          projectedHoursAfterDelivery: 8,
+          remainingStabilityGap: 20,
+          remainingReserveGap: 80,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      scheduledArrivalOffsetHours: node.scheduledArrivalOffsetHours,
+      scheduledProjectedHoursAfterDispatch: node.scheduledProjectedHoursAfterDispatch,
+      scheduledRemainingStabilityGap: node.scheduledRemainingStabilityGap,
+      scheduledRemainingReserveGap: node.scheduledRemainingReserveGap,
+      scheduledRunsDryBeforeArrival: node.scheduledRunsDryBeforeArrival,
+      usesTripCadence: node.usesTripCadence,
+    })),
+    [
+      {
+        name: 'North Gate',
+        scheduledArrivalOffsetHours: 2,
+        scheduledProjectedHoursAfterDispatch: 22,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 10,
+        scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: true,
+      },
+      {
+        name: 'South Relay',
+        scheduledArrivalOffsetHours: 4,
+        scheduledProjectedHoursAfterDispatch: 8,
+        scheduledRemainingStabilityGap: 20,
+        scheduledRemainingReserveGap: 80,
+        scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: true,
+      },
+      {
+        name: 'Refinery Spine',
+        scheduledArrivalOffsetHours: 0,
+        scheduledProjectedHoursAfterDispatch: 16,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 40,
+        scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: false,
+      },
+    ],
+  );
 });
 
 test('parseNodeRows accepts optional priority columns in headers and trailing positional fields', () => {
