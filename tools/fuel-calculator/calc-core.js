@@ -1,5 +1,6 @@
 export const DEFAULT_RESERVE_HOURS = 24;
 export const CRITICAL_STABILITY_HOURS = 12;
+export const DEFAULT_DELIVERY_DELAY_HOURS = 0;
 const HEADER_ALIASES = {
   name: ['name', 'node', 'nodename'],
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
@@ -137,6 +138,7 @@ export function parseNodeRows(input) {
     }];
   });
 }
+
 function getStatusPriority(status) {
   switch (status) {
     case 'critical':
@@ -154,7 +156,7 @@ function compareDispatchPriority(left, right) {
     return statusDelta;
   }
 
-  const hoursDelta = left.hoursRemaining - right.hoursRemaining;
+  const hoursDelta = left.hoursAtArrival - right.hoursAtArrival;
   if (hoursDelta !== 0) {
     return hoursDelta;
   }
@@ -167,30 +169,41 @@ export function planFuel(
   reserveHours = DEFAULT_RESERVE_HOURS,
   availableFuel = Infinity,
   stabilityHours = CRITICAL_STABILITY_HOURS,
+  deliveryDelayHours = DEFAULT_DELIVERY_DELAY_HOURS,
 ) {
   const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
   const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
   const normalizedStabilityHours = Math.max(0, toFiniteNumber(stabilityHours) ?? CRITICAL_STABILITY_HOURS);
+  const normalizedDeliveryDelayHours = Math.max(0, toFiniteNumber(deliveryDelayHours) ?? DEFAULT_DELIVERY_DELAY_HOURS);
 
   const perNode = nodes.map((node) => {
-    const stabilityFuel = node.burnRatePerHour * normalizedStabilityHours;
-    const reserveFuel = node.burnRatePerHour * normalizedReserveHours;
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
       : node.currentFuel / node.burnRatePerHour;
+    const fuelConsumedBeforeArrival = Math.min(
+      node.currentFuel,
+      node.burnRatePerHour * normalizedDeliveryDelayHours,
+    );
+    const fuelAtArrival = Math.max(0, node.currentFuel - fuelConsumedBeforeArrival);
+    const hoursAtArrival = node.burnRatePerHour === 0
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, hoursRemaining - normalizedDeliveryDelayHours);
+    const stabilityFuel = node.burnRatePerHour * normalizedStabilityHours;
+    const reserveFuel = node.burnRatePerHour * normalizedReserveHours;
     const reachableStabilityFuel = Math.min(node.maxFuel, stabilityFuel);
     const reachableReserveFuel = Math.min(node.maxFuel, reserveFuel);
-    const fuelToStability = Math.max(0, reachableStabilityFuel - node.currentFuel);
-    const fuelToReserve = Math.max(0, reserveFuel - node.currentFuel);
-    const fuelToDeliver = Math.max(0, reachableReserveFuel - node.currentFuel);
+    const fuelToStability = Math.max(0, reachableStabilityFuel - fuelAtArrival);
+    const fuelToReserve = Math.max(0, reserveFuel - fuelAtArrival);
+    const fuelToDeliver = Math.max(0, reachableReserveFuel - fuelAtArrival);
     const fuelToFull = Math.max(0, node.maxFuel - node.currentFuel);
     const projectedStabilityShortfall = Math.max(0, stabilityFuel - node.maxFuel);
     const projectedShortfall = Math.max(0, reserveFuel - node.maxFuel);
+    const runsDryBeforeArrival = node.burnRatePerHour > 0 && hoursRemaining < normalizedDeliveryDelayHours;
     const status = node.burnRatePerHour === 0
       ? 'stable'
-      : hoursRemaining < normalizedStabilityHours
+      : hoursAtArrival < normalizedStabilityHours
         ? 'critical'
-        : hoursRemaining < normalizedReserveHours
+        : hoursAtArrival < normalizedReserveHours
           ? 'warning'
           : 'stable';
 
@@ -198,15 +211,21 @@ export function planFuel(
       ...node,
       stabilityHours: normalizedStabilityHours,
       reserveHours: normalizedReserveHours,
+      deliveryDelayHours: normalizedDeliveryDelayHours,
       stabilityFuel: roundTo(stabilityFuel),
       reserveFuel: roundTo(reserveFuel),
       hoursRemaining: Number.isFinite(hoursRemaining) ? roundTo(hoursRemaining) : Infinity,
+      hoursAtArrival: Number.isFinite(hoursAtArrival) ? roundTo(hoursAtArrival) : Infinity,
+      fuelConsumedBeforeArrival: roundTo(fuelConsumedBeforeArrival),
+      fuelAtArrival: roundTo(fuelAtArrival),
       fuelToStability: roundTo(fuelToStability),
       fuelToReserve: roundTo(fuelToReserve),
       fuelToDeliver: roundTo(fuelToDeliver),
       fuelToFull: roundTo(fuelToFull),
       projectedStabilityShortfall: roundTo(projectedStabilityShortfall),
       projectedShortfall: roundTo(projectedShortfall),
+      runsDryBeforeArrival,
+      survivesUntilArrival: !runsDryBeforeArrival,
       status,
     };
   });
@@ -217,7 +236,7 @@ export function planFuel(
   const stabilityOrder = [...perNode]
     .filter((node) => node.status === 'critical' && node.fuelToStability > 0)
     .sort((left, right) => {
-      const hoursDelta = left.hoursRemaining - right.hoursRemaining;
+      const hoursDelta = left.hoursAtArrival - right.hoursAtArrival;
       if (hoursDelta !== 0) {
         return hoursDelta;
       }
@@ -245,15 +264,22 @@ export function planFuel(
       const remainingStabilityGap = roundTo(node.projectedStabilityShortfall + remainingStabilitySupplyGap);
       const remainingSupplyGap = roundTo(Math.max(0, node.fuelToDeliver - allocatedFuel));
       const remainingReserveGap = roundTo(node.projectedShortfall + remainingSupplyGap);
+      const projectedHoursAfterArrival = node.burnRatePerHour === 0
+        ? Number.POSITIVE_INFINITY
+        : roundTo((node.fuelAtArrival + allocatedFuel) / node.burnRatePerHour);
       const projectedHoursAfterDispatch = node.burnRatePerHour === 0
         ? Number.POSITIVE_INFINITY
-        : roundTo((node.currentFuel + allocatedFuel) / node.burnRatePerHour);
+        : roundTo(normalizedDeliveryDelayHours + projectedHoursAfterArrival);
 
       return {
         name: node.name,
         status: node.status,
         hoursRemaining: node.hoursRemaining,
+        hoursAtArrival: node.hoursAtArrival,
         projectedHoursAfterDispatch,
+        projectedHoursAfterArrival,
+        fuelConsumedBeforeArrival: node.fuelConsumedBeforeArrival,
+        fuelAtArrival: node.fuelAtArrival,
         fuelToStability: node.fuelToStability,
         fuelToReserve: node.fuelToReserve,
         fuelToDeliver: node.fuelToDeliver,
@@ -264,6 +290,8 @@ export function planFuel(
         projectedShortfall: node.projectedShortfall,
         stabilityCapacityLimited: node.projectedStabilityShortfall > 0,
         capacityLimited: node.projectedShortfall > 0,
+        runsDryBeforeArrival: node.runsDryBeforeArrival,
+        survivesUntilArrival: node.survivesUntilArrival,
         remainingStabilityGap,
         remainingSupplyGap,
         remainingReserveGap,
@@ -278,6 +306,8 @@ export function planFuel(
       maxFuel: roundTo(accumulator.maxFuel + node.maxFuel),
       stabilityFuel: roundTo(accumulator.stabilityFuel + node.stabilityFuel),
       reserveFuel: roundTo(accumulator.reserveFuel + node.reserveFuel),
+      fuelConsumedBeforeArrival: roundTo(accumulator.fuelConsumedBeforeArrival + node.fuelConsumedBeforeArrival),
+      fuelAtArrival: roundTo(accumulator.fuelAtArrival + node.fuelAtArrival),
       fuelToStability: roundTo(accumulator.fuelToStability + node.fuelToStability),
       fuelToReserve: roundTo(accumulator.fuelToReserve + node.fuelToReserve),
       fuelToDeliver: roundTo(accumulator.fuelToDeliver + node.fuelToDeliver),
@@ -290,6 +320,8 @@ export function planFuel(
       maxFuel: 0,
       stabilityFuel: 0,
       reserveFuel: 0,
+      fuelConsumedBeforeArrival: 0,
+      fuelAtArrival: 0,
       fuelToStability: 0,
       fuelToReserve: 0,
       fuelToDeliver: 0,
@@ -302,6 +334,9 @@ export function planFuel(
   const counts = perNode.reduce(
     (accumulator, node) => {
       accumulator[node.status] += 1;
+      if (node.runsDryBeforeArrival) {
+        accumulator.arrivalRisk += 1;
+      }
       if (node.projectedShortfall > 0) {
         accumulator.capacityLimited += 1;
       }
@@ -314,6 +349,7 @@ export function planFuel(
       critical: 0,
       warning: 0,
       stable: 0,
+      arrivalRisk: 0,
       capacityLimited: 0,
       stabilityCapacityLimited: 0,
     },
@@ -337,6 +373,7 @@ export function planFuel(
   return {
     stabilityHours: normalizedStabilityHours,
     reserveHours: normalizedReserveHours,
+    deliveryDelayHours: normalizedDeliveryDelayHours,
     availableFuel: Number.isFinite(normalizedAvailableFuel) ? normalizedAvailableFuel : null,
     perNode,
     totals,
