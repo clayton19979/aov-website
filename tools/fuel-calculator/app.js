@@ -1,6 +1,7 @@
 import {
   CRITICAL_STABILITY_HOURS,
   DEFAULT_DELIVERY_DELAY_HOURS,
+  DEFAULT_HAULER_COUNT,
   DEFAULT_RESERVE_HOURS,
   DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
@@ -25,6 +26,7 @@ const deliveryDelayInput = document.querySelector('[data-delivery-delay-hours]')
 const availableFuelInput = document.querySelector('[data-available-fuel]');
 const tripCapacityInput = document.querySelector('[data-trip-capacity]');
 const tripTurnaroundInput = document.querySelector('[data-trip-turnaround-hours]');
+const haulerCountInput = document.querySelector('[data-hauler-count]');
 const summary = document.querySelector('[data-summary]');
 const dispatchList = document.querySelector('[data-dispatch-list]');
 const tripList = document.querySelector('[data-trip-list]');
@@ -124,10 +126,14 @@ function getTripCadenceLabel(plan) {
   if (plan.dispatch.tripCapacity === null) {
     return 'Direct dispatch';
   }
-  if ((plan.dispatch.tripTurnaroundHours ?? 0) === 0) {
-    return 'Back-to-back departures';
-  }
-  return `${formatHourLabel(plan.dispatch.tripTurnaroundHours)} between trips`;
+
+  const cadence = (plan.dispatch.tripTurnaroundHours ?? 0) === 0
+    ? 'Back-to-back departures'
+    : `${formatHourLabel(plan.dispatch.tripTurnaroundHours)} between waves`;
+
+  return plan.dispatch.haulerCount > 1
+    ? `${cadence} with ${formatNumber(plan.dispatch.haulerCount)} haulers`
+    : cadence;
 }
 
 function getTripRiskLabel(plan) {
@@ -149,7 +155,8 @@ function getTripSummaryLabel(plan) {
     return 'Direct dispatch';
   }
 
-  return `${plan.dispatch.tripCount} trip${plan.dispatch.tripCount === 1 ? '' : 's'} @ ${formatTripCapacity(plan.dispatch.tripCapacity)}`;
+  const haulerLabel = `${formatNumber(plan.dispatch.haulerCount)} hauler${plan.dispatch.haulerCount === 1 ? '' : 's'}`;
+  return `${plan.dispatch.tripCount} trip${plan.dispatch.tripCount === 1 ? '' : 's'} @ ${formatTripCapacity(plan.dispatch.tripCapacity)} | ${haulerLabel}`;
 }
 
 function createSummaryMarkup(plan) {
@@ -351,6 +358,7 @@ function createReport(plan) {
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
     `Trip capacity: ${formatTripCapacity(plan.dispatch.tripCapacity)}`,
     `Trip turnaround: ${plan.dispatch.tripTurnaroundHours === null ? 'Not batched' : formatHourLabel(plan.dispatch.tripTurnaroundHours)}`,
+    `Haulers: ${plan.dispatch.haulerCount === null ? 'Not batched' : formatNumber(plan.dispatch.haulerCount)}`,
     `Trip count: ${plan.dispatch.tripCount === null ? 'Not batched' : plan.dispatch.tripCount}`,
     `Trip timing risk: ${getTripRiskLabel(plan)}`,
     `Fuel burned before arrival: ${formatNumber(plan.totals.fuelConsumedBeforeArrival)}`,
@@ -424,9 +432,9 @@ function renderPlan(plan) {
   copyReportButton.dataset.report = createReport(plan);
 
   if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.additionalArrivalRisk > 0) {
-    setFeedback(`${plan.dispatch.tripTiming.additionalArrivalRisk} node(s) stay online in the base plan but run dry once later trip departures are applied. Reduce trip turnaround or re-balance the manifests.`, 'critical');
+    setFeedback(`${plan.dispatch.tripTiming.additionalArrivalRisk} node(s) stay online in the base plan but run dry once later trip departures are applied. Reduce trip turnaround, add haulers, or re-balance the manifests.`, 'critical');
   } else if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.degradedStability > 0) {
-    setFeedback(`${plan.dispatch.tripTiming.degradedStability} node(s) lose critical-floor coverage once convoy timing is applied. Increase trip capacity, reduce turnaround, or move those drops earlier.`, 'critical');
+    setFeedback(`${plan.dispatch.tripTiming.degradedStability} node(s) lose critical-floor coverage once convoy timing is applied. Increase trip capacity, add haulers, reduce turnaround, or move those drops earlier.`, 'critical');
   } else if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.degradedReserve > 0) {
     setFeedback(`${plan.dispatch.tripTiming.degradedReserve} node(s) lose reserve coverage once convoy timing is applied. The base allocation is valid, but later manifests land too late to preserve the full reserve window.`, 'warning');
   } else if (plan.counts.arrivalRisk > 0) {
@@ -465,6 +473,9 @@ function updatePlan() {
     const tripTurnaroundHours = tripTurnaroundInput.value.trim() === ''
       ? DEFAULT_TRIP_TURNAROUND_HOURS
       : Number(tripTurnaroundInput.value);
+    const haulerCount = haulerCountInput.value.trim() === ''
+      ? DEFAULT_HAULER_COUNT
+      : Number(haulerCountInput.value);
     const plan = planFuel(
       nodes,
       reserveHours,
@@ -473,6 +484,7 @@ function updatePlan() {
       deliveryDelayHours,
       tripCapacity,
       tripTurnaroundHours,
+      haulerCount,
     );
     renderPlan(plan);
   } catch (error) {
@@ -494,6 +506,7 @@ fillSampleButton.addEventListener('click', () => {
   availableFuelInput.value = '220';
   tripCapacityInput.value = '90';
   tripTurnaroundInput.value = '2';
+  haulerCountInput.value = '2';
   updatePlan();
 });
 
@@ -523,4 +536,5 @@ deliveryDelayInput.value = '3';
 availableFuelInput.value = '220';
 tripCapacityInput.value = '90';
 tripTurnaroundInput.value = '2';
+haulerCountInput.value = '2';
 updatePlan();

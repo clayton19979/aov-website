@@ -2,6 +2,7 @@ export const DEFAULT_RESERVE_HOURS = 24;
 export const CRITICAL_STABILITY_HOURS = 12;
 export const DEFAULT_DELIVERY_DELAY_HOURS = 0;
 export const DEFAULT_TRIP_TURNAROUND_HOURS = 0;
+export const DEFAULT_HAULER_COUNT = 1;
 const HEADER_ALIASES = {
   name: ['name', 'node', 'nodename'],
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
@@ -292,11 +293,17 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
   return trips;
 }
 
-function applyTripSchedule(dispatchOrder, trips, tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS) {
+function applyTripSchedule(
+  dispatchOrder,
+  trips,
+  tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
+  haulerCount = DEFAULT_HAULER_COUNT,
+) {
   const normalizedTripTurnaroundHours = Math.max(
     0,
     toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
   );
+  const normalizedHaulerCount = Math.max(1, Math.floor(toFiniteNumber(haulerCount) ?? DEFAULT_HAULER_COUNT));
   const nodeMap = new Map(dispatchOrder.map((node) => [node.name, node]));
   const nodeStates = new Map(dispatchOrder.map((node) => [
     node.name,
@@ -314,11 +321,13 @@ function applyTripSchedule(dispatchOrder, trips, tripTurnaroundHours = DEFAULT_T
 
   const scheduledTrips = trips.map((trip, tripIndex) => ({
     ...trip,
-    departureOffsetHours: roundTo(tripIndex * normalizedTripTurnaroundHours),
+    departureOffsetHours: roundTo(Math.floor(tripIndex / normalizedHaulerCount) * normalizedTripTurnaroundHours),
     stops: trip.stops.map((stop) => {
       const node = nodeMap.get(stop.name);
       const state = nodeStates.get(stop.name);
-      const arrivalOffsetHours = roundTo((tripIndex * normalizedTripTurnaroundHours) + node.deliveryDelayHours);
+      const arrivalOffsetHours = roundTo(
+        (Math.floor(tripIndex / normalizedHaulerCount) * normalizedTripTurnaroundHours) + node.deliveryDelayHours,
+      );
       const elapsedHours = Math.max(0, arrivalOffsetHours - state.lastArrivalOffsetHours);
       const burnSinceLastStop = Math.min(state.fuel, node.burnRatePerHour * elapsedHours);
       const fuelBeforeArrival = roundTo(Math.max(0, state.fuel - burnSinceLastStop));
@@ -405,6 +414,7 @@ export function planFuel(
   deliveryDelayHours = DEFAULT_DELIVERY_DELAY_HOURS,
   tripCapacity = null,
   tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
+  haulerCount = DEFAULT_HAULER_COUNT,
 ) {
   const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
   const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
@@ -418,6 +428,7 @@ export function planFuel(
     0,
     toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
   );
+  const normalizedHaulerCount = Math.max(1, Math.floor(toFiniteNumber(haulerCount) ?? DEFAULT_HAULER_COUNT));
 
   const perNode = nodes.map((node) => {
     const nodeDeliveryDelayHours = Math.max(
@@ -683,7 +694,7 @@ export function planFuel(
         degradedReserve: 0,
       },
     }
-    : applyTripSchedule(dispatchOrder, trips, normalizedTripTurnaroundHours);
+    : applyTripSchedule(dispatchOrder, trips, normalizedTripTurnaroundHours, normalizedHaulerCount);
   const scheduledOutcomeMap = new Map(tripSchedule.outcomes.map((outcome) => [outcome.name, outcome]));
   const scheduledDispatchOrder = dispatchOrder.map((node) => ({
     ...node,
@@ -695,6 +706,7 @@ export function planFuel(
     reserveHours: normalizedReserveHours,
     deliveryDelayHours: normalizedDeliveryDelayHours,
     tripTurnaroundHours: normalizedTripTurnaroundHours,
+    haulerCount: normalizedHaulerCount,
     availableFuel: Number.isFinite(normalizedAvailableFuel) ? normalizedAvailableFuel : null,
     perNode,
     totals,
@@ -706,6 +718,7 @@ export function planFuel(
         : null,
       tripCapacity: normalizedTripCapacity,
       tripTurnaroundHours: normalizedTripCapacity === null ? null : normalizedTripTurnaroundHours,
+      haulerCount: normalizedTripCapacity === null ? null : normalizedHaulerCount,
       tripCount: normalizedTripCapacity === null ? null : tripSchedule.trips.length,
       tripTiming: tripSchedule.counts,
       trips: tripSchedule.trips,
@@ -726,3 +739,4 @@ export function formatHours(hours) {
   const remHours = roundTo(hours - (days * 24));
   return remHours === 0 ? `${days}d` : `${days}d ${remHours}h`;
 }
+

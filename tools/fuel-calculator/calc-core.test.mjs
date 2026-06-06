@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   CRITICAL_STABILITY_HOURS,
   DEFAULT_DELIVERY_DELAY_HOURS,
+  DEFAULT_HAULER_COUNT,
   DEFAULT_RESERVE_HOURS,
   DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
@@ -747,8 +748,10 @@ test('planFuel skips trip manifests when trip capacity is omitted', () => {
 
   assert.equal(plan.dispatch.tripCapacity, null);
   assert.equal(plan.dispatch.tripTurnaroundHours, null);
+  assert.equal(plan.dispatch.haulerCount, null);
   assert.equal(plan.dispatch.tripCount, null);
   assert.equal(plan.tripTurnaroundHours, DEFAULT_TRIP_TURNAROUND_HOURS);
+  assert.equal(plan.haulerCount, DEFAULT_HAULER_COUNT);
   assert.deepEqual(plan.dispatch.trips, []);
 });
 
@@ -873,6 +876,72 @@ test('planFuel applies trip turnaround hours to later manifests and tracks degra
         scheduledRemainingStabilityGap: 0,
         scheduledRemainingReserveGap: 40,
         scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: false,
+      },
+    ],
+  );
+});
+
+
+test('planFuel schedules concurrent haulers into the same departure wave', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'South Relay', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 80, maxFuel: 300, burnRatePerHour: 5 },
+  ], 24, 130, 12, 0, 50, 2, 2);
+
+  assert.equal(plan.haulerCount, 2);
+  assert.equal(plan.dispatch.haulerCount, 2);
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 1,
+    degradedReserve: 1,
+  });
+  assert.deepEqual(
+    plan.dispatch.trips.map((trip) => ({
+      tripNumber: trip.tripNumber,
+      departureOffsetHours: trip.departureOffsetHours,
+      arrivalOffsetHours: trip.stops[0].arrivalOffsetHours,
+    })),
+    [
+      { tripNumber: 1, departureOffsetHours: 0, arrivalOffsetHours: 0 },
+      { tripNumber: 2, departureOffsetHours: 0, arrivalOffsetHours: 0 },
+      { tripNumber: 3, departureOffsetHours: 2, arrivalOffsetHours: 2 },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      scheduledArrivalOffsetHours: node.scheduledArrivalOffsetHours,
+      scheduledProjectedHoursAfterDispatch: node.scheduledProjectedHoursAfterDispatch,
+      scheduledRemainingStabilityGap: node.scheduledRemainingStabilityGap,
+      scheduledRemainingReserveGap: node.scheduledRemainingReserveGap,
+      usesTripCadence: node.usesTripCadence,
+    })),
+    [
+      {
+        name: 'North Gate',
+        scheduledArrivalOffsetHours: 0,
+        scheduledProjectedHoursAfterDispatch: 24,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 0,
+        usesTripCadence: true,
+      },
+      {
+        name: 'South Relay',
+        scheduledArrivalOffsetHours: 2,
+        scheduledProjectedHoursAfterDispatch: 10,
+        scheduledRemainingStabilityGap: 10,
+        scheduledRemainingReserveGap: 70,
+        usesTripCadence: true,
+      },
+      {
+        name: 'Refinery Spine',
+        scheduledArrivalOffsetHours: 0,
+        scheduledProjectedHoursAfterDispatch: 16,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 40,
         usesTripCadence: false,
       },
     ],
