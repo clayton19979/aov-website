@@ -12,8 +12,8 @@
         <p class="eyebrow">Architects of the Void</p>
         <h1>Network Node Fuel Calculator</h1>
         <p class="lede">
-          Paste node fuel snapshots, set a reserve window, and turn a limited fuel cache into an actionable dispatch brief.
-          Critical nodes are now stabilized to a 12-hour floor before the planner spends remaining fuel on the broader reserve target.
+          Paste node fuel snapshots, set an emergency floor and reserve window, and turn a limited fuel cache into an actionable dispatch brief.
+          Critical nodes are stabilized to your chosen floor before the planner spends remaining fuel on the broader reserve target.
         </p>
       </header>
 
@@ -23,6 +23,11 @@
             <h2>Fuel Snapshot</h2>
             <button type="button" class="ghost-button" data-fill-sample>Load Sample</button>
           </div>
+
+          <label class="field">
+            <span>Critical Floor (hours)</span>
+            <input data-stability-hours type="number" min="0" step="1" />
+          </label>
 
           <label class="field">
             <span>Reserve Window (hours)</span>
@@ -75,8 +80,8 @@
                   <th>Max</th>
                   <th>Burn / hr</th>
                   <th>Runtime</th>
-                  <th>To 12h</th>
-                  <th>12h Gap</th>
+                  <th data-floor-need-label>To Floor</th>
+                  <th data-floor-gap-label>Floor Gap</th>
                   <th>To Reserve</th>
                   <th>Cap Gap</th>
                   <th>Allocated</th>

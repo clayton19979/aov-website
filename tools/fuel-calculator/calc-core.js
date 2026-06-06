@@ -89,12 +89,18 @@ function compareDispatchPriority(left, right) {
   return right.fuelToReserve - left.fuelToReserve;
 }
 
-export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableFuel = Infinity) {
+export function planFuel(
+  nodes,
+  reserveHours = DEFAULT_RESERVE_HOURS,
+  availableFuel = Infinity,
+  stabilityHours = CRITICAL_STABILITY_HOURS,
+) {
   const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
   const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
+  const normalizedStabilityHours = Math.max(0, toFiniteNumber(stabilityHours) ?? CRITICAL_STABILITY_HOURS);
 
   const perNode = nodes.map((node) => {
-    const stabilityFuel = node.burnRatePerHour * CRITICAL_STABILITY_HOURS;
+    const stabilityFuel = node.burnRatePerHour * normalizedStabilityHours;
     const reserveFuel = node.burnRatePerHour * normalizedReserveHours;
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
@@ -109,7 +115,7 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
     const projectedShortfall = Math.max(0, reserveFuel - node.maxFuel);
     const status = node.burnRatePerHour === 0
       ? 'stable'
-      : hoursRemaining < CRITICAL_STABILITY_HOURS
+      : hoursRemaining < normalizedStabilityHours
         ? 'critical'
         : hoursRemaining < normalizedReserveHours
           ? 'warning'
@@ -117,7 +123,7 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
 
     return {
       ...node,
-      stabilityHours: CRITICAL_STABILITY_HOURS,
+      stabilityHours: normalizedStabilityHours,
       reserveHours: normalizedReserveHours,
       stabilityFuel: roundTo(stabilityFuel),
       reserveFuel: roundTo(reserveFuel),
@@ -256,7 +262,7 @@ export function planFuel(nodes, reserveHours = DEFAULT_RESERVE_HOURS, availableF
   );
 
   return {
-    stabilityHours: CRITICAL_STABILITY_HOURS,
+    stabilityHours: normalizedStabilityHours,
     reserveHours: normalizedReserveHours,
     availableFuel: Number.isFinite(normalizedAvailableFuel) ? normalizedAvailableFuel : null,
     perNode,

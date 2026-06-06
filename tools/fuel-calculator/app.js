@@ -17,6 +17,7 @@ const sampleRows = [
 
 const form = document.querySelector('[data-fuel-form]');
 const textarea = document.querySelector('[data-node-input]');
+const stabilityInput = document.querySelector('[data-stability-hours]');
 const reserveInput = document.querySelector('[data-reserve-hours]');
 const availableFuelInput = document.querySelector('[data-available-fuel]');
 const summary = document.querySelector('[data-summary]');
@@ -25,6 +26,8 @@ const tableBody = document.querySelector('[data-table-body]');
 const feedback = document.querySelector('[data-feedback]');
 const fillSampleButton = document.querySelector('[data-fill-sample]');
 const copyReportButton = document.querySelector('[data-copy-report]');
+const floorNeedHeader = document.querySelector('[data-floor-need-label]');
+const floorGapHeader = document.querySelector('[data-floor-gap-label]');
 
 function formatNumber(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value);
@@ -32,6 +35,10 @@ function formatNumber(value) {
 
 function formatFuelBudget(value) {
   return value === null ? 'Open' : formatNumber(value);
+}
+
+function formatHourLabel(value) {
+  return `${formatNumber(value)}h`;
 }
 
 function escapeHtml(value) {
@@ -43,11 +50,17 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function syncFloorLabels(stabilityHours) {
+  const floorLabel = formatHourLabel(stabilityHours);
+  floorNeedHeader.textContent = `To ${floorLabel}`;
+  floorGapHeader.textContent = `${floorLabel} Gap`;
+}
+
 function createSummaryMarkup(plan) {
   const cards = [
     ['Tracked Nodes', plan.perNode.length],
-    ['Critical Floor', `${plan.stabilityHours}h`],
-    ['Reserve Target', `${plan.reserveHours}h`],
+    ['Critical Floor', formatHourLabel(plan.stabilityHours)],
+    ['Reserve Target', formatHourLabel(plan.reserveHours)],
     ['Fuel On Hand', formatFuelBudget(plan.availableFuel)],
     ['Fuel To Stabilize', formatNumber(plan.totals.fuelToStability)],
     ['Fuel To Reserve', formatNumber(plan.totals.fuelToReserve)],
@@ -69,10 +82,12 @@ function getDispatchRecord(plan, nodeName) {
 }
 
 function createDispatchMarkup(plan) {
+  const floorLabel = formatHourLabel(plan.stabilityHours);
+
   return plan.dispatch.order.map((node) => {
     const allocationParts = [
       `Send ${formatNumber(node.allocatedFuel)}`,
-      node.allocatedForStability > 0 ? `${formatNumber(node.allocatedForStability)} to ${CRITICAL_STABILITY_HOURS}h floor` : null,
+      node.allocatedForStability > 0 ? `${formatNumber(node.allocatedForStability)} to ${floorLabel} floor` : null,
       node.allocatedForReserve > 0 ? `${formatNumber(node.allocatedForReserve)} to reserve` : null,
     ].filter(Boolean);
 
@@ -84,7 +99,7 @@ function createDispatchMarkup(plan) {
         </div>
         <div class="dispatch-metrics">
           <span>${escapeHtml(allocationParts.join(' | '))}</span>
-          <span>${node.remainingStabilityGap > 0 ? `12h gap ${escapeHtml(formatNumber(node.remainingStabilityGap))}` : `${CRITICAL_STABILITY_HOURS}h floor covered`}</span>
+          <span>${node.remainingStabilityGap > 0 ? `${escapeHtml(floorLabel)} gap ${escapeHtml(formatNumber(node.remainingStabilityGap))}` : `${escapeHtml(floorLabel)} floor covered`}</span>
           <span>${node.remainingReserveGap > 0 ? `Reserve gap ${escapeHtml(formatNumber(node.remainingReserveGap))}` : 'Reserve covered'}</span>
           ${node.capacityLimited ? `<span>Max capacity leaves ${escapeHtml(formatNumber(node.projectedShortfall))} reserve uncovered</span>` : ''}
         </div>
@@ -119,9 +134,10 @@ function createTableMarkup(plan) {
 }
 
 function createReport(plan) {
+  const floorLabel = formatHourLabel(plan.stabilityHours);
   const header = [
-    `Critical floor: ${plan.stabilityHours}h`,
-    `Reserve target: ${plan.reserveHours}h`,
+    `Critical floor: ${floorLabel}`,
+    `Reserve target: ${formatHourLabel(plan.reserveHours)}`,
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
     `Fuel needed to stabilize critical nodes: ${formatNumber(plan.totals.fuelToStability)}`,
     `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
@@ -136,7 +152,7 @@ function createReport(plan) {
     `remaining ${formatHours(node.hoursRemaining)}`,
     `after ${formatHours(node.projectedHoursAfterDispatch)}`,
     `send ${formatNumber(node.allocatedFuel)}`,
-    `12h ${node.remainingStabilityGap > 0 ? `gap ${formatNumber(node.remainingStabilityGap)}` : 'covered'}`,
+    `${floorLabel} ${node.remainingStabilityGap > 0 ? `gap ${formatNumber(node.remainingStabilityGap)}` : 'covered'}`,
     node.capacityLimited ? `reserve cap gap ${formatNumber(node.projectedShortfall)}` : 'reserve cap ok',
     node.remainingReserveGap > 0 ? `reserve gap ${formatNumber(node.remainingReserveGap)}` : 'reserve covered',
   ].join(' | '));
@@ -150,6 +166,7 @@ function setFeedback(message, tone = 'info') {
 }
 
 function renderPlan(plan) {
+  syncFloorLabels(plan.stabilityHours);
   summary.innerHTML = createSummaryMarkup(plan);
   dispatchList.innerHTML = createDispatchMarkup(plan);
   tableBody.innerHTML = createTableMarkup(plan);
@@ -158,9 +175,9 @@ function renderPlan(plan) {
 
   if (plan.dispatch.uncoveredStability > 0) {
     const reason = plan.counts.stabilityCapacityLimited > 0
-      ? `${plan.counts.stabilityCapacityLimited} node(s) cannot physically hold ${plan.stabilityHours} hours of fuel.`
+      ? `${plan.counts.stabilityCapacityLimited} node(s) cannot physically hold ${formatHourLabel(plan.stabilityHours)} of fuel.`
       : 'Available dispatch fuel is below the immediate stabilization requirement.';
-    setFeedback(`Critical coverage is short ${formatNumber(plan.dispatch.uncoveredStability)} fuel against the ${plan.stabilityHours}h floor. ${reason}`, 'critical');
+    setFeedback(`Critical coverage is short ${formatNumber(plan.dispatch.uncoveredStability)} fuel against the ${formatHourLabel(plan.stabilityHours)} floor. ${reason}`, 'critical');
   } else if (plan.dispatch.uncoveredReserve > 0) {
     const reason = plan.counts.capacityLimited > 0
       ? `${plan.counts.capacityLimited} node(s) cannot physically hold the full reserve target.`
@@ -178,11 +195,12 @@ function renderPlan(plan) {
 function updatePlan() {
   try {
     const nodes = parseNodeRows(textarea.value);
+    const stabilityHours = Number(stabilityInput.value || CRITICAL_STABILITY_HOURS);
     const reserveHours = Number(reserveInput.value || DEFAULT_RESERVE_HOURS);
     const availableFuel = availableFuelInput.value.trim() === ''
       ? Infinity
       : Number(availableFuelInput.value);
-    const plan = planFuel(nodes, reserveHours, availableFuel);
+    const plan = planFuel(nodes, reserveHours, availableFuel, stabilityHours);
     renderPlan(plan);
   } catch (error) {
     summary.innerHTML = '';
@@ -196,6 +214,7 @@ function updatePlan() {
 
 fillSampleButton.addEventListener('click', () => {
   textarea.value = sampleRows;
+  stabilityInput.value = String(CRITICAL_STABILITY_HOURS);
   reserveInput.value = String(DEFAULT_RESERVE_HOURS);
   availableFuelInput.value = '220';
   updatePlan();
@@ -221,6 +240,7 @@ form.addEventListener('submit', (event) => {
 });
 
 textarea.value = sampleRows;
+stabilityInput.value = String(CRITICAL_STABILITY_HOURS);
 reserveInput.value = String(DEFAULT_RESERVE_HOURS);
 availableFuelInput.value = '220';
 updatePlan();

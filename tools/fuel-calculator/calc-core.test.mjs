@@ -76,6 +76,31 @@ test('planFuel computes reserve, refill, and alert status', () => {
   );
 });
 
+test('planFuel accepts a custom stability floor', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 70, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 70, maxFuel: 240, burnRatePerHour: 5 },
+  ], 24, Infinity, 8);
+
+  assert.equal(plan.stabilityHours, 8);
+  assert.equal(plan.counts.critical, 1);
+  assert.equal(plan.counts.warning, 1);
+  assert.equal(plan.totals.fuelToStability, 10);
+  assert.equal(plan.dispatch.allocatedForStability, 10);
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      status: node.status,
+      fuelToStability: node.fuelToStability,
+      projectedHoursAfterDispatch: node.projectedHoursAfterDispatch,
+    })),
+    [
+      { name: 'North Gate', status: 'critical', fuelToStability: 10, projectedHoursAfterDispatch: 24 },
+      { name: 'South Relay', status: 'warning', fuelToStability: 0, projectedHoursAfterDispatch: 24 },
+    ],
+  );
+});
+
 test('planFuel stabilizes all critical nodes before spending fuel on reserve fill', () => {
   const plan = planFuel([
     { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
