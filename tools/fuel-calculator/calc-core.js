@@ -8,6 +8,8 @@ const HEADER_ALIASES = {
   burnPerHour: ['burnperhour', 'burnrate', 'burnrateperhour', 'usageperhour', 'consumptionperhour'],
   deliveryDelayHours: ['deliverydelayhours', 'delayhours', 'deliverydelay', 'travelhours', 'transithours'],
   priority: ['priority', 'dispatchpriority', 'rank', 'importance'],
+  stabilityHours: ['stabilityhours', 'criticalfloorhours', 'criticalhours', 'floorhours', 'stabilityfloorhours'],
+  reserveHours: ['reservehours', 'reservewindowhours', 'targetreservehours', 'coveragehours'],
 };
 
 function parseDelimitedLine(line) {
@@ -74,6 +76,16 @@ function getHeaderColumnIndexes(parts) {
     indexes.priority = priorityIndex;
   }
 
+  const stabilityHoursIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.stabilityHours.includes(part));
+  if (stabilityHoursIndex !== -1) {
+    indexes.stabilityHours = stabilityHoursIndex;
+  }
+
+  const reserveHoursIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.reserveHours.includes(part));
+  if (reserveHoursIndex !== -1) {
+    indexes.reserveHours = reserveHoursIndex;
+  }
+
   return indexes;
 }
 
@@ -122,6 +134,12 @@ export function parseNodeRows(input) {
     const priorityRaw = headerColumnIndexes
       ? (headerColumnIndexes.priority !== undefined ? parts[headerColumnIndexes.priority] : '')
       : (parts[5] ?? '');
+    const stabilityHoursRaw = headerColumnIndexes
+      ? (headerColumnIndexes.stabilityHours !== undefined ? parts[headerColumnIndexes.stabilityHours] : '')
+      : (parts[6] ?? '');
+    const reserveHoursRaw = headerColumnIndexes
+      ? (headerColumnIndexes.reserveHours !== undefined ? parts[headerColumnIndexes.reserveHours] : '')
+      : (parts[7] ?? '');
     const currentFuel = toFiniteNumber(currentFuelRaw);
     const maxFuel = toFiniteNumber(maxFuelRaw);
     const burnRatePerHour = toFiniteNumber(burnRateRaw);
@@ -133,6 +151,14 @@ export function parseNodeRows(input) {
       ? priorityRaw.trim() !== ''
       : priorityRaw !== undefined && priorityRaw !== null;
     const priority = hasPriorityValue ? toFiniteNumber(priorityRaw) : null;
+    const hasStabilityHoursValue = typeof stabilityHoursRaw === 'string'
+      ? stabilityHoursRaw.trim() !== ''
+      : stabilityHoursRaw !== undefined && stabilityHoursRaw !== null;
+    const stabilityHours = hasStabilityHoursValue ? toFiniteNumber(stabilityHoursRaw) : null;
+    const hasReserveHoursValue = typeof reserveHoursRaw === 'string'
+      ? reserveHoursRaw.trim() !== ''
+      : reserveHoursRaw !== undefined && reserveHoursRaw !== null;
+    const reserveHours = hasReserveHoursValue ? toFiniteNumber(reserveHoursRaw) : null;
 
     if (!name) {
       throw new Error(`Row ${index + 1} is missing a node name`);
@@ -157,6 +183,12 @@ export function parseNodeRows(input) {
     if (hasPriorityValue && (priority === null || priority < 0)) {
       throw new Error(`Row ${index + 1} has an invalid priority value`);
     }
+    if (hasStabilityHoursValue && (stabilityHours === null || stabilityHours < 0)) {
+      throw new Error(`Row ${index + 1} has an invalid stability-hours value`);
+    }
+    if (hasReserveHoursValue && (reserveHours === null || reserveHours < 0)) {
+      throw new Error(`Row ${index + 1} has an invalid reserve-hours value`);
+    }
     if (currentFuel > maxFuel) {
       throw new Error(`Row ${index + 1} current fuel cannot exceed max fuel`);
     }
@@ -170,6 +202,8 @@ export function parseNodeRows(input) {
       burnRatePerHour,
       ...(deliveryDelayHours !== null ? { deliveryDelayHours } : {}),
       ...(priority !== null ? { priority } : {}),
+      ...(stabilityHours !== null ? { stabilityHours } : {}),
+      ...(reserveHours !== null ? { reserveHours } : {}),
     }];
   });
 }
@@ -279,6 +313,14 @@ export function planFuel(
       toFiniteNumber(node.deliveryDelayHours) ?? normalizedDeliveryDelayHours,
     );
     const nodePriority = Math.max(0, toFiniteNumber(node.priority) ?? 0);
+    const nodeStabilityHours = Math.max(
+      0,
+      toFiniteNumber(node.stabilityHours) ?? normalizedStabilityHours,
+    );
+    const nodeReserveHours = Math.max(
+      0,
+      toFiniteNumber(node.reserveHours) ?? normalizedReserveHours,
+    );
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
       : node.currentFuel / node.burnRatePerHour;
@@ -290,8 +332,8 @@ export function planFuel(
     const hoursAtArrival = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
       : Math.max(0, hoursRemaining - nodeDeliveryDelayHours);
-    const stabilityFuel = node.burnRatePerHour * normalizedStabilityHours;
-    const reserveFuel = node.burnRatePerHour * normalizedReserveHours;
+    const stabilityFuel = node.burnRatePerHour * nodeStabilityHours;
+    const reserveFuel = node.burnRatePerHour * nodeReserveHours;
     const reachableStabilityFuel = Math.min(node.maxFuel, stabilityFuel);
     const reachableReserveFuel = Math.min(node.maxFuel, reserveFuel);
     const fuelToStability = Math.max(0, reachableStabilityFuel - fuelAtArrival);
@@ -303,17 +345,19 @@ export function planFuel(
     const runsDryBeforeArrival = node.burnRatePerHour > 0 && hoursRemaining < nodeDeliveryDelayHours;
     const status = node.burnRatePerHour === 0
       ? 'stable'
-      : hoursAtArrival < normalizedStabilityHours
+      : hoursAtArrival < nodeStabilityHours
         ? 'critical'
-        : hoursAtArrival < normalizedReserveHours
+        : hoursAtArrival < nodeReserveHours
           ? 'warning'
           : 'stable';
 
     return {
       ...node,
-      stabilityHours: normalizedStabilityHours,
-      reserveHours: normalizedReserveHours,
+      stabilityHours: roundTo(nodeStabilityHours),
+      reserveHours: roundTo(nodeReserveHours),
       deliveryDelayHours: roundTo(nodeDeliveryDelayHours),
+      usesCustomStabilityHours: roundTo(nodeStabilityHours) !== normalizedStabilityHours,
+      usesCustomReserveHours: roundTo(nodeReserveHours) !== normalizedReserveHours,
       usesCustomDeliveryDelay: roundTo(nodeDeliveryDelayHours) !== normalizedDeliveryDelayHours,
       priority: roundTo(nodePriority),
       usesCustomPriority: nodePriority > 0,
@@ -384,7 +428,11 @@ export function planFuel(
       return {
         name: node.name,
         status: node.status,
+        stabilityHours: node.stabilityHours,
+        reserveHours: node.reserveHours,
         deliveryDelayHours: node.deliveryDelayHours,
+        usesCustomStabilityHours: node.usesCustomStabilityHours,
+        usesCustomReserveHours: node.usesCustomReserveHours,
         usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
         priority: node.priority,
         usesCustomPriority: node.usesCustomPriority,
@@ -463,6 +511,12 @@ export function planFuel(
       if (node.usesCustomPriority) {
         accumulator.customPriority += 1;
       }
+      if (node.usesCustomStabilityHours) {
+        accumulator.customStabilityHours += 1;
+      }
+      if (node.usesCustomReserveHours) {
+        accumulator.customReserveHours += 1;
+      }
       return accumulator;
     },
     {
@@ -474,6 +528,8 @@ export function planFuel(
       stabilityCapacityLimited: 0,
       customDeliveryDelay: 0,
       customPriority: 0,
+      customStabilityHours: 0,
+      customReserveHours: 0,
     },
   );
 

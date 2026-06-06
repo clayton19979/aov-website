@@ -768,3 +768,125 @@ test('planFuel uses per-node priority to break ties inside the same alert band',
     ],
   );
 });
+
+test('parseNodeRows accepts optional stability and reserve hour columns in headers and trailing positional fields', () => {
+  const rows = parseNodeRows([
+    'node,current fuel,max fuel,burn rate,travel hours,rank,critical floor hours,reserve window hours',
+    'North Gate,120,400,10,2.5,3,12,30',
+    'South Relay,60,240,5,,0,,18',
+    'Refinery Spine,110,500,8,4,1.5,16,36',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 2.5, priority: 3, stabilityHours: 12, reserveHours: 30 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5, priority: 0, reserveHours: 18 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, deliveryDelayHours: 4, priority: 1.5, stabilityHours: 16, reserveHours: 36 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows('Forward Tower,90,300,6,1.5,2,10,24'),
+    [{ name: 'Forward Tower', currentFuel: 90, maxFuel: 300, burnRatePerHour: 6, deliveryDelayHours: 1.5, priority: 2, stabilityHours: 10, reserveHours: 24 }],
+  );
+});
+
+test('parseNodeRows rejects invalid stability and reserve overrides', () => {
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1.5,2,-1,24'),
+    /Row 1 has an invalid stability-hours value/,
+  );
+
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1.5,2,10,-1'),
+    /Row 1 has an invalid reserve-hours value/,
+  );
+});
+
+test('planFuel applies per-node stability and reserve windows ahead of global defaults', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 90, maxFuel: 400, burnRatePerHour: 10, stabilityHours: 8, reserveHours: 30 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5, reserveHours: 18 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, stabilityHours: 16 },
+  ], 24, 240, 12, 0);
+
+  assert.equal(plan.counts.customStabilityHours, 2);
+  assert.equal(plan.counts.customReserveHours, 2);
+  assert.equal(plan.totals.fuelToStability, 18);
+  assert.equal(plan.totals.fuelToReserve, 322);
+  assert.deepEqual(
+    plan.perNode.map((node) => ({
+      name: node.name,
+      stabilityHours: node.stabilityHours,
+      reserveHours: node.reserveHours,
+      usesCustomStabilityHours: node.usesCustomStabilityHours,
+      usesCustomReserveHours: node.usesCustomReserveHours,
+      status: node.status,
+      fuelToStability: node.fuelToStability,
+      fuelToReserve: node.fuelToReserve,
+    })),
+    [
+      {
+        name: 'North Gate',
+        stabilityHours: 8,
+        reserveHours: 30,
+        usesCustomStabilityHours: true,
+        usesCustomReserveHours: true,
+        status: 'warning',
+        fuelToStability: 0,
+        fuelToReserve: 210,
+      },
+      {
+        name: 'South Relay',
+        stabilityHours: 12,
+        reserveHours: 18,
+        usesCustomStabilityHours: false,
+        usesCustomReserveHours: true,
+        status: 'warning',
+        fuelToStability: 0,
+        fuelToReserve: 30,
+      },
+      {
+        name: 'Refinery Spine',
+        stabilityHours: 16,
+        reserveHours: 24,
+        usesCustomStabilityHours: true,
+        usesCustomReserveHours: false,
+        status: 'critical',
+        fuelToStability: 18,
+        fuelToReserve: 82,
+      },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      stabilityHours: node.stabilityHours,
+      reserveHours: node.reserveHours,
+      allocatedFuel: node.allocatedFuel,
+      remainingReserveGap: node.remainingReserveGap,
+    })),
+    [
+      {
+        name: 'Refinery Spine',
+        stabilityHours: 16,
+        reserveHours: 24,
+        allocatedFuel: 82,
+        remainingReserveGap: 0,
+      },
+      {
+        name: 'North Gate',
+        stabilityHours: 8,
+        reserveHours: 30,
+        allocatedFuel: 158,
+        remainingReserveGap: 52,
+      },
+      {
+        name: 'South Relay',
+        stabilityHours: 12,
+        reserveHours: 18,
+        allocatedFuel: 0,
+        remainingReserveGap: 30,
+      },
+    ],
+  );
+});
+

@@ -8,12 +8,12 @@ import {
 } from './calc-core.js';
 
 const sampleRows = [
-  'name\tcurrentFuel\tmaxFuel\tburnPerHour\tdeliveryDelayHours\tpriority',
+  'name\tcurrentFuel\tmaxFuel\tburnPerHour\tdeliveryDelayHours\tpriority\tstabilityHours\treserveHours',
   '# Pasted logistics snapshot',
-  'North Gate\t90\t400\t10\t2\t2',
-  'South Relay\t160\t240\t5\t4\t0',
-  'Refinery Spine\t110\t500\t8\t\t4',
-  'Dormant Backup\t50\t100\t0\t0\t0',
+  'North Gate\t90\t400\t10\t2\t2\t12\t30',
+  'South Relay\t160\t240\t5\t4\t0\t\t18',
+  'Refinery Spine\t110\t500\t8\t\t4\t16\t36',
+  'Dormant Backup\t50\t100\t0\t0\t0\t0\t0',
 ].join('\n');
 
 const form = document.querySelector('[data-fuel-form]');
@@ -82,10 +82,36 @@ function getPriorityCoverageLabel(plan) {
   return `${plan.counts.customPriority} override${plan.counts.customPriority === 1 ? '' : 's'}`;
 }
 
+function getStabilityCoverageLabel(plan) {
+  if (plan.counts.customStabilityHours === 0) {
+    return formatHourLabel(plan.stabilityHours);
+  }
+  return `${formatHourLabel(plan.stabilityHours)} default + ${plan.counts.customStabilityHours} override${plan.counts.customStabilityHours === 1 ? '' : 's'}`;
+}
+
+function getReserveCoverageLabel(plan) {
+  if (plan.counts.customReserveHours === 0) {
+    return formatHourLabel(plan.reserveHours);
+  }
+  return `${formatHourLabel(plan.reserveHours)} default + ${plan.counts.customReserveHours} override${plan.counts.customReserveHours === 1 ? '' : 's'}`;
+}
+
 function describeDelayContext(plan) {
   return plan.counts.customDeliveryDelay > 0
     ? 'current delivery timings'
     : `current ${formatHourLabel(plan.deliveryDelayHours)} delay`;
+}
+
+function describeStabilityContext(plan) {
+  return plan.counts.customStabilityHours > 0
+    ? 'node-specific stability floors'
+    : `${formatHourLabel(plan.stabilityHours)} floor`;
+}
+
+function describeReserveContext(plan) {
+  return plan.counts.customReserveHours > 0
+    ? 'node-specific reserve targets'
+    : `${formatHourLabel(plan.reserveHours)} reserve target`;
 }
 
 function getTripSummaryLabel(plan) {
@@ -101,8 +127,8 @@ function createSummaryMarkup(plan) {
     ['Tracked Nodes', plan.perNode.length],
     ['Delivery Timing', getDelayCoverageLabel(plan)],
     ['Priority Overrides', getPriorityCoverageLabel(plan)],
-    ['Critical Floor', formatHourLabel(plan.stabilityHours)],
-    ['Reserve Target', formatHourLabel(plan.reserveHours)],
+    ['Critical Floors', getStabilityCoverageLabel(plan)],
+    ['Reserve Windows', getReserveCoverageLabel(plan)],
     ['Fuel On Hand', formatFuelBudget(plan.availableFuel)],
     ['Trip Manifests', getTripSummaryLabel(plan)],
     ['Fuel Burned Before Arrival', formatNumber(plan.totals.fuelConsumedBeforeArrival)],
@@ -124,13 +150,15 @@ function getDispatchRecord(plan, nodeName) {
   return plan.dispatch.order.find((entry) => entry.name === nodeName);
 }
 
-function createDispatchMarkup(plan) {
-  const floorLabel = formatHourLabel(plan.stabilityHours);
+function formatCoveragePair(node) {
+  return `${formatHourLabel(node.stabilityHours)} floor | ${formatHourLabel(node.reserveHours)} reserve`;
+}
 
+function createDispatchMarkup(plan) {
   return plan.dispatch.order.map((node) => {
     const allocationParts = [
       `Send ${formatNumber(node.allocatedFuel)}`,
-      node.allocatedForStability > 0 ? `${formatNumber(node.allocatedForStability)} to ${floorLabel} floor` : null,
+      node.allocatedForStability > 0 ? `${formatNumber(node.allocatedForStability)} to ${formatHourLabel(node.stabilityHours)} floor` : null,
       node.allocatedForReserve > 0 ? `${formatNumber(node.allocatedForReserve)} to reserve` : null,
     ].filter(Boolean);
     const delayLabel = node.usesCustomDeliveryDelay
@@ -139,19 +167,23 @@ function createDispatchMarkup(plan) {
     const priorityLabel = node.usesCustomPriority
       ? `${formatPriority(node.priority)} override`
       : `${formatPriority(node.priority)} queue`;
+    const coverageLabel = (node.usesCustomStabilityHours || node.usesCustomReserveHours)
+      ? `${formatCoveragePair(node)} override`
+      : `${formatCoveragePair(node)} default`;
 
     return `
       <li class="dispatch-item tone-${node.status}">
         <div>
           <strong>${escapeHtml(node.name)}</strong>
-          <span>${escapeHtml(node.status.toUpperCase())} | ${escapeHtml(priorityLabel)} | ${escapeHtml(delayLabel)} | ${escapeHtml(formatHours(node.hoursRemaining))} now | ${escapeHtml(formatHours(node.hoursAtArrival))} at arrival | ${escapeHtml(formatHours(node.projectedHoursAfterDispatch))} after dispatch</span>
+          <span>${escapeHtml(node.status.toUpperCase())} | ${escapeHtml(priorityLabel)} | ${escapeHtml(delayLabel)} | ${escapeHtml(coverageLabel)} | ${escapeHtml(formatHours(node.hoursRemaining))} now | ${escapeHtml(formatHours(node.hoursAtArrival))} at arrival | ${escapeHtml(formatHours(node.projectedHoursAfterDispatch))} after dispatch</span>
         </div>
         <div class="dispatch-metrics">
           <span>${escapeHtml(allocationParts.join(' | '))}</span>
           <span>${node.runsDryBeforeArrival ? 'Runs dry before arrival' : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before arrival`}</span>
-          <span>${node.remainingStabilityGap > 0 ? `${escapeHtml(floorLabel)} gap ${escapeHtml(formatNumber(node.remainingStabilityGap))}` : `${escapeHtml(floorLabel)} floor covered`}</span>
+          <span>${node.remainingStabilityGap > 0 ? `${escapeHtml(formatHourLabel(node.stabilityHours))} gap ${escapeHtml(formatNumber(node.remainingStabilityGap))}` : `${escapeHtml(formatHourLabel(node.stabilityHours))} floor covered`}</span>
           <span>${node.remainingReserveGap > 0 ? `Reserve gap ${escapeHtml(formatNumber(node.remainingReserveGap))}` : 'Reserve covered'}</span>
           ${node.capacityLimited ? `<span>Max capacity leaves ${escapeHtml(formatNumber(node.projectedShortfall))} reserve uncovered</span>` : ''}
+
         </div>
       </li>
     `;
@@ -165,6 +197,7 @@ function createTripMarkup(plan) {
 
   return plan.dispatch.trips.map((trip) => {
     const stopMarkup = trip.stops.map((stop) => {
+      const stopNode = getDispatchRecord(plan, stop.name);
       const stopParts = [
         `${formatNumber(stop.fuel)} fuel`,
         stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
@@ -174,7 +207,7 @@ function createTripMarkup(plan) {
       return `
         <li>
           <strong>${escapeHtml(stop.name)}</strong>
-          <span>${escapeHtml(stop.status.toUpperCase())}</span>
+          <span>${escapeHtml(stop.status.toUpperCase())}${stopNode ? ` | ${escapeHtml(formatCoveragePair(stopNode))}` : ''}</span>
           <small>${escapeHtml(stopParts.join(' | '))}</small>
         </li>
       `;
@@ -207,6 +240,7 @@ function createTableMarkup(plan) {
         <td>${escapeHtml(formatNumber(node.burnRatePerHour))}</td>
         <td>${escapeHtml(formatPriority(node.priority))}</td>
         <td>${escapeHtml(formatHourLabel(node.deliveryDelayHours))}</td>
+        <td>${escapeHtml(formatHourLabel(node.stabilityHours))} / ${escapeHtml(formatHourLabel(node.reserveHours))}</td>
         <td>${escapeHtml(formatHours(node.hoursRemaining))}</td>
         <td>${escapeHtml(formatHours(node.hoursAtArrival))}</td>
         <td>${escapeHtml(formatNumber(node.fuelToStability))}</td>
@@ -222,17 +256,16 @@ function createTableMarkup(plan) {
 }
 
 function createReport(plan) {
-  const floorLabel = formatHourLabel(plan.stabilityHours);
   const header = [
     `Delivery timing: ${getDelayCoverageLabel(plan)}`,
     `Priority overrides: ${getPriorityCoverageLabel(plan)}`,
-    `Critical floor: ${floorLabel}`,
-    `Reserve target: ${formatHourLabel(plan.reserveHours)}`,
+    `Critical floors: ${getStabilityCoverageLabel(plan)}`,
+    `Reserve windows: ${getReserveCoverageLabel(plan)}`,
     `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
     `Trip capacity: ${formatTripCapacity(plan.dispatch.tripCapacity)}`,
     `Trip count: ${plan.dispatch.tripCount === null ? 'Not batched' : plan.dispatch.tripCount}`,
     `Fuel burned before arrival: ${formatNumber(plan.totals.fuelConsumedBeforeArrival)}`,
-    `Fuel needed to stabilize critical nodes: ${formatNumber(plan.totals.fuelToStability)}`,
+    `Fuel needed to stabilize: ${formatNumber(plan.totals.fuelToStability)}`,
     `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
     `Uncovered critical gap: ${formatNumber(plan.dispatch.uncoveredStability)}`,
     `Uncovered reserve gap: ${formatNumber(plan.dispatch.uncoveredReserve)}`,
@@ -245,11 +278,12 @@ function createReport(plan) {
     node.status.toUpperCase(),
     `priority ${formatPriority(node.priority)}`,
     `delay ${formatHourLabel(node.deliveryDelayHours)}`,
+    `coverage ${formatHourLabel(node.stabilityHours)} floor / ${formatHourLabel(node.reserveHours)} reserve`,
     `remaining ${formatHours(node.hoursRemaining)}`,
     `arrival ${formatHours(node.hoursAtArrival)}`,
     `after ${formatHours(node.projectedHoursAfterDispatch)}`,
     `send ${formatNumber(node.allocatedFuel)}`,
-    `${floorLabel} ${node.remainingStabilityGap > 0 ? `gap ${formatNumber(node.remainingStabilityGap)}` : 'covered'}`,
+    `${formatHourLabel(node.stabilityHours)} ${node.remainingStabilityGap > 0 ? `gap ${formatNumber(node.remainingStabilityGap)}` : 'covered'}`,
     node.runsDryBeforeArrival ? 'offline before arrival' : `burns ${formatNumber(node.fuelConsumedBeforeArrival)} before arrival`,
     node.capacityLimited ? `reserve cap gap ${formatNumber(node.projectedShortfall)}` : 'reserve cap ok',
     node.remainingReserveGap > 0 ? `reserve gap ${formatNumber(node.remainingReserveGap)}` : 'reserve covered',
@@ -260,8 +294,10 @@ function createReport(plan) {
     : plan.dispatch.trips.map((trip) => {
       const stops = trip.stops
         .map((stop) => {
+          const stopNode = getDispatchRecord(plan, stop.name);
           const parts = [
             `${stop.name} ${formatNumber(stop.fuel)}`,
+            stopNode ? `${formatHourLabel(stopNode.stabilityHours)} floor / ${formatHourLabel(stopNode.reserveHours)} reserve` : null,
             stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
             stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
           ].filter(Boolean);
@@ -292,20 +328,20 @@ function renderPlan(plan) {
     setFeedback(`${plan.counts.arrivalRisk} node(s) run dry before fuel arrives with the ${describeDelayContext(plan)}. Dispatch can recover them after arrival but cannot prevent that outage.`, 'critical');
   } else if (plan.dispatch.uncoveredStability > 0) {
     const reason = plan.counts.stabilityCapacityLimited > 0
-      ? `${plan.counts.stabilityCapacityLimited} node(s) cannot physically hold ${formatHourLabel(plan.stabilityHours)} of fuel.`
-      : 'Available dispatch fuel is below the immediate stabilization requirement at arrival.';
-    setFeedback(`Critical coverage is short ${formatNumber(plan.dispatch.uncoveredStability)} fuel against the ${formatHourLabel(plan.stabilityHours)} floor. ${reason}`, 'critical');
+      ? `${plan.counts.stabilityCapacityLimited} node(s) cannot physically hold enough fuel for the ${describeStabilityContext(plan)}.`
+      : `Available dispatch fuel is below the immediate ${describeStabilityContext(plan)} requirement at arrival.`;
+    setFeedback(`Critical coverage is short ${formatNumber(plan.dispatch.uncoveredStability)} fuel against the ${describeStabilityContext(plan)}. ${reason}`, 'critical');
   } else if (plan.dispatch.uncoveredReserve > 0) {
     const reason = plan.counts.capacityLimited > 0
-      ? `${plan.counts.capacityLimited} node(s) cannot physically hold the full reserve target.`
-      : 'Available dispatch fuel is below the reserve requirement at arrival.';
-    setFeedback(`Critical nodes are stabilized, but dispatch is still short ${formatNumber(plan.dispatch.uncoveredReserve)} fuel for the full reserve target. ${reason}`, 'warning');
+      ? `${plan.counts.capacityLimited} node(s) cannot physically hold the full ${describeReserveContext(plan)}.`
+      : `Available dispatch fuel is below the ${describeReserveContext(plan)} requirement at arrival.`;
+    setFeedback(`Critical nodes are stabilized, but dispatch is still short ${formatNumber(plan.dispatch.uncoveredReserve)} fuel for the ${describeReserveContext(plan)}. ${reason}`, 'warning');
   } else if (plan.counts.critical > 0) {
     setFeedback(`${plan.counts.critical} node(s) will be critical by arrival but can be stabilized with this dispatch order.`, 'warning');
   } else if (plan.counts.warning > 0) {
-    setFeedback(`${plan.counts.warning} node(s) fall below the reserve window by arrival.`, 'warning');
+    setFeedback(`${plan.counts.warning} node(s) fall below their reserve window by arrival.`, 'warning');
   } else {
-    setFeedback('All tracked nodes meet the reserve window after delivery timing is applied.', 'stable');
+    setFeedback('All tracked nodes meet their reserve window after delivery timing is applied.', 'stable');
   }
 }
 
@@ -370,3 +406,5 @@ deliveryDelayInput.value = '3';
 availableFuelInput.value = '220';
 tripCapacityInput.value = '90';
 updatePlan();
+
+
