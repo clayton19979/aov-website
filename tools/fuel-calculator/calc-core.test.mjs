@@ -1355,3 +1355,95 @@ test('planFuel applies per-node stability and reserve windows ahead of global de
   );
 });
 
+
+test('planFuel totals base outage hours for nodes that run dry before arrival', () => {
+  const plan = planFuel([
+    { name: 'Forward Tower', currentFuel: 10, maxFuel: 120, burnRatePerHour: 5 },
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10 },
+  ], 24, 150, 12, 3);
+
+  assert.equal(plan.counts.arrivalRisk, 1);
+  assert.equal(plan.totals.outageHoursBeforeArrival, 1);
+  assert.equal(plan.totals.scheduledOutageHours, 1);
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      outageHoursBeforeArrival: node.outageHoursBeforeArrival,
+      scheduledOutageHours: node.scheduledOutageHours,
+    })),
+    [
+      { name: 'Forward Tower', outageHoursBeforeArrival: 1, scheduledOutageHours: 1 },
+      { name: 'North Gate', outageHoursBeforeArrival: 0, scheduledOutageHours: 0 },
+    ],
+  );
+});
+
+test('planFuel tracks convoy-added outage hours when later manifests land after burnout', () => {
+  const plan = planFuel([
+    { name: 'Forward Tower', currentFuel: 12, maxFuel: 200, burnRatePerHour: 2 },
+  ], 24, 40, 12, 1, 20, 16, 1);
+
+  assert.equal(plan.counts.arrivalRisk, 0);
+  assert.equal(plan.totals.outageHoursBeforeArrival, 0);
+  assert.equal(plan.totals.scheduledOutageHours, 1);
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 1,
+    additionalArrivalRisk: 1,
+    degradedStability: 1,
+    degradedReserve: 1,
+  });
+  assert.deepEqual(
+    plan.dispatch.trips.map((trip) => ({
+      tripNumber: trip.tripNumber,
+      departureOffsetHours: trip.departureOffsetHours,
+      stops: trip.stops.map((stop) => ({
+        fuel: stop.fuel,
+        arrivalOffsetHours: stop.arrivalOffsetHours,
+        outageHoursBeforeArrival: stop.outageHoursBeforeArrival,
+        runsDryBeforeArrival: stop.runsDryBeforeArrival,
+      })),
+    })),
+    [
+      {
+        tripNumber: 1,
+        departureOffsetHours: 0,
+        stops: [
+          {
+            fuel: 20,
+            arrivalOffsetHours: 1,
+            outageHoursBeforeArrival: 0,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 2,
+        departureOffsetHours: 16,
+        stops: [
+          {
+            fuel: 18,
+            arrivalOffsetHours: 17,
+            outageHoursBeforeArrival: 1,
+            runsDryBeforeArrival: true,
+          },
+        ],
+      },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      outageHoursBeforeArrival: node.outageHoursBeforeArrival,
+      scheduledOutageHours: node.scheduledOutageHours,
+      scheduledRunsDryBeforeArrival: node.scheduledRunsDryBeforeArrival,
+    })),
+    [
+      {
+        name: 'Forward Tower',
+        outageHoursBeforeArrival: 0,
+        scheduledOutageHours: 1,
+        scheduledRunsDryBeforeArrival: true,
+      },
+    ],
+  );
+});

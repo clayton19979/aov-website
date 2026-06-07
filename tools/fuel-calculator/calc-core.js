@@ -326,6 +326,9 @@ function projectNodeArrival(node, state, arrivalOffsetHours) {
   const fuelBeforeArrival = roundTo(Math.max(0, state.fuel - burnSinceLastStop));
   const runsDryBeforeArrival = node.burnRatePerHour > 0
     && state.fuel / node.burnRatePerHour < elapsedHours;
+  const outageHoursBeforeArrival = runsDryBeforeArrival
+    ? roundTo(Math.max(0, elapsedHours - (state.fuel / node.burnRatePerHour)))
+    : 0;
   const projectedHoursBeforeDelivery = node.burnRatePerHour === 0
     ? Number.POSITIVE_INFINITY
     : roundTo(fuelBeforeArrival / node.burnRatePerHour);
@@ -333,6 +336,7 @@ function projectNodeArrival(node, state, arrivalOffsetHours) {
   return {
     fuelBeforeArrival,
     runsDryBeforeArrival,
+    outageHoursBeforeArrival,
     projectedHoursBeforeDelivery,
   };
 }
@@ -353,6 +357,7 @@ function applyScheduledStop(node, state, arrivalOffsetHours, fuel) {
   state.remainingReserveGap = remainingReserveGap;
   state.scheduledArrivalOffsetHours = arrivalOffsetHours;
   state.scheduledRunsDryBeforeArrival = state.scheduledRunsDryBeforeArrival || projection.runsDryBeforeArrival;
+  state.totalOutageHours = roundTo((state.totalOutageHours ?? 0) + projection.outageHoursBeforeArrival);
   state.allocatedStops += 1;
 
   return {
@@ -363,6 +368,7 @@ function applyScheduledStop(node, state, arrivalOffsetHours, fuel) {
     remainingStabilityGap,
     remainingReserveGap,
     runsDryBeforeArrival: projection.runsDryBeforeArrival,
+    outageHoursBeforeArrival: projection.outageHoursBeforeArrival,
   };
 }
 
@@ -560,6 +566,7 @@ function applyTripSchedule(
       remainingReserveGap: node.remainingReserveGap,
       scheduledArrivalOffsetHours: node.deliveryDelayHours,
       scheduledRunsDryBeforeArrival: node.runsDryBeforeArrival,
+      totalOutageHours: 0,
       allocatedStops: 0,
     },
   ]));
@@ -599,6 +606,7 @@ function applyTripSchedule(
       scheduledRemainingStabilityGap: state.remainingStabilityGap,
       scheduledRemainingReserveGap: state.remainingReserveGap,
       scheduledRunsDryBeforeArrival: state.scheduledRunsDryBeforeArrival,
+      scheduledOutageHours: state.allocatedStops > 0 ? state.totalOutageHours : node.outageHoursBeforeArrival,
       usesTripCadence,
     };
   });
@@ -691,6 +699,9 @@ export function planFuel(
     const projectedStabilityShortfall = Math.max(0, stabilityFuel - node.maxFuel);
     const projectedShortfall = Math.max(0, reserveFuel - node.maxFuel);
     const runsDryBeforeArrival = node.burnRatePerHour > 0 && hoursRemaining < nodeDeliveryDelayHours;
+    const outageHoursBeforeArrival = runsDryBeforeArrival
+      ? roundTo(Math.max(0, nodeDeliveryDelayHours - hoursRemaining))
+      : 0;
     const status = node.burnRatePerHour === 0
       ? 'stable'
       : hoursAtArrival < nodeStabilityHours
@@ -722,6 +733,7 @@ export function planFuel(
       projectedStabilityShortfall: roundTo(projectedStabilityShortfall),
       projectedShortfall: roundTo(projectedShortfall),
       runsDryBeforeArrival,
+      outageHoursBeforeArrival,
       survivesUntilArrival: !runsDryBeforeArrival,
       status,
     };
@@ -806,6 +818,7 @@ export function planFuel(
         stabilityCapacityLimited: node.projectedStabilityShortfall > 0,
         capacityLimited: node.projectedShortfall > 0,
         runsDryBeforeArrival: node.runsDryBeforeArrival,
+        outageHoursBeforeArrival: node.outageHoursBeforeArrival,
         survivesUntilArrival: node.survivesUntilArrival,
         remainingStabilityGap,
         remainingSupplyGap,
@@ -817,6 +830,7 @@ export function planFuel(
         scheduledRemainingStabilityGap: remainingStabilityGap,
         scheduledRemainingReserveGap: remainingReserveGap,
         scheduledRunsDryBeforeArrival: node.runsDryBeforeArrival,
+        scheduledOutageHours: node.outageHoursBeforeArrival,
         usesTripCadence: false,
       };
     });
@@ -835,6 +849,7 @@ export function planFuel(
       fuelToFull: roundTo(accumulator.fuelToFull + node.fuelToFull),
       projectedStabilityShortfall: roundTo(accumulator.projectedStabilityShortfall + node.projectedStabilityShortfall),
       projectedShortfall: roundTo(accumulator.projectedShortfall + node.projectedShortfall),
+      outageHoursBeforeArrival: roundTo(accumulator.outageHoursBeforeArrival + node.outageHoursBeforeArrival),
     }),
     {
       currentFuel: 0,
@@ -849,6 +864,7 @@ export function planFuel(
       fuelToFull: 0,
       projectedStabilityShortfall: 0,
       projectedShortfall: 0,
+      outageHoursBeforeArrival: 0,
     },
   );
 
@@ -930,6 +946,10 @@ export function planFuel(
     ...node,
     ...(scheduledOutcomeMap.get(node.name) ?? {}),
   }));
+  totals.scheduledOutageHours = roundTo(scheduledDispatchOrder.reduce(
+    (sum, node) => sum + (node.scheduledOutageHours ?? node.outageHoursBeforeArrival),
+    0,
+  ));
 
   return {
     stabilityHours: normalizedStabilityHours,
