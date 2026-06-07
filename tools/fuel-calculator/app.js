@@ -5,6 +5,7 @@ import {
   DEFAULT_RESERVE_HOURS,
   DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
+  parseHourValue,
   parseNodeRows,
   planFuel,
 } from './calc-core.js';
@@ -523,9 +524,9 @@ function renderPlan(plan) {
 function updatePlan() {
   try {
     const nodes = parseNodeRows(textarea.value);
-    const stabilityHours = Number(stabilityInput.value || CRITICAL_STABILITY_HOURS);
-    const reserveHours = Number(reserveInput.value || DEFAULT_RESERVE_HOURS);
-    const deliveryDelayHours = Number(deliveryDelayInput.value || DEFAULT_DELIVERY_DELAY_HOURS);
+    const stabilityHours = parseHourValue(stabilityInput.value) ?? CRITICAL_STABILITY_HOURS;
+    const reserveHours = parseHourValue(reserveInput.value) ?? DEFAULT_RESERVE_HOURS;
+    const deliveryDelayHours = parseHourValue(deliveryDelayInput.value) ?? DEFAULT_DELIVERY_DELAY_HOURS;
     const availableFuel = availableFuelInput.value.trim() === ''
       ? Infinity
       : Number(availableFuelInput.value);
@@ -534,7 +535,7 @@ function updatePlan() {
       : Number(tripCapacityInput.value);
     const tripTurnaroundHours = tripTurnaroundInput.value.trim() === ''
       ? DEFAULT_TRIP_TURNAROUND_HOURS
-      : Number(tripTurnaroundInput.value);
+      : (parseHourValue(tripTurnaroundInput.value) ?? Number.NaN);
     const haulerCount = haulerCountInput.value.trim() === ''
       ? DEFAULT_HAULER_COUNT
       : Number(haulerCountInput.value);
@@ -623,6 +624,4 @@ applyFormState(hasSharedState
     haulerCount: '2',
   });
 updatePlan();
-
-
 

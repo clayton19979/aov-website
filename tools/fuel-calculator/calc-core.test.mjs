@@ -8,6 +8,7 @@ import {
   DEFAULT_RESERVE_HOURS,
   DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
+  parseHourValue,
   parseNodeRows,
   planFuel,
 } from './calc-core.js';
@@ -1447,3 +1448,76 @@ test('planFuel tracks convoy-added outage hours when later manifests land after 
     ],
   );
 });
+
+test('parseHourValue accepts duration strings and rejects malformed ones', () => {
+  assert.equal(parseHourValue('36h'), 36);
+  assert.equal(parseHourValue('1d 12h'), 36);
+  assert.equal(parseHourValue('90m'), 1.5);
+  assert.equal(parseHourValue('1d, 30m'), 24.5);
+  assert.equal(parseHourValue('1d12h'), 36);
+  assert.equal(parseHourValue('bad data'), null);
+  assert.equal(parseHourValue('1w'), null);
+});
+
+test('parseNodeRows accepts duration strings for runtime and hour override columns', () => {
+  const rows = parseNodeRows([
+    'node,hours remaining,max fuel,burn rate,travel hours,rank,critical floor hours,reserve window hours',
+    'North Gate,1d 6h,400,10,90m,2,12h,36h',
+    'South Relay,90m,240,5,30m,0,6h,1d',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 300, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 1.5, priority: 2, stabilityHours: 12, reserveHours: 36 },
+    { name: 'South Relay', currentFuel: 7.5, maxFuel: 240, burnRatePerHour: 5, deliveryDelayHours: 0.5, priority: 0, stabilityHours: 6, reserveHours: 24 },
+  ]);
+});
+
+test('parseNodeRows rejects malformed duration strings in runtime and override columns', () => {
+  assert.throws(
+    () => parseNodeRows([
+      'node,hours remaining,max fuel,burn rate',
+      'North Gate,1w,400,10',
+    ].join('\n')),
+    /Row 2 has an invalid runtime-hours value/,
+  );
+
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,soon'),
+    /Row 1 has an invalid delivery delay value/,
+  );
+
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1h,2,overnight,24h'),
+    /Row 1 has an invalid stability-hours value/,
+  );
+
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1h,2,10h,tomorrow'),
+    /Row 1 has an invalid reserve-hours value/,
+  );
+});
+
+test('planFuel accepts duration strings for global and per-node hour inputs', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: '90m', stabilityHours: '12h', reserveHours: '36h' },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ], '1d 12h', 260, '10h', '2h', 100, '90m', 1);
+
+  assert.equal(plan.reserveHours, 36);
+  assert.equal(plan.stabilityHours, 10);
+  assert.equal(plan.deliveryDelayHours, 2);
+  assert.equal(plan.dispatch.tripTurnaroundHours, 1.5);
+  assert.deepEqual(
+    plan.perNode.map((node) => ({
+      name: node.name,
+      deliveryDelayHours: node.deliveryDelayHours,
+      stabilityHours: node.stabilityHours,
+      reserveHours: node.reserveHours,
+    })),
+    [
+      { name: 'North Gate', deliveryDelayHours: 1.5, stabilityHours: 12, reserveHours: 36 },
+      { name: 'South Relay', deliveryDelayHours: 2, stabilityHours: 10, reserveHours: 36 },
+    ],
+  );
+});
+
