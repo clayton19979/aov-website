@@ -136,6 +136,64 @@ test('parseNodeRows accepts optional delivery-delay columns in headers and trail
   );
 });
 
+
+test('parseNodeRows accepts percent-based fuel snapshots from inline values and percent headers', () => {
+  const rows = parseNodeRows([
+    'name,current fuel,max fuel,burn rate',
+    'North Gate,37.5%,400,10',
+    'South Relay,25%,240,5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 150, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows([
+      'node,fuel percent,max fuel,burn rate',
+      'Refinery Spine,22,500,8',
+    ].join('\n')),
+    [{ name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8 }],
+  );
+});
+
+test('parseNodeRows accepts runtime-hour snapshots when current fuel is not provided', () => {
+  const rows = parseNodeRows([
+    'node,hours remaining,max fuel,burn rate',
+    'North Gate,15,400,10',
+    'South Relay,12,240,5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 150, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ]);
+});
+
+test('parseNodeRows rejects invalid percent and runtime-hour snapshots', () => {
+  assert.throws(
+    () => parseNodeRows('North Gate,120%,400,10'),
+    /Row 1 has an invalid current fuel percent/,
+  );
+
+  assert.throws(
+    () => parseNodeRows([
+      'node,fuel percent,max fuel,burn rate',
+      'North Gate,140,400,10',
+    ].join('\n')),
+    /Row 2 has an invalid current fuel percent/,
+  );
+
+  assert.throws(
+    () => parseNodeRows([
+      'node,hours remaining,max fuel,burn rate',
+      'Idle Node,4,100,0',
+    ].join('\n')),
+    /Row 2 runtime-hours input requires burn-per-hour above zero/,
+  );
+});
+
 test('parseNodeRows rejects invalid delivery delays', () => {
   assert.throws(
     () => parseNodeRows('Forward Tower,90,300,6,-1'),
@@ -149,7 +207,7 @@ test('parseNodeRows treats unmatched first-row labels as invalid data rather tha
       'label,currentFuel,maxFuel,burnPerHour',
       'North Gate,120,400,10',
     ].join('\n')),
-    /Row 1 has an invalid current fuel value/,
+    /Row 1 has an invalid max fuel value/,
   );
 });
 

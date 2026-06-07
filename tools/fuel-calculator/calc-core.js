@@ -6,6 +6,8 @@ export const DEFAULT_HAULER_COUNT = 1;
 const HEADER_ALIASES = {
   name: ['name', 'node', 'nodename'],
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
+  currentFuelPercent: ['currentfuelpercent', 'fuelpercent', 'currentpercent', 'fillpercent', 'percentfull'],
+  runtimeHours: ['hoursremaining', 'runtimehours', 'currentruntimehours', 'remaininghours', 'runtimeleft', 'timeleft'],
   maxFuel: ['maxfuel', 'capacity', 'fuelcapacity', 'maximumfuel'],
   burnPerHour: ['burnperhour', 'burnrate', 'burnrateperhour', 'usageperhour', 'consumptionperhour'],
   deliveryDelayHours: ['deliverydelayhours', 'delayhours', 'deliverydelay', 'travelhours', 'transithours'],
@@ -58,7 +60,7 @@ function normalizeHeaderToken(value) {
 function getHeaderColumnIndexes(parts) {
   const normalizedParts = parts.map((part) => normalizeHeaderToken(part));
   const indexes = {};
-  const requiredFields = ['name', 'currentFuel', 'maxFuel', 'burnPerHour'];
+  const requiredFields = ['name', 'maxFuel', 'burnPerHour'];
 
   for (const field of requiredFields) {
     const columnIndex = normalizedParts.findIndex((part) => HEADER_ALIASES[field].includes(part));
@@ -66,6 +68,29 @@ function getHeaderColumnIndexes(parts) {
       return null;
     }
     indexes[field] = columnIndex;
+  }
+
+  const currentFuelIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.currentFuel.includes(part));
+  if (currentFuelIndex !== -1) {
+    indexes.currentFuel = currentFuelIndex;
+  }
+
+  const currentFuelPercentIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.currentFuelPercent.includes(part));
+  if (currentFuelPercentIndex !== -1) {
+    indexes.currentFuelPercent = currentFuelPercentIndex;
+  }
+
+  const runtimeHoursIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.runtimeHours.includes(part));
+  if (runtimeHoursIndex !== -1) {
+    indexes.runtimeHours = runtimeHoursIndex;
+  }
+
+  if (
+    indexes.currentFuel === undefined
+    && indexes.currentFuelPercent === undefined
+    && indexes.runtimeHours === undefined
+  ) {
+    return null;
   }
 
   const deliveryDelayIndex = normalizedParts.findIndex((part) => HEADER_ALIASES.deliveryDelayHours.includes(part));
@@ -92,11 +117,32 @@ function getHeaderColumnIndexes(parts) {
 }
 
 function toFiniteNumber(value) {
-  const normalized = typeof value === 'string'
-    ? value.trim().replaceAll(',', '').replaceAll('_', '')
-    : value;
-  const parsed = Number(normalized);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return null;
+    }
+
+    const normalized = trimmed.replaceAll(',', '').replaceAll('_', '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parsePercentValue(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.endsWith('%')) {
+    return null;
+  }
+
+  return toFiniteNumber(trimmed.slice(0, -1));
 }
 
 function roundTo(value, digits = 1) {
@@ -127,7 +173,15 @@ export function parseNodeRows(input) {
     }
 
     const name = headerColumnIndexes ? parts[headerColumnIndexes.name] : parts[0];
-    const currentFuelRaw = headerColumnIndexes ? parts[headerColumnIndexes.currentFuel] : parts[1];
+    const currentFuelRaw = headerColumnIndexes && headerColumnIndexes.currentFuel !== undefined
+      ? parts[headerColumnIndexes.currentFuel]
+      : (headerColumnIndexes ? '' : parts[1]);
+    const currentFuelPercentRaw = headerColumnIndexes && headerColumnIndexes.currentFuelPercent !== undefined
+      ? parts[headerColumnIndexes.currentFuelPercent]
+      : '';
+    const runtimeHoursRaw = headerColumnIndexes && headerColumnIndexes.runtimeHours !== undefined
+      ? parts[headerColumnIndexes.runtimeHours]
+      : '';
     const maxFuelRaw = headerColumnIndexes ? parts[headerColumnIndexes.maxFuel] : parts[2];
     const burnRateRaw = headerColumnIndexes ? parts[headerColumnIndexes.burnPerHour] : parts[3];
     const deliveryDelayRaw = headerColumnIndexes
@@ -142,9 +196,16 @@ export function parseNodeRows(input) {
     const reserveHoursRaw = headerColumnIndexes
       ? (headerColumnIndexes.reserveHours !== undefined ? parts[headerColumnIndexes.reserveHours] : '')
       : (parts[7] ?? '');
-    const currentFuel = toFiniteNumber(currentFuelRaw);
     const maxFuel = toFiniteNumber(maxFuelRaw);
     const burnRatePerHour = toFiniteNumber(burnRateRaw);
+    const currentFuelPercent = currentFuelPercentRaw === '' ? null : toFiniteNumber(currentFuelPercentRaw);
+    const runtimeHours = runtimeHoursRaw === '' ? null : toFiniteNumber(runtimeHoursRaw);
+    const inlinePercent = parsePercentValue(currentFuelRaw);
+    const currentFuelCandidate = inlinePercent === null ? toFiniteNumber(currentFuelRaw) : null;
+    const currentFuel = currentFuelCandidate
+      ?? (inlinePercent !== null && maxFuel !== null ? roundTo((maxFuel * inlinePercent) / 100) : null)
+      ?? (currentFuelPercent !== null && maxFuel !== null ? roundTo((maxFuel * currentFuelPercent) / 100) : null)
+      ?? (runtimeHours !== null && burnRatePerHour !== null ? roundTo(runtimeHours * burnRatePerHour) : null);
     const hasDeliveryDelayValue = typeof deliveryDelayRaw === 'string'
       ? deliveryDelayRaw.trim() !== ''
       : deliveryDelayRaw !== undefined && deliveryDelayRaw !== null;
@@ -170,14 +231,29 @@ export function parseNodeRows(input) {
     if (firstSeenRow !== undefined) {
       throw new Error(`Row ${index + 1} duplicates node "${name}" from row ${firstSeenRow}`);
     }
-    if (currentFuel === null || currentFuel < 0) {
-      throw new Error(`Row ${index + 1} has an invalid current fuel value`);
-    }
     if (maxFuel === null || maxFuel <= 0) {
       throw new Error(`Row ${index + 1} has an invalid max fuel value`);
     }
     if (burnRatePerHour === null || burnRatePerHour < 0) {
       throw new Error(`Row ${index + 1} has an invalid burn-per-hour value`);
+    }
+    if (currentFuelCandidate === null && inlinePercent === null && currentFuelPercent === null && runtimeHours === null) {
+      throw new Error(`Row ${index + 1} has an invalid current fuel value`);
+    }
+    if (inlinePercent !== null && (inlinePercent < 0 || inlinePercent > 100)) {
+      throw new Error(`Row ${index + 1} has an invalid current fuel percent`);
+    }
+    if (currentFuelPercent !== null && (currentFuelPercent < 0 || currentFuelPercent > 100)) {
+      throw new Error(`Row ${index + 1} has an invalid current fuel percent`);
+    }
+    if (runtimeHours !== null && runtimeHours < 0) {
+      throw new Error(`Row ${index + 1} has an invalid runtime-hours value`);
+    }
+    if (runtimeHours !== null && burnRatePerHour === 0) {
+      throw new Error(`Row ${index + 1} runtime-hours input requires burn-per-hour above zero`);
+    }
+    if (currentFuel === null || currentFuel < 0) {
+      throw new Error(`Row ${index + 1} has an invalid current fuel value`);
     }
     if (hasDeliveryDelayValue && (deliveryDelayHours === null || deliveryDelayHours < 0)) {
       throw new Error(`Row ${index + 1} has an invalid delivery delay value`);
