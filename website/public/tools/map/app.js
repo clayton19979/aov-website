@@ -61,6 +61,8 @@ const state = {
   showSmartGateLinks: true,
   avoidKills: false,
   overlayAssembliesOnlineOnly: false,
+  showJumpRange: false,
+  showKillLabels: false,
 };
 
 const els = {
@@ -104,6 +106,8 @@ const els = {
   showSmartGateLinksToggle: document.getElementById("showSmartGateLinks"),
   avoidKillsToggle: document.getElementById("avoidKills"),
   assembliesOnlineOnlyToggle: document.getElementById("assembliesOnlineOnly"),
+  showJumpRangeToggle: document.getElementById("showJumpRange"),
+  showKillLabelsToggle: document.getElementById("showKillLabels"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -511,7 +515,9 @@ function draw() {
 
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
+  if (state.showJumpRange) drawJumpRangeCircle();
   if (state.showKills) drawKillOverlay();
+  if (state.showKills && state.showKillLabels) drawKillLabels();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   drawRoute();
@@ -1595,7 +1601,7 @@ function bindEvents() {
     field.addEventListener("input", scheduleRouteUpdate);
     field.addEventListener("change", scheduleRouteUpdate);
   });
-  els.jumpRange.addEventListener("input", updateRangePresets);
+  els.jumpRange.addEventListener("input", () => { updateRangePresets(); if (state.showJumpRange) scheduleDraw(); });
   els.jumpRange.addEventListener("change", updateRangePresets);
   els.rangePresets.forEach((button) => {
     button.addEventListener("click", () => {
@@ -1624,6 +1630,14 @@ function bindEvents() {
   });
   els.assembliesOnlineOnlyToggle?.addEventListener("change", () => {
     state.overlayAssembliesOnlineOnly = els.assembliesOnlineOnlyToggle.checked;
+    draw();
+  });
+  els.showJumpRangeToggle?.addEventListener("change", () => {
+    state.showJumpRange = els.showJumpRangeToggle.checked;
+    draw();
+  });
+  els.showKillLabelsToggle?.addEventListener("change", () => {
+    state.showKillLabels = els.showKillLabelsToggle.checked;
     draw();
   });
   document.querySelectorAll('input[name="optimize"]').forEach((field) => {
@@ -1724,7 +1738,7 @@ async function fetchKillFeed() {
   const kills = [];
   let cursor = null;
   let pages = 0;
-  const MAX_PAGES = 10; // up to ~1 000 events
+  const MAX_PAGES = 20; // up to ~2 000 events
   do {
     const data = await suiRpc("suix_queryEvents", [
       { MoveEventType: eventType },
@@ -1765,6 +1779,8 @@ function buildKillSystemMap() {
 function drawKillOverlay() {
   const killsBySystem = buildKillSystemMap();
   if (!killsBySystem.size) return;
+  const now = Date.now();
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
   ctx.save();
   for (const [systemId, kills] of killsBySystem) {
     const system = state.systemsById.get(systemId);
@@ -1774,16 +1790,25 @@ function drawKillOverlay() {
     if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
     const count = kills.length;
     const radius = Math.min(12, 4 + Math.log2(count + 1) * 2);
+    // Recency: 1.0 = just happened, 0.0 = at edge of time window
+    const mostRecent = Math.max(...kills.map((k) => k.timestamp));
+    const age = Math.min(1, (now - mostRecent) / windowMs);
+    const freshness = 1 - age;
+    // Blend from dim warm-red (old) to bright red (recent)
+    const r = Math.round(180 + freshness * 75);
+    const g = Math.round(40 + freshness * 20);
+    const coreAlpha = 0.55 + freshness * 0.35;
+    const glowAlpha = 0.20 + freshness * 0.20;
     // Glow
     const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius * 2.5);
-    grd.addColorStop(0, "rgba(255, 60, 60, 0.35)");
-    grd.addColorStop(1, "rgba(255, 60, 60, 0)");
+    grd.addColorStop(0, `rgba(${r}, ${g}, 50, ${glowAlpha})`);
+    grd.addColorStop(1, `rgba(${r}, ${g}, 50, 0)`);
     ctx.fillStyle = grd;
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius * 2.5, 0, Math.PI * 2);
     ctx.fill();
     // Core dot
-    ctx.fillStyle = "rgba(255, 80, 80, 0.90)";
+    ctx.fillStyle = `rgba(${r}, ${g}, 50, ${coreAlpha})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -1900,9 +1925,10 @@ async function fetchAssemblyOverlay() {
 function drawAssemblyOverlay() {
   if (!state.overlayAssemblies.length) return;
   ctx.save();
-  // Group by system
+  // Group by system, respecting the online-only filter
   const bySystem = new Map();
   for (const asm of state.overlayAssemblies) {
+    if (state.overlayAssembliesOnlineOnly && !asm.online) continue;
     if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
     bySystem.get(asm.systemId).push(asm);
   }
@@ -2040,6 +2066,124 @@ function drawPlayerBaseOverlay() {
         : `${base.assemblyCount} asm`;
       ctx.fillText(label, p.x, p.y + r + 3);
     }
+  }
+  ctx.restore();
+}
+
+// ── Hover tooltip ─────────────────────────────────────────────────────────
+
+function drawHoverTooltip() {
+  if (!state.hovered) return;
+  const system = state.hovered;
+  const p = project(system);
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+
+  const lines = [];
+  lines.push({ text: system.name, color: "rgba(255,255,255,0.95)", bold: true });
+  lines.push({ text: `Region ${system.regionId}`, color: "rgba(255,255,255,0.42)", bold: false });
+
+  if (state.overlayKillsLoaded && state.showKills) {
+    const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+    const n = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff).length;
+    if (n > 0) lines.push({ text: `${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h`, color: "rgba(255,100,100,0.95)", bold: true });
+  }
+
+  if (state.overlayAssembliesLoaded && (state.showAssemblies || state.showPlayerBases)) {
+    const asms = state.overlayAssemblies.filter((a) => a.systemId === system.id);
+    const visible = state.overlayAssembliesOnlineOnly ? asms.filter((a) => a.online) : asms;
+    if (visible.length) {
+      const online = visible.filter((a) => a.online).length;
+      const label = state.overlayAssembliesOnlineOnly
+        ? `${online} online assembl${online !== 1 ? "ies" : "y"}`
+        : `${online}/${visible.length} assembl${visible.length !== 1 ? "ies" : "y"}`;
+      lines.push({ text: label, color: "rgba(0,180,216,0.90)", bold: false });
+    }
+  }
+
+  const base = state.overlayPlayerBases.find((b) => b.systemId === system.id);
+  if (base && state.showPlayerBases) {
+    lines.push({ text: `Player Base · ${base.assemblyCount} asm`, color: "rgba(241,184,75,0.95)", bold: true });
+  }
+
+  const pad = 9;
+  const lh = 15;
+  ctx.save();
+  ctx.font = "10px ui-monospace, monospace";
+  const maxW = Math.max(...lines.map((l) => ctx.measureText(l.text).width));
+  const W = maxW + pad * 2;
+  const H = lines.length * lh + pad * 2 - 2;
+
+  let tx = p.x + 14;
+  let ty = p.y - H / 2;
+  if (tx + W > rect.width - 10) tx = p.x - W - 14;
+  if (ty < 10) ty = 10;
+  if (ty + H > rect.height - 10) ty = rect.height - H - 10;
+
+  ctx.fillStyle = "rgba(2, 8, 12, 0.92)";
+  ctx.strokeStyle = "rgba(0, 180, 216, 0.30)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(tx, ty, W, H);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  lines.forEach((line, i) => {
+    ctx.font = line.bold ? "bold 10px ui-monospace, monospace" : "10px ui-monospace, monospace";
+    ctx.fillStyle = line.color;
+    ctx.fillText(line.text, tx + pad, ty + pad + i * lh);
+  });
+  ctx.restore();
+}
+
+// ── Jump range circle ──────────────────────────────────────────────────────
+
+function drawJumpRangeCircle() {
+  const origin = parseSystem(els.origin.value);
+  if (!origin) return;
+  const range = Number(els.jumpRange.value || 120);
+  const SEGS = 72;
+  ctx.save();
+  ctx.strokeStyle = "rgba(97, 213, 199, 0.18)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
+  ctx.beginPath();
+  for (let i = 0; i <= SEGS; i++) {
+    const a = (i / SEGS) * Math.PI * 2;
+    const pt = { x: origin.x + Math.cos(a) * range, y: origin.y, z: origin.z + Math.sin(a) * range };
+    const pp = project(pt);
+    i === 0 ? ctx.moveTo(pp.x, pp.y) : ctx.lineTo(pp.x, pp.y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// ── Kill labels ────────────────────────────────────────────────────────────
+
+function drawKillLabels() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  const THRESHOLD = 3;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (const [systemId, kills] of killsBySystem) {
+    if (kills.length < THRESHOLD) continue;
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -50 || p.y < -50 || p.x > rect.width + 50 || p.y > rect.height + 50) continue;
+    const radius = Math.min(12, 4 + Math.log2(kills.length + 1) * 2);
+    ctx.font = "bold 9px ui-monospace, monospace";
+    // Shadow for readability
+    ctx.fillStyle = "rgba(2,8,12,0.70)";
+    ctx.fillText(system.name, p.x + 1, p.y - radius - 1);
+    ctx.fillStyle = "rgba(255, 130, 130, 0.92)";
+    ctx.fillText(system.name, p.x, p.y - radius - 2);
   }
   ctx.restore();
 }

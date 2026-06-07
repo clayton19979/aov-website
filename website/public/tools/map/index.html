@@ -86,6 +86,11 @@
               <button type="button" class="time-preset active" data-hours="24">24h</button>
               <button type="button" class="time-preset" data-hours="168">7d</button>
             </div>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killLabelsToggleLabel">
+              <input type="checkbox" id="showKillLabels" />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;"></span>
+              Label hot systems (3+)
+            </label>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
@@ -129,6 +134,7 @@
             <label><input id="showGameGates" type="checkbox" checked /> Show game gate links</label>
             <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
+            <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
           </div>
 
           <button class="primary" type="submit">Calculate</button>
