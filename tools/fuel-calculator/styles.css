@@ -79,6 +79,10 @@ body {
   gap: 12px;
 }
 
+.actions {
+  flex-wrap: wrap;
+}
+
 .panel-heading h2,
 .dispatch-block h3 {
   margin: 0;
@@ -149,7 +153,7 @@ textarea {
 
 .actions .ghost-button,
 .actions .primary-button {
-  min-width: 160px;
+  flex: 1 1 160px;
 }
 
 .feedback {

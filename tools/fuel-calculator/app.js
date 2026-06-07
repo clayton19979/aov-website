@@ -9,6 +9,11 @@ import {
   parseNodeRows,
   planFuel,
 } from './calc-core.js';
+import {
+  buildDispatchTextReport,
+  buildNodeTableTsv,
+  buildTripManifestTsv,
+} from './report-export.js';
 import { buildShareUrl, parseShareState } from './state-share.js';
 
 const sampleRows = [
@@ -36,6 +41,8 @@ const tableBody = document.querySelector('[data-table-body]');
 const feedback = document.querySelector('[data-feedback]');
 const fillSampleButton = document.querySelector('[data-fill-sample]');
 const copyReportButton = document.querySelector('[data-copy-report]');
+const copyNodeTsvButton = document.querySelector('[data-copy-node-tsv]');
+const copyTripTsvButton = document.querySelector('[data-copy-trip-tsv]');
 const copyShareLinkButton = document.querySelector('[data-copy-share-link]');
 const floorNeedHeader = document.querySelector('[data-floor-need-label]');
 const floorGapHeader = document.querySelector('[data-floor-gap-label]');
@@ -376,81 +383,23 @@ function createTableMarkup(plan) {
   }).join('');
 }
 
-function createReport(plan) {
-  const header = [
-    `Delivery timing: ${getDelayCoverageLabel(plan)}`,
-    `Priority overrides: ${getPriorityCoverageLabel(plan)}`,
-    `Critical floors: ${getStabilityCoverageLabel(plan)}`,
-    `Reserve windows: ${getReserveCoverageLabel(plan)}`,
-    `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
-    `Trip capacity: ${formatTripCapacity(plan.dispatch.tripCapacity)}`,
-    `Trip turnaround: ${plan.dispatch.tripTurnaroundHours === null ? 'Not batched' : formatHourLabel(plan.dispatch.tripTurnaroundHours)}`,
-    `Haulers: ${plan.dispatch.haulerCount === null ? 'Not batched' : formatNumber(plan.dispatch.haulerCount)}`,
-    `Trip count: ${plan.dispatch.tripCount === null ? 'Not batched' : plan.dispatch.tripCount}`,
-    `Trip timing risk: ${getTripRiskLabel(plan)}`,
-    `Fuel burned before arrival: ${formatNumber(plan.totals.fuelConsumedBeforeArrival)}`,
-    `Base outage: ${formatOutageSummary(plan.counts.arrivalRisk, plan.totals.outageHoursBeforeArrival)}`,
-    `Scheduled outage: ${formatOutageSummary(getScheduledOutageNodeCount(plan), plan.totals.scheduledOutageHours)}`,
-    `Fuel needed to stabilize: ${formatNumber(plan.totals.fuelToStability)}`,
-    `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
-    `Uncovered critical gap: ${formatNumber(plan.dispatch.uncoveredStability)}`,
-    `Uncovered reserve gap: ${formatNumber(plan.dispatch.uncoveredReserve)}`,
-    `Arrival outage risk: ${plan.counts.arrivalRisk}`,
-    `Trip-added arrival risk: ${plan.dispatch.tripTiming.additionalArrivalRisk}`,
-    `Trip-degraded floor coverage: ${plan.dispatch.tripTiming.degradedStability}`,
-    `Trip-degraded reserve coverage: ${plan.dispatch.tripTiming.degradedReserve}`,
-    `Critical: ${plan.counts.critical}, Warning: ${plan.counts.warning}, Stable: ${plan.counts.stable}, Capacity-limited: ${plan.counts.capacityLimited}`,
-  ];
-
-  const rows = plan.dispatch.order.map((node) => [
-    node.name,
-    node.status.toUpperCase(),
-    `priority ${formatPriority(node.priority)}`,
-    `delay ${formatHourLabel(node.deliveryDelayHours)}`,
-    `coverage ${formatHourLabel(node.stabilityHours)} floor / ${formatHourLabel(node.reserveHours)} reserve`,
-    `remaining ${formatHours(node.hoursRemaining)}`,
-    `arrival ${formatHours(node.hoursAtArrival)}`,
-    `base outage ${formatOutageHours(node.outageHoursBeforeArrival)}`,
-    `last drop ${node.allocatedFuel > 0 && plan.dispatch.tripCapacity !== null ? formatOffsetLabel(node.scheduledArrivalOffsetHours) : 'n/a'}`,
-    `scheduled outage ${formatOutageHours(getDisplayOutageHours(plan, node))}`,
-    `after ${formatHours(getDisplayProjectedHours(plan, node))}`,
-    `send ${formatNumber(node.allocatedFuel)}`,
-    `${formatHourLabel(node.stabilityHours)} ${getDisplayStabilityGap(plan, node) > 0 ? `gap ${formatNumber(getDisplayStabilityGap(plan, node))}` : 'covered'}`,
-    getDisplayRunsDry(plan, node) ? 'offline before scheduled drop' : `burns ${formatNumber(node.fuelConsumedBeforeArrival)} before arrival`,
-    node.capacityLimited ? `reserve cap gap ${formatNumber(node.projectedShortfall)}` : 'reserve cap ok',
-    getDisplayReserveGap(plan, node) > 0 ? `reserve gap ${formatNumber(getDisplayReserveGap(plan, node))}` : 'reserve covered',
-  ].join(' | '));
-
-  const tripRows = plan.dispatch.tripCapacity === null
-    ? ['Trip manifests: set a trip capacity to generate them.']
-    : plan.dispatch.trips.map((trip) => {
-      const stops = trip.stops
-        .map((stop) => {
-          const stopNode = getDispatchRecord(plan, stop.name);
-          const parts = [
-            `${stop.name} ${formatNumber(stop.fuel)}`,
-            stopNode ? `${formatHourLabel(stopNode.stabilityHours)} floor / ${formatHourLabel(stopNode.reserveHours)} reserve` : null,
-            `arrives ${formatOffsetLabel(stop.arrivalOffsetHours)}`,
-            `before ${formatNumber(stop.fuelBeforeArrival)}`,
-            `after ${formatNumber(stop.fuelAfterDelivery)}`,
-            `runtime ${formatHours(stop.projectedHoursAfterDelivery)}`,
-            stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
-            stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
-            stop.remainingReserveGap > 0 ? `${formatNumber(stop.remainingReserveGap)} reserve gap` : 'reserve covered',
-            stop.runsDryBeforeArrival ? `offline ${formatOutageHours(stop.outageHoursBeforeArrival)} before arrival` : null,
-          ].filter(Boolean);
-          return parts.join(' / ');
-        })
-        .join(' ; ');
-      return `Trip ${trip.tripNumber} | depart ${formatOffsetLabel(trip.departureOffsetHours)} | load ${formatNumber(trip.fuel)} / ${formatNumber(trip.capacity)} | remaining ${formatNumber(trip.remainingCapacity)} | ${stops}`;
-    });
-
-  return [...header, '', 'Dispatch order:', ...rows, '', 'Trip manifests:', ...tripRows].join('\n');
-}
-
 function setFeedback(message, tone = 'info') {
   feedback.textContent = message;
   feedback.dataset.tone = tone;
+}
+
+async function copyDatasetValue(button, key, successMessage, failureMessage) {
+  const value = button.dataset[key] || '';
+  if (!value) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    setFeedback(successMessage, 'stable');
+  } catch {
+    setFeedback(failureMessage, 'warning');
+  }
 }
 
 function getFormState() {
@@ -491,7 +440,11 @@ function renderPlan(plan) {
   tripList.innerHTML = createTripMarkup(plan);
   tableBody.innerHTML = createTableMarkup(plan);
   copyReportButton.disabled = false;
-  copyReportButton.dataset.report = createReport(plan);
+  copyReportButton.dataset.report = buildDispatchTextReport(plan);
+  copyNodeTsvButton.disabled = false;
+  copyNodeTsvButton.dataset.tsv = buildNodeTableTsv(plan);
+  copyTripTsvButton.disabled = plan.dispatch.trips.length === 0;
+  copyTripTsvButton.dataset.tsv = plan.dispatch.trips.length === 0 ? '' : buildTripManifestTsv(plan);
   syncShareState();
 
   if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.additionalArrivalRisk > 0) {
@@ -557,6 +510,10 @@ function updatePlan() {
     tableBody.innerHTML = '';
     copyReportButton.disabled = true;
     copyReportButton.dataset.report = '';
+    copyNodeTsvButton.disabled = true;
+    copyNodeTsvButton.dataset.tsv = '';
+    copyTripTsvButton.disabled = true;
+    copyTripTsvButton.dataset.tsv = '';
     copyShareLinkButton.disabled = true;
     copyShareLinkButton.dataset.shareUrl = '';
     setFeedback(error instanceof Error ? error.message : 'Could not calculate fuel plan.', 'critical');
@@ -576,17 +533,30 @@ fillSampleButton.addEventListener('click', () => {
 });
 
 copyReportButton.addEventListener('click', async () => {
-  const report = copyReportButton.dataset.report || '';
-  if (!report) {
-    return;
-  }
+  await copyDatasetValue(
+    copyReportButton,
+    'report',
+    'Copied fuel dispatch report to clipboard.',
+    'Clipboard write failed. Copy the table manually.',
+  );
+});
 
-  try {
-    await navigator.clipboard.writeText(report);
-    setFeedback('Copied fuel dispatch report to clipboard.', 'stable');
-  } catch {
-    setFeedback('Clipboard write failed. Copy the table manually.', 'warning');
-  }
+copyNodeTsvButton.addEventListener('click', async () => {
+  await copyDatasetValue(
+    copyNodeTsvButton,
+    'tsv',
+    'Copied node status TSV to clipboard.',
+    'Clipboard write failed. Copy the node table manually.',
+  );
+});
+
+copyTripTsvButton.addEventListener('click', async () => {
+  await copyDatasetValue(
+    copyTripTsvButton,
+    'tsv',
+    'Copied trip manifest TSV to clipboard.',
+    'Clipboard write failed. Copy the trip manifests manually.',
+  );
 });
 
 copyShareLinkButton.addEventListener('click', async () => {
