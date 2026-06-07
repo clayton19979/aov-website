@@ -246,6 +246,37 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
     return [];
   }
 
+  const stabilitySegments = dispatchOrder
+    .filter((node) => node.allocatedForStability > 0)
+    .sort((left, right) => {
+      const priorityDelta = right.priority - left.priority;
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+
+      const hoursDelta = left.hoursAtArrival - right.hoursAtArrival;
+      if (hoursDelta !== 0) {
+        return hoursDelta;
+      }
+
+      return right.allocatedForStability - left.allocatedForStability;
+    })
+    .map((node) => ({
+      name: node.name,
+      status: node.status,
+      remainingFuel: node.allocatedForStability,
+      phase: 'stability',
+    }));
+  const reserveSegments = dispatchOrder
+    .filter((node) => node.allocatedForReserve > 0)
+    .sort(compareDispatchPriority)
+    .map((node) => ({
+      name: node.name,
+      status: node.status,
+      remainingFuel: node.allocatedForReserve,
+      phase: 'reserve',
+    }));
+  const manifestSegments = [...stabilitySegments, ...reserveSegments];
   const trips = [];
   let activeTrip = null;
 
@@ -265,28 +296,35 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
     return activeTrip;
   }
 
-  for (const node of dispatchOrder) {
-    let remainingStability = node.allocatedForStability;
-    let remainingReserve = node.allocatedForReserve;
+  function appendStop(trip, segment, amount) {
+    const forStability = segment.phase === 'stability' ? amount : 0;
+    const forReserve = roundTo(amount - forStability);
+    const lastStop = trip.stops[trip.stops.length - 1];
 
-    while (remainingStability > 0 || remainingReserve > 0) {
+    if (lastStop && lastStop.name === segment.name && lastStop.status === segment.status) {
+      lastStop.fuel = roundTo(lastStop.fuel + amount);
+      lastStop.forStability = roundTo(lastStop.forStability + forStability);
+      lastStop.forReserve = roundTo(lastStop.forReserve + forReserve);
+      return;
+    }
+
+    trip.stops.push({
+      name: segment.name,
+      status: segment.status,
+      fuel: roundTo(amount),
+      forStability: roundTo(forStability),
+      forReserve,
+    });
+  }
+
+  for (const segment of manifestSegments) {
+    while (segment.remainingFuel > 0) {
       const trip = ensureTrip();
-      const amount = Math.min(trip.remainingCapacity, remainingStability + remainingReserve);
-      const forStability = Math.min(amount, remainingStability);
-      const forReserve = roundTo(amount - forStability);
-
-      trip.stops.push({
-        name: node.name,
-        status: node.status,
-        fuel: roundTo(amount),
-        forStability: roundTo(forStability),
-        forReserve,
-      });
+      const amount = Math.min(trip.remainingCapacity, segment.remainingFuel);
+      appendStop(trip, segment, amount);
       trip.fuel = roundTo(trip.fuel + amount);
       trip.remainingCapacity = roundTo(Math.max(0, trip.remainingCapacity - amount));
-
-      remainingStability = roundTo(Math.max(0, remainingStability - forStability));
-      remainingReserve = roundTo(Math.max(0, remainingReserve - forReserve));
+      segment.remainingFuel = roundTo(Math.max(0, segment.remainingFuel - amount));
     }
   }
 
