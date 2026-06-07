@@ -14,6 +14,7 @@ import {
   buildNodeTableTsv,
   buildTripManifestTsv,
 } from './report-export.js';
+import { buildExportFiles, downloadExportFiles } from './download-pack.js';
 import { clearDraft, loadDraft, normalizeFormState, saveDraft } from './local-draft.js';
 import { buildShareUrl, parseShareState } from './state-share.js';
 
@@ -56,9 +57,12 @@ const copyReportButton = document.querySelector('[data-copy-report]');
 const copyNodeTsvButton = document.querySelector('[data-copy-node-tsv]');
 const copyTripTsvButton = document.querySelector('[data-copy-trip-tsv]');
 const copyShareLinkButton = document.querySelector('[data-copy-share-link]');
+const downloadPackButton = document.querySelector('[data-download-pack]');
 const clearDraftButton = document.querySelector('[data-clear-draft]');
 const floorNeedHeader = document.querySelector('[data-floor-need-label]');
 const floorGapHeader = document.querySelector('[data-floor-gap-label]');
+
+let currentPlan = null;
 
 function formatNumber(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value);
@@ -477,6 +481,8 @@ function renderPlan(plan) {
   copyNodeTsvButton.dataset.tsv = buildNodeTableTsv(plan);
   copyTripTsvButton.disabled = plan.dispatch.trips.length === 0;
   copyTripTsvButton.dataset.tsv = plan.dispatch.trips.length === 0 ? '' : buildTripManifestTsv(plan);
+  currentPlan = plan;
+  downloadPackButton.disabled = false;
   syncShareState();
 
   if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.additionalArrivalRisk > 0) {
@@ -540,12 +546,14 @@ function updatePlan() {
     dispatchList.innerHTML = '';
     tripList.innerHTML = '';
     tableBody.innerHTML = '';
+    currentPlan = null;
     copyReportButton.disabled = true;
     copyReportButton.dataset.report = '';
     copyNodeTsvButton.disabled = true;
     copyNodeTsvButton.dataset.tsv = '';
     copyTripTsvButton.disabled = true;
     copyTripTsvButton.dataset.tsv = '';
+    downloadPackButton.disabled = true;
     copyShareLinkButton.disabled = true;
     copyShareLinkButton.dataset.shareUrl = '';
     setFeedback(error instanceof Error ? error.message : 'Could not calculate fuel plan.', 'critical');
@@ -599,6 +607,23 @@ copyShareLinkButton.addEventListener('click', async () => {
   }
 });
 
+downloadPackButton.addEventListener('click', () => {
+  if (!currentPlan) {
+    return;
+  }
+
+  try {
+    const files = buildExportFiles(currentPlan, getFormState(), {
+      generatedAt: new Date(),
+      shareUrl: copyShareLinkButton.dataset.shareUrl || '',
+    });
+    const downloaded = downloadExportFiles(files);
+    setFeedback(`Downloaded ${downloaded} export file${downloaded === 1 ? '' : 's'} for handoff.`, 'stable');
+  } catch {
+    setFeedback('Could not build the export pack. Try recalculating the plan first.', 'warning');
+  }
+});
+
 form.addEventListener('input', () => {
   persistDraftState();
 });
@@ -623,3 +648,4 @@ applyFormState(hasSharedState
   ? sharedState
   : (savedDraftState ?? defaultFormState));
 updatePlan();
+
