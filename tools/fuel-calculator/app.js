@@ -14,6 +14,7 @@ import {
   buildNodeTableTsv,
   buildTripManifestTsv,
 } from './report-export.js';
+import { clearDraft, loadDraft, normalizeFormState, saveDraft } from './local-draft.js';
 import { buildShareUrl, parseShareState } from './state-share.js';
 
 const sampleRows = [
@@ -24,6 +25,17 @@ const sampleRows = [
   'Refinery Spine\t110\t500\t8\t\t4\t16\t36',
   'Dormant Backup\t50\t100\t0\t0\t0\t0\t0',
 ].join('\n');
+
+const defaultFormState = {
+  nodes: sampleRows,
+  stabilityHours: String(CRITICAL_STABILITY_HOURS),
+  reserveHours: String(DEFAULT_RESERVE_HOURS),
+  deliveryDelayHours: '3',
+  availableFuel: '220',
+  tripCapacity: '90',
+  tripTurnaroundHours: '2',
+  haulerCount: '2',
+};
 
 const form = document.querySelector('[data-fuel-form]');
 const textarea = document.querySelector('[data-node-input]');
@@ -44,6 +56,7 @@ const copyReportButton = document.querySelector('[data-copy-report]');
 const copyNodeTsvButton = document.querySelector('[data-copy-node-tsv]');
 const copyTripTsvButton = document.querySelector('[data-copy-trip-tsv]');
 const copyShareLinkButton = document.querySelector('[data-copy-share-link]');
+const clearDraftButton = document.querySelector('[data-clear-draft]');
 const floorNeedHeader = document.querySelector('[data-floor-need-label]');
 const floorGapHeader = document.querySelector('[data-floor-gap-label]');
 
@@ -402,6 +415,16 @@ async function copyDatasetValue(button, key, successMessage, failureMessage) {
   }
 }
 
+function getDraftStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const draftStorage = getDraftStorage();
+
 function getFormState() {
   return {
     nodes: textarea.value,
@@ -416,14 +439,23 @@ function getFormState() {
 }
 
 function applyFormState(formState) {
-  textarea.value = formState.nodes;
-  stabilityInput.value = formState.stabilityHours;
-  reserveInput.value = formState.reserveHours;
-  deliveryDelayInput.value = formState.deliveryDelayHours;
-  availableFuelInput.value = formState.availableFuel;
-  tripCapacityInput.value = formState.tripCapacity;
-  tripTurnaroundInput.value = formState.tripTurnaroundHours;
-  haulerCountInput.value = formState.haulerCount;
+  const normalizedFormState = normalizeFormState(formState);
+  textarea.value = normalizedFormState.nodes;
+  stabilityInput.value = normalizedFormState.stabilityHours;
+  reserveInput.value = normalizedFormState.reserveHours;
+  deliveryDelayInput.value = normalizedFormState.deliveryDelayHours;
+  availableFuelInput.value = normalizedFormState.availableFuel;
+  tripCapacityInput.value = normalizedFormState.tripCapacity;
+  tripTurnaroundInput.value = normalizedFormState.tripTurnaroundHours;
+  haulerCountInput.value = normalizedFormState.haulerCount;
+}
+
+function syncDraftControls(hasSavedDraft) {
+  clearDraftButton.disabled = !hasSavedDraft;
+}
+
+function persistDraftState() {
+  syncDraftControls(saveDraft(draftStorage, getFormState()));
 }
 
 function syncShareState() {
@@ -521,14 +553,8 @@ function updatePlan() {
 }
 
 fillSampleButton.addEventListener('click', () => {
-  textarea.value = sampleRows;
-  stabilityInput.value = String(CRITICAL_STABILITY_HOURS);
-  reserveInput.value = String(DEFAULT_RESERVE_HOURS);
-  deliveryDelayInput.value = '3';
-  availableFuelInput.value = '220';
-  tripCapacityInput.value = '90';
-  tripTurnaroundInput.value = '2';
-  haulerCountInput.value = '2';
+  applyFormState(defaultFormState);
+  persistDraftState();
   updatePlan();
 });
 
@@ -573,25 +599,27 @@ copyShareLinkButton.addEventListener('click', async () => {
   }
 });
 
+form.addEventListener('input', () => {
+  persistDraftState();
+});
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   updatePlan();
 });
 
+clearDraftButton.addEventListener('click', () => {
+  clearDraft(draftStorage);
+  syncDraftControls(false);
+  setFeedback('Cleared the saved local draft. The current workspace stays loaded until you replace or refresh it.', 'stable');
+});
+
 const sharedState = parseShareState(window.location.href);
 const hasSharedState = Object.values(sharedState).some((value) => value !== '');
+const savedDraftState = loadDraft(draftStorage);
 
+syncDraftControls(savedDraftState !== null);
 applyFormState(hasSharedState
   ? sharedState
-  : {
-    nodes: sampleRows,
-    stabilityHours: String(CRITICAL_STABILITY_HOURS),
-    reserveHours: String(DEFAULT_RESERVE_HOURS),
-    deliveryDelayHours: '3',
-    availableFuel: '220',
-    tripCapacity: '90',
-    tripTurnaroundHours: '2',
-    haulerCount: '2',
-  });
+  : (savedDraftState ?? defaultFormState));
 updatePlan();
-
