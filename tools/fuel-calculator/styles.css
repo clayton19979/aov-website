@@ -147,6 +147,11 @@ textarea {
   cursor: not-allowed;
 }
 
+.actions .ghost-button,
+.actions .primary-button {
+  min-width: 160px;
+}
+
 .feedback {
   min-height: 24px;
   margin: 16px 0 0;
@@ -371,3 +376,4 @@ code {
 .trip-stops small {
   color: rgba(226, 232, 240, 0.76);
 }
+
