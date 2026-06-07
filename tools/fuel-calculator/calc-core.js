@@ -240,27 +240,118 @@ function compareDispatchPriority(left, right) {
   return right.fuelToReserve - left.fuelToReserve;
 }
 
-export function buildDispatchTrips(dispatchOrder, tripCapacity) {
+function getTripDepartureOffsetHours(tripIndex, tripTurnaroundHours, haulerCount) {
+  return roundTo(Math.floor(tripIndex / haulerCount) * tripTurnaroundHours);
+}
+
+function projectNodeArrival(node, state, arrivalOffsetHours) {
+  const elapsedHours = Math.max(0, arrivalOffsetHours - state.lastArrivalOffsetHours);
+  const burnSinceLastStop = Math.min(state.fuel, node.burnRatePerHour * elapsedHours);
+  const fuelBeforeArrival = roundTo(Math.max(0, state.fuel - burnSinceLastStop));
+  const runsDryBeforeArrival = node.burnRatePerHour > 0
+    && state.fuel / node.burnRatePerHour < elapsedHours;
+  const projectedHoursBeforeDelivery = node.burnRatePerHour === 0
+    ? Number.POSITIVE_INFINITY
+    : roundTo(fuelBeforeArrival / node.burnRatePerHour);
+
+  return {
+    fuelBeforeArrival,
+    runsDryBeforeArrival,
+    projectedHoursBeforeDelivery,
+  };
+}
+
+function applyScheduledStop(node, state, arrivalOffsetHours, fuel) {
+  const projection = projectNodeArrival(node, state, arrivalOffsetHours);
+  const fuelAfterDelivery = roundTo(Math.min(node.maxFuel, projection.fuelBeforeArrival + fuel));
+  const projectedHoursAfterDelivery = node.burnRatePerHour === 0
+    ? Number.POSITIVE_INFINITY
+    : roundTo(fuelAfterDelivery / node.burnRatePerHour);
+  const remainingStabilityGap = roundTo(Math.max(0, node.stabilityFuel - fuelAfterDelivery));
+  const remainingReserveGap = roundTo(Math.max(0, node.reserveFuel - fuelAfterDelivery));
+
+  state.fuel = fuelAfterDelivery;
+  state.lastArrivalOffsetHours = arrivalOffsetHours;
+  state.lastProjectedHoursAfterDelivery = projectedHoursAfterDelivery;
+  state.remainingStabilityGap = remainingStabilityGap;
+  state.remainingReserveGap = remainingReserveGap;
+  state.scheduledArrivalOffsetHours = arrivalOffsetHours;
+  state.scheduledRunsDryBeforeArrival = state.scheduledRunsDryBeforeArrival || projection.runsDryBeforeArrival;
+  state.allocatedStops += 1;
+
+  return {
+    arrivalOffsetHours,
+    fuelBeforeArrival: projection.fuelBeforeArrival,
+    fuelAfterDelivery,
+    projectedHoursAfterDelivery,
+    remainingStabilityGap,
+    remainingReserveGap,
+    runsDryBeforeArrival: projection.runsDryBeforeArrival,
+  };
+}
+
+function compareManifestCandidates(left, right, phase) {
+  if (left.projection.runsDryBeforeArrival !== right.projection.runsDryBeforeArrival) {
+    return left.projection.runsDryBeforeArrival ? -1 : 1;
+  }
+
+  const hoursDelta = left.projection.projectedHoursBeforeDelivery - right.projection.projectedHoursBeforeDelivery;
+  if (hoursDelta !== 0) {
+    return hoursDelta;
+  }
+
+  const priorityDelta = right.node.priority - left.node.priority;
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+
+  const remainingFuelDelta = right.remainingFuel - left.remainingFuel;
+  if (remainingFuelDelta !== 0) {
+    return remainingFuelDelta;
+  }
+
+  if (phase === 'stability') {
+    const stabilityNeedDelta = right.node.fuelToStability - left.node.fuelToStability;
+    if (stabilityNeedDelta !== 0) {
+      return stabilityNeedDelta;
+    }
+  } else {
+    const reserveNeedDelta = right.node.fuelToReserve - left.node.fuelToReserve;
+    if (reserveNeedDelta !== 0) {
+      return reserveNeedDelta;
+    }
+  }
+
+  return left.dispatchIndex - right.dispatchIndex;
+}
+
+export function buildDispatchTrips(
+  dispatchOrder,
+  tripCapacity,
+  tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
+  haulerCount = DEFAULT_HAULER_COUNT,
+) {
   const normalizedTripCapacity = toFiniteNumber(tripCapacity);
   if (normalizedTripCapacity === null || normalizedTripCapacity <= 0) {
     return [];
   }
+  const normalizedTripTurnaroundHours = Math.max(
+    0,
+    toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
+  );
+  const normalizedHaulerCount = Math.max(1, Math.floor(toFiniteNumber(haulerCount) ?? DEFAULT_HAULER_COUNT));
+  const dispatchIndexMap = new Map(dispatchOrder.map((node, index) => [node.name, index]));
+  const nodeMap = new Map(dispatchOrder.map((node) => [node.name, node]));
+  const nodeStates = new Map(dispatchOrder.map((node) => [
+    node.name,
+    {
+      fuel: node.currentFuel,
+      lastArrivalOffsetHours: 0,
+    },
+  ]));
 
   const stabilitySegments = dispatchOrder
     .filter((node) => node.allocatedForStability > 0)
-    .sort((left, right) => {
-      const priorityDelta = right.priority - left.priority;
-      if (priorityDelta !== 0) {
-        return priorityDelta;
-      }
-
-      const hoursDelta = left.hoursAtArrival - right.hoursAtArrival;
-      if (hoursDelta !== 0) {
-        return hoursDelta;
-      }
-
-      return right.allocatedForStability - left.allocatedForStability;
-    })
     .map((node) => ({
       name: node.name,
       status: node.status,
@@ -269,7 +360,6 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
     }));
   const reserveSegments = dispatchOrder
     .filter((node) => node.allocatedForReserve > 0)
-    .sort(compareDispatchPriority)
     .map((node) => ({
       name: node.name,
       status: node.status,
@@ -287,7 +377,11 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
         capacity: roundTo(normalizedTripCapacity),
         fuel: 0,
         remainingCapacity: roundTo(normalizedTripCapacity),
-        departureOffsetHours: 0,
+        departureOffsetHours: getTripDepartureOffsetHours(
+          trips.length,
+          normalizedTripTurnaroundHours,
+          normalizedHaulerCount,
+        ),
         stops: [],
       };
       trips.push(activeTrip);
@@ -317,14 +411,51 @@ export function buildDispatchTrips(dispatchOrder, tripCapacity) {
     });
   }
 
-  for (const segment of manifestSegments) {
-    while (segment.remainingFuel > 0) {
-      const trip = ensureTrip();
-      const amount = Math.min(trip.remainingCapacity, segment.remainingFuel);
-      appendStop(trip, segment, amount);
-      trip.fuel = roundTo(trip.fuel + amount);
-      trip.remainingCapacity = roundTo(Math.max(0, trip.remainingCapacity - amount));
-      segment.remainingFuel = roundTo(Math.max(0, segment.remainingFuel - amount));
+  while (manifestSegments.some((segment) => segment.remainingFuel > 0)) {
+    const trip = ensureTrip();
+    const phase = stabilitySegments.some((segment) => segment.remainingFuel > 0) ? 'stability' : 'reserve';
+    const candidateSegments = manifestSegments
+      .filter((segment) => segment.phase === phase && segment.remainingFuel > 0)
+      .map((segment) => {
+        const node = nodeMap.get(segment.name);
+        const arrivalOffsetHours = roundTo(trip.departureOffsetHours + node.deliveryDelayHours);
+
+        return {
+          ...segment,
+          node,
+          arrivalOffsetHours,
+          dispatchIndex: dispatchIndexMap.get(segment.name) ?? Number.MAX_SAFE_INTEGER,
+          projection: projectNodeArrival(node, nodeStates.get(segment.name), arrivalOffsetHours),
+        };
+      })
+      .sort((left, right) => compareManifestCandidates(left, right, phase));
+
+    if (candidateSegments.length === 0) {
+      break;
+    }
+
+    const selectedSegment = candidateSegments[0];
+    const amount = Math.min(trip.remainingCapacity, selectedSegment.remainingFuel);
+    appendStop(trip, selectedSegment, amount);
+    trip.fuel = roundTo(trip.fuel + amount);
+    trip.remainingCapacity = roundTo(Math.max(0, trip.remainingCapacity - amount));
+
+    const liveSegment = manifestSegments.find((segment) => (
+      segment.name === selectedSegment.name && segment.phase === selectedSegment.phase
+    ));
+    if (liveSegment) {
+      liveSegment.remainingFuel = roundTo(Math.max(0, liveSegment.remainingFuel - amount));
+    }
+
+    applyScheduledStop(
+      selectedSegment.node,
+      nodeStates.get(selectedSegment.name),
+      selectedSegment.arrivalOffsetHours,
+      amount,
+    );
+
+    if (trip.remainingCapacity <= 0) {
+      activeTrip = null;
     }
   }
 
@@ -359,43 +490,23 @@ function applyTripSchedule(
 
   const scheduledTrips = trips.map((trip, tripIndex) => ({
     ...trip,
-    departureOffsetHours: roundTo(Math.floor(tripIndex / normalizedHaulerCount) * normalizedTripTurnaroundHours),
+    departureOffsetHours: getTripDepartureOffsetHours(
+      tripIndex,
+      normalizedTripTurnaroundHours,
+      normalizedHaulerCount,
+    ),
     stops: trip.stops.map((stop) => {
       const node = nodeMap.get(stop.name);
       const state = nodeStates.get(stop.name);
       const arrivalOffsetHours = roundTo(
-        (Math.floor(tripIndex / normalizedHaulerCount) * normalizedTripTurnaroundHours) + node.deliveryDelayHours,
+        getTripDepartureOffsetHours(tripIndex, normalizedTripTurnaroundHours, normalizedHaulerCount)
+        + node.deliveryDelayHours,
       );
-      const elapsedHours = Math.max(0, arrivalOffsetHours - state.lastArrivalOffsetHours);
-      const burnSinceLastStop = Math.min(state.fuel, node.burnRatePerHour * elapsedHours);
-      const fuelBeforeArrival = roundTo(Math.max(0, state.fuel - burnSinceLastStop));
-      const runsDryBeforeArrival = node.burnRatePerHour > 0
-        && state.fuel / node.burnRatePerHour < elapsedHours;
-      const fuelAfterDelivery = roundTo(Math.min(node.maxFuel, fuelBeforeArrival + stop.fuel));
-      const projectedHoursAfterDelivery = node.burnRatePerHour === 0
-        ? Number.POSITIVE_INFINITY
-        : roundTo(fuelAfterDelivery / node.burnRatePerHour);
-      const remainingStabilityGap = roundTo(Math.max(0, node.stabilityFuel - fuelAfterDelivery));
-      const remainingReserveGap = roundTo(Math.max(0, node.reserveFuel - fuelAfterDelivery));
-
-      state.fuel = fuelAfterDelivery;
-      state.lastArrivalOffsetHours = arrivalOffsetHours;
-      state.lastProjectedHoursAfterDelivery = projectedHoursAfterDelivery;
-      state.remainingStabilityGap = remainingStabilityGap;
-      state.remainingReserveGap = remainingReserveGap;
-      state.scheduledArrivalOffsetHours = arrivalOffsetHours;
-      state.scheduledRunsDryBeforeArrival = state.scheduledRunsDryBeforeArrival || runsDryBeforeArrival;
-      state.allocatedStops += 1;
+      const stopOutcome = applyScheduledStop(node, state, arrivalOffsetHours, stop.fuel);
 
       return {
         ...stop,
-        arrivalOffsetHours,
-        fuelBeforeArrival,
-        fuelAfterDelivery,
-        projectedHoursAfterDelivery,
-        remainingStabilityGap,
-        remainingReserveGap,
-        runsDryBeforeArrival,
+        ...stopOutcome,
       };
     }),
   }));
@@ -720,7 +831,12 @@ export function planFuel(
     },
   );
 
-  const trips = buildDispatchTrips(dispatchOrder, normalizedTripCapacity);
+  const trips = buildDispatchTrips(
+    dispatchOrder,
+    normalizedTripCapacity,
+    normalizedTripTurnaroundHours,
+    normalizedHaulerCount,
+  );
   const tripSchedule = normalizedTripCapacity === null
     ? {
       trips,

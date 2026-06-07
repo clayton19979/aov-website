@@ -1010,6 +1010,102 @@ test('planFuel schedules concurrent haulers into the same departure wave', () =>
   );
 });
 
+test('planFuel prioritizes long-delay critical nodes when trip waves would otherwise deepen stability loss', () => {
+  const plan = planFuel([
+    { name: 'Node 1', currentFuel: 42, maxFuel: 144, burnRatePerHour: 6, deliveryDelayHours: 1, priority: 2 },
+    { name: 'Node 2', currentFuel: 29, maxFuel: 138, burnRatePerHour: 11, deliveryDelayHours: 4, priority: 0 },
+    { name: 'Node 3', currentFuel: 39, maxFuel: 163, burnRatePerHour: 8, deliveryDelayHours: 2, priority: 2 },
+  ], 24, 154, 12, 0, 48, 1, 1);
+
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 2,
+    degradedReserve: 2,
+  });
+  assert.deepEqual(
+    plan.dispatch.trips.map((trip) => ({
+      tripNumber: trip.tripNumber,
+      departureOffsetHours: trip.departureOffsetHours,
+      stops: trip.stops.map((stop) => ({
+        name: stop.name,
+        fuel: stop.fuel,
+        forStability: stop.forStability,
+        arrivalOffsetHours: stop.arrivalOffsetHours,
+        runsDryBeforeArrival: stop.runsDryBeforeArrival,
+      })),
+    })),
+    [
+      {
+        tripNumber: 1,
+        departureOffsetHours: 0,
+        stops: [
+          {
+            name: 'Node 2',
+            fuel: 45,
+            forStability: 45,
+            arrivalOffsetHours: 4,
+            runsDryBeforeArrival: true,
+          },
+          {
+            name: 'Node 3',
+            fuel: 3,
+            forStability: 3,
+            arrivalOffsetHours: 2,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 2,
+        departureOffsetHours: 1,
+        stops: [
+          {
+            name: 'Node 3',
+            fuel: 48,
+            forStability: 48,
+            arrivalOffsetHours: 3,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 3,
+        departureOffsetHours: 2,
+        stops: [
+          {
+            name: 'Node 1',
+            fuel: 36,
+            forStability: 36,
+            arrivalOffsetHours: 3,
+            runsDryBeforeArrival: false,
+          },
+          {
+            name: 'Node 3',
+            fuel: 12,
+            forStability: 12,
+            arrivalOffsetHours: 4,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 4,
+        departureOffsetHours: 3,
+        stops: [
+          {
+            name: 'Node 3',
+            fuel: 10,
+            forStability: 10,
+            arrivalOffsetHours: 5,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+    ],
+  );
+});
+
 test('parseNodeRows accepts optional priority columns in headers and trailing positional fields', () => {
   const rows = parseNodeRows([
     'node,current fuel,max fuel,burn rate,travel hours,rank',
