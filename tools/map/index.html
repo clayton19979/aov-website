@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Void Map — AoV</title>
+    <title>Void Map &mdash; AoV</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -16,7 +16,7 @@
         </div>
         <div class="map-tools" aria-label="Map controls">
           <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-          <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+          <button id="zoomOut" title="Zoom out" aria-label="Zoom out">&minus;</button>
           <button id="fitRoute" title="Fit route" aria-label="Fit route">FIT</button>
           <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
           <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
@@ -54,7 +54,7 @@
         <section class="overlay-section" aria-label="Map overlays">
           <div class="section-title">
             <h3>Map Overlays</h3>
-            <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
+            <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">&#8635;</button>
           </div>
           <div class="overlay-toggles">
             <label class="overlay-toggle" id="killsToggleLabel">
@@ -164,6 +164,7 @@
 
     <script src="./route-core.js"></script>
     <script src="./gate-cache.js"></script>
+    <script src="./map-state-share.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

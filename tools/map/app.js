@@ -1388,21 +1388,33 @@ async function copyRouteToClipboard() {
   setStatus("In-game route copied");
 }
 
-function routeShareUrl() {
+function getRouteShareState() {
   const origin = parseSystem(els.origin.value);
   const destination = parseSystem(els.destination.value);
   const via = parseSystem(els.via.value);
-  if (!origin || !destination) return "";
-  const params = new URLSearchParams();
-  params.set("system1", String(origin.id));
-  params.set("system2", String(destination.id));
-  if (via) params.set("via", String(via.id));
-  params.set("jumpDistance", String(Number(els.jumpRange.value || 120)));
-  params.set("optimize", new FormData(els.form).get("optimize") || "fuel");
-  params.set("useGates", els.useGates.checked ? "1" : "0");
-  const url = new URL(location.href);
-  url.search = params.toString();
-  return url.toString();
+
+  return {
+    origin: origin?.id ?? "",
+    destination: destination?.id ?? "",
+    via: via?.id ?? "",
+    jumpDistance: Number(els.jumpRange.value || 120),
+    optimize: new FormData(els.form).get("optimize") || "fuel",
+    useGates: els.useGates.checked,
+    showGameGates: state.showGameGates,
+    showSmartGateLinks: state.showSmartGateLinks,
+    avoidKills: state.avoidKills,
+    showJumpRange: state.showJumpRange,
+    showKills: state.showKills,
+    killWindow: state.overlayKillsTimeWindow,
+    showKillLabels: state.showKillLabels,
+    showAssemblies: state.showAssemblies,
+    assembliesOnlineOnly: state.overlayAssembliesOnlineOnly,
+    showPlayerBases: state.showPlayerBases,
+  };
+}
+
+function routeShareUrl() {
+  return MapStateShare.buildShareUrl(getRouteShareState(), location.href);
 }
 
 async function copyShareLinkToClipboard() {
@@ -1428,23 +1440,33 @@ async function copyShareLinkToClipboard() {
 }
 
 function loadUrlParams() {
-  const params = new URLSearchParams(location.search);
-  const origin = params.get("system1");
-  const destination = params.get("system2");
-  const via = params.get("via");
-  const jump = params.get("jumpDistance");
-  const optimize = params.get("optimize");
-  const useGates = params.get("useGates");
-  if (origin) els.origin.value = origin;
-  if (destination) els.destination.value = destination;
-  if (via) els.via.value = via;
-  if (jump) els.jumpRange.value = jump;
-  if (["fuel", "jumps"].includes(optimize)) {
-    document.querySelector(`[name="optimize"][value="${optimize}"]`).checked = true;
-  }
-  if (["0", "false", "off", "no"].includes(String(useGates).toLowerCase())) {
-    els.useGates.checked = false;
-  }
+  const shared = MapStateShare.parseShareState(location.href);
+  if (shared.origin) els.origin.value = shared.origin;
+  if (shared.destination) els.destination.value = shared.destination;
+  if (shared.via) els.via.value = shared.via;
+  els.jumpRange.value = String(shared.jumpDistance);
+  document.querySelector(`[name="optimize"][value="${shared.optimize}"]`).checked = true;
+  els.useGates.checked = shared.useGates;
+  state.showGameGates = shared.showGameGates;
+  state.showSmartGateLinks = shared.showSmartGateLinks;
+  state.avoidKills = shared.avoidKills;
+  state.showJumpRange = shared.showJumpRange;
+  state.showKills = shared.showKills;
+  state.overlayKillsTimeWindow = shared.killWindow;
+  state.showKillLabels = shared.showKillLabels;
+  state.showAssemblies = shared.showAssemblies;
+  state.overlayAssembliesOnlineOnly = shared.assembliesOnlineOnly;
+  state.showPlayerBases = shared.showPlayerBases;
+  els.showGameGatesToggle.checked = state.showGameGates;
+  els.showSmartGateLinksToggle.checked = state.showSmartGateLinks;
+  els.avoidKillsToggle.checked = state.avoidKills;
+  els.showJumpRangeToggle.checked = state.showJumpRange;
+  els.killsToggle.checked = state.showKills;
+  els.killTimePanel.style.display = state.showKills ? "" : "none";
+  els.showKillLabelsToggle.checked = state.showKillLabels;
+  els.assembliesToggle.checked = state.showAssemblies;
+  els.assembliesOnlineOnlyToggle.checked = state.overlayAssembliesOnlineOnly;
+  els.playerBasesToggle.checked = state.showPlayerBases;
 }
 
 function resolveWaypoint() {
@@ -2297,11 +2319,12 @@ function bindOverlayEvents() {
 async function init() {
   bindEvents();
   bindOverlayEvents();
-  updateTimePresets();
   loadUrlParams();
+  updateTimePresets();
   updateRangePresets();
   updateRouteActions();
   updateSystemActions();
+  updateOverlayLegend();
   renderRouteState("Pick an origin and destination", "Use search or click stars on the map.", "", "Pick");
   resizeCanvas();
   try {
@@ -2318,6 +2341,11 @@ async function init() {
   fitSystems(state.systems);
   // Load gate network eagerly so links appear on the map immediately
   ensureGateNetwork().catch(() => {});
+  const overlayTasks = [];
+  if (state.showKills) overlayTasks.push(toggleOverlay("kills", true));
+  if (state.showAssemblies) overlayTasks.push(toggleOverlay("assemblies", true));
+  if (state.showPlayerBases) overlayTasks.push(toggleOverlay("playerBases", true));
+  if (overlayTasks.length) await Promise.all(overlayTasks);
   if (els.origin.value && els.destination.value) calculate();
 }
 
