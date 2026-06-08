@@ -13,7 +13,7 @@
         <h1>Network Node Fuel Calculator</h1>
         <p class="lede">
           Paste node fuel snapshots, set an emergency floor and reserve window, and turn a limited fuel cache into an actionable dispatch brief.
-          Critical nodes are stabilized to your chosen floor before the planner spends remaining fuel on the broader reserve target.
+          Critical nodes are stabilized to their target floor before the planner spends remaining fuel on the broader reserve target.
         </p>
       </header>
 
@@ -35,7 +35,7 @@
           </label>
 
           <label class="field">
-            <span>Delivery Delay (hours)</span>
+            <span>Default Delivery Delay (hours)</span>
             <input data-delivery-delay-hours type="number" min="0" step="1" />
           </label>
 
@@ -45,20 +45,36 @@
           </label>
 
           <label class="field">
+            <span>Trip Capacity (optional)</span>
+            <input data-trip-capacity type="number" min="0" step="1" placeholder="Split dispatch into hauler-sized trips" />
+          </label>
+
+          <label class="field">
+            <span>Trip Turnaround (hours)</span>
+            <input data-trip-turnaround-hours type="number" min="0" step="0.5" placeholder="Delay between trip departures" />
+          </label>
+
+          <label class="field">
+            <span>Hauler Count</span>
+            <input data-hauler-count type="number" min="1" step="1" placeholder="Parallel ships sharing the manifest queue" />
+          </label>
+
+          <label class="field">
             <span>CSV or TSV Rows</span>
             <textarea
               data-node-input
               rows="10"
               spellcheck="false"
-              placeholder="North Gate,90,400,10"
+              placeholder="North Gate,90,400,10[,2][,3][,12][,24] or North Gate,37.5%,400,10"
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. Each node name must appear only once per run. Delivery delay applies burn before any dispatched fuel lands.</p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours][,priority][,stabilityHours][,reserveHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, inline fuel percentages like <code>37.5%</code>, percent columns such as <code>fuelPercent</code>, runtime columns such as <code>hoursRemaining</code>, extra spreadsheet columns, and <code># comments</code> are accepted. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. If a row includes <code>priority</code>, higher values break ties inside the same alert band and critical-floor queue. If a row includes <code>stabilityHours</code> or <code>reserveHours</code>, that node carries its own coverage targets for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing alert-band precedence. Trip turnaround delays each later manifest departure so you can spot batching risk before launch. Hauler count lets multiple ships launch in parallel before the next turnaround wave. Each node name must appear only once per run.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>
             <button type="button" class="ghost-button" data-copy-report disabled>Copy Dispatch Report</button>
+            <button type="button" class="ghost-button" data-copy-share-link disabled>Copy Share Link</button>
           </div>
 
           <p class="feedback" data-feedback data-tone="info"></p>
@@ -76,6 +92,11 @@
             <ol class="dispatch-list" data-dispatch-list></ol>
           </div>
 
+          <div class="dispatch-block">
+            <h3>Trip Manifests</h3>
+            <ol class="trip-list" data-trip-list></ol>
+          </div>
+
           <div class="table-wrap">
             <table>
               <thead>
@@ -84,8 +105,12 @@
                   <th>Current</th>
                   <th>Max</th>
                   <th>Burn / hr</th>
+                  <th>Priority</th>
+                  <th>Delay</th>
+                  <th>Floor / Reserve</th>
                   <th>Runtime Now</th>
                   <th>At Arrival</th>
+                  <th>Last Drop</th>
                   <th data-floor-need-label>To Floor</th>
                   <th data-floor-gap-label>Floor Gap</th>
                   <th>To Reserve</th>
@@ -105,3 +130,4 @@
     <script type="module" src="./app.js"></script>
   </body>
 </html>
+

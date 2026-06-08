@@ -4,16 +4,44 @@ import assert from 'node:assert/strict';
 import {
   CRITICAL_STABILITY_HOURS,
   DEFAULT_DELIVERY_DELAY_HOURS,
+  DEFAULT_HAULER_COUNT,
   DEFAULT_RESERVE_HOURS,
+  DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
   parseNodeRows,
   planFuel,
 } from './calc-core.js';
 
+function pickTripFields(plan) {
+  return plan.dispatch.trips.map((trip) => ({
+    tripNumber: trip.tripNumber,
+    capacity: trip.capacity,
+    fuel: trip.fuel,
+    remainingCapacity: trip.remainingCapacity,
+    departureOffsetHours: trip.departureOffsetHours,
+    stops: trip.stops.map((stop) => ({
+      name: stop.name,
+      status: stop.status,
+      fuel: stop.fuel,
+      forStability: stop.forStability,
+      forReserve: stop.forReserve,
+      arrivalOffsetHours: stop.arrivalOffsetHours,
+      fuelBeforeArrival: stop.fuelBeforeArrival,
+      fuelAfterDelivery: stop.fuelAfterDelivery,
+      projectedHoursAfterDelivery: stop.projectedHoursAfterDelivery,
+      remainingStabilityGap: stop.remainingStabilityGap,
+      remainingReserveGap: stop.remainingReserveGap,
+      runsDryBeforeArrival: stop.runsDryBeforeArrival,
+    })),
+  }));
+}
+
 function pickDispatchFields(plan) {
   return plan.dispatch.order.map((node) => ({
     name: node.name,
     status: node.status,
+    deliveryDelayHours: node.deliveryDelayHours,
+    usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
     hoursRemaining: node.hoursRemaining,
     hoursAtArrival: node.hoursAtArrival,
     projectedHoursAfterDispatch: node.projectedHoursAfterDispatch,
@@ -88,13 +116,98 @@ test('parseNodeRows accepts quoted CSV fields and formatted numeric values', () 
   ]);
 });
 
+test('parseNodeRows accepts optional delivery-delay columns in headers and trailing positional fields', () => {
+  const rows = parseNodeRows([
+    'node,current fuel,max fuel,burn rate,travel hours',
+    'North Gate,120,400,10,2.5',
+    'South Relay,60,240,5,',
+    'Refinery Spine,110,500,8,4',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 2.5 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, deliveryDelayHours: 4 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows('Forward Tower,90,300,6,1.5'),
+    [{ name: 'Forward Tower', currentFuel: 90, maxFuel: 300, burnRatePerHour: 6, deliveryDelayHours: 1.5 }],
+  );
+});
+
+
+test('parseNodeRows accepts percent-based fuel snapshots from inline values and percent headers', () => {
+  const rows = parseNodeRows([
+    'name,current fuel,max fuel,burn rate',
+    'North Gate,37.5%,400,10',
+    'South Relay,25%,240,5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 150, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows([
+      'node,fuel percent,max fuel,burn rate',
+      'Refinery Spine,22,500,8',
+    ].join('\n')),
+    [{ name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8 }],
+  );
+});
+
+test('parseNodeRows accepts runtime-hour snapshots when current fuel is not provided', () => {
+  const rows = parseNodeRows([
+    'node,hours remaining,max fuel,burn rate',
+    'North Gate,15,400,10',
+    'South Relay,12,240,5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 150, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ]);
+});
+
+test('parseNodeRows rejects invalid percent and runtime-hour snapshots', () => {
+  assert.throws(
+    () => parseNodeRows('North Gate,120%,400,10'),
+    /Row 1 has an invalid current fuel percent/,
+  );
+
+  assert.throws(
+    () => parseNodeRows([
+      'node,fuel percent,max fuel,burn rate',
+      'North Gate,140,400,10',
+    ].join('\n')),
+    /Row 2 has an invalid current fuel percent/,
+  );
+
+  assert.throws(
+    () => parseNodeRows([
+      'node,hours remaining,max fuel,burn rate',
+      'Idle Node,4,100,0',
+    ].join('\n')),
+    /Row 2 runtime-hours input requires burn-per-hour above zero/,
+  );
+});
+
+test('parseNodeRows rejects invalid delivery delays', () => {
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,-1'),
+    /Row 1 has an invalid delivery delay value/,
+  );
+});
+
 test('parseNodeRows treats unmatched first-row labels as invalid data rather than a header', () => {
   assert.throws(
     () => parseNodeRows([
       'label,currentFuel,maxFuel,burnPerHour',
       'North Gate,120,400,10',
     ].join('\n')),
-    /Row 1 has an invalid current fuel value/,
+    /Row 1 has an invalid max fuel value/,
   );
 });
 
@@ -148,6 +261,7 @@ test('planFuel computes reserve, refill, and alert status', () => {
   assert.equal(plan.counts.stable, 2);
   assert.equal(plan.counts.arrivalRisk, 0);
   assert.equal(plan.counts.capacityLimited, 0);
+  assert.equal(plan.counts.customDeliveryDelay, 0);
   assert.equal(plan.totals.fuelConsumedBeforeArrival, 0);
   assert.equal(plan.totals.fuelAtArrival, 300);
   assert.equal(plan.totals.fuelToStability, 30);
@@ -212,6 +326,8 @@ test('planFuel stabilizes all critical nodes before spending fuel on reserve fil
     {
       name: 'North Gate',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 4,
       hoursAtArrival: 4,
       projectedHoursAfterDispatch: 12,
@@ -235,6 +351,8 @@ test('planFuel stabilizes all critical nodes before spending fuel on reserve fil
     {
       name: 'South Relay',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 6,
       hoursAtArrival: 6,
       projectedHoursAfterDispatch: 12,
@@ -258,6 +376,8 @@ test('planFuel stabilizes all critical nodes before spending fuel on reserve fil
     {
       name: 'Refinery Spine',
       status: 'warning',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 16,
       hoursAtArrival: 16,
       projectedHoursAfterDispatch: 16,
@@ -297,6 +417,8 @@ test('planFuel allocates limited stockpile by urgency and time remaining after s
     {
       name: 'North Gate',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 9,
       hoursAtArrival: 9,
       projectedHoursAfterDispatch: 24,
@@ -320,6 +442,8 @@ test('planFuel allocates limited stockpile by urgency and time remaining after s
     {
       name: 'South Relay',
       status: 'warning',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 12,
       hoursAtArrival: 12,
       projectedHoursAfterDispatch: 24,
@@ -343,6 +467,8 @@ test('planFuel allocates limited stockpile by urgency and time remaining after s
     {
       name: 'Refinery Spine',
       status: 'warning',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 13.8,
       hoursAtArrival: 13.8,
       projectedHoursAfterDispatch: 15,
@@ -384,6 +510,8 @@ test('planFuel caps dispatch at node max capacity and tracks structural stabilit
     {
       name: 'Forward Tower',
       status: 'critical',
+      deliveryDelayHours: 0,
+      usesCustomDeliveryDelay: false,
       hoursRemaining: 1,
       hoursAtArrival: 1,
       projectedHoursAfterDispatch: 10,
@@ -493,6 +621,85 @@ test('planFuel flags nodes that run dry before arrival', () => {
   );
 });
 
+test('planFuel applies per-node delivery delays ahead of the global default', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 1 },
+    { name: 'South Relay', currentFuel: 100, maxFuel: 240, burnRatePerHour: 5 },
+    { name: 'Forward Tower', currentFuel: 45, maxFuel: 160, burnRatePerHour: 10, deliveryDelayHours: 5 },
+  ], 24, 250, 12, 3);
+
+  assert.equal(plan.counts.customDeliveryDelay, 2);
+  assert.equal(plan.totals.fuelConsumedBeforeArrival, 70);
+  assert.deepEqual(
+    plan.perNode.map((node) => ({
+      name: node.name,
+      deliveryDelayHours: node.deliveryDelayHours,
+      usesCustomDeliveryDelay: node.usesCustomDeliveryDelay,
+      hoursAtArrival: node.hoursAtArrival,
+      fuelAtArrival: node.fuelAtArrival,
+      status: node.status,
+    })),
+    [
+      {
+        name: 'North Gate',
+        deliveryDelayHours: 1,
+        usesCustomDeliveryDelay: true,
+        hoursAtArrival: 11,
+        fuelAtArrival: 110,
+        status: 'critical',
+      },
+      {
+        name: 'South Relay',
+        deliveryDelayHours: 3,
+        usesCustomDeliveryDelay: false,
+        hoursAtArrival: 17,
+        fuelAtArrival: 85,
+        status: 'warning',
+      },
+      {
+        name: 'Forward Tower',
+        deliveryDelayHours: 5,
+        usesCustomDeliveryDelay: true,
+        hoursAtArrival: 0,
+        fuelAtArrival: 0,
+        status: 'critical',
+      },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      deliveryDelayHours: node.deliveryDelayHours,
+      runsDryBeforeArrival: node.runsDryBeforeArrival,
+      allocatedFuel: node.allocatedFuel,
+      projectedHoursAfterDispatch: node.projectedHoursAfterDispatch,
+    })),
+    [
+      {
+        name: 'Forward Tower',
+        deliveryDelayHours: 5,
+        runsDryBeforeArrival: true,
+        allocatedFuel: 160,
+        projectedHoursAfterDispatch: 21,
+      },
+      {
+        name: 'North Gate',
+        deliveryDelayHours: 1,
+        runsDryBeforeArrival: false,
+        allocatedFuel: 90,
+        projectedHoursAfterDispatch: 21,
+      },
+      {
+        name: 'South Relay',
+        deliveryDelayHours: 3,
+        runsDryBeforeArrival: false,
+        allocatedFuel: 0,
+        projectedHoursAfterDispatch: 20,
+      },
+    ],
+  );
+});
+
 test('planFuel falls back to the default reserve window and zero delivery delay', () => {
   const plan = planFuel([
     { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10 },
@@ -507,3 +714,644 @@ test('formatHours renders human-readable durations', () => {
   assert.equal(formatHours(48), '2d');
   assert.equal(formatHours(Infinity), 'Unlimited');
 });
+
+
+
+test('planFuel builds trip manifests when trip capacity is provided', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'South Relay', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 80, maxFuel: 300, burnRatePerHour: 5 },
+  ], 24, 130, 12, 0, 50);
+
+  assert.equal(plan.dispatch.tripCapacity, 50);
+  assert.equal(plan.dispatch.tripCount, 3);
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 0,
+    degradedReserve: 0,
+  });
+  assert.deepEqual(pickTripFields(plan), [
+    {
+      tripNumber: 1,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      departureOffsetHours: 0,
+      stops: [
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 40,
+          forStability: 40,
+          forReserve: 0,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 20,
+          fuelAfterDelivery: 60,
+          projectedHoursAfterDelivery: 12,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 60,
+          runsDryBeforeArrival: false,
+        },
+        {
+          name: 'South Relay',
+          status: 'critical',
+          fuel: 10,
+          forStability: 10,
+          forReserve: 0,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 30,
+          fuelAfterDelivery: 40,
+          projectedHoursAfterDelivery: 8,
+          remainingStabilityGap: 20,
+          remainingReserveGap: 80,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+    {
+      tripNumber: 2,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      departureOffsetHours: 0,
+      stops: [
+        {
+          name: 'South Relay',
+          status: 'critical',
+          fuel: 20,
+          forStability: 20,
+          forReserve: 0,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 40,
+          fuelAfterDelivery: 60,
+          projectedHoursAfterDelivery: 12,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 60,
+          runsDryBeforeArrival: false,
+        },
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 30,
+          forStability: 0,
+          forReserve: 30,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 60,
+          fuelAfterDelivery: 90,
+          projectedHoursAfterDelivery: 18,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 30,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+    {
+      tripNumber: 3,
+      capacity: 50,
+      fuel: 30,
+      remainingCapacity: 20,
+      departureOffsetHours: 0,
+      stops: [
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 30,
+          forStability: 0,
+          forReserve: 30,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 90,
+          fuelAfterDelivery: 120,
+          projectedHoursAfterDelivery: 24,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 0,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+  ]);
+});
+
+test('planFuel skips trip manifests when trip capacity is omitted', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 90, maxFuel: 400, burnRatePerHour: 10 },
+  ], 24, Infinity, 12, 0);
+
+  assert.equal(plan.dispatch.tripCapacity, null);
+  assert.equal(plan.dispatch.tripTurnaroundHours, null);
+  assert.equal(plan.dispatch.haulerCount, null);
+  assert.equal(plan.dispatch.tripCount, null);
+  assert.equal(plan.tripTurnaroundHours, DEFAULT_TRIP_TURNAROUND_HOURS);
+  assert.equal(plan.haulerCount, DEFAULT_HAULER_COUNT);
+  assert.deepEqual(plan.dispatch.trips, []);
+});
+
+test('planFuel applies trip turnaround hours to later manifests and tracks degraded outcomes', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'South Relay', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 80, maxFuel: 300, burnRatePerHour: 5 },
+  ], 24, 130, 12, 0, 50, 2);
+
+  assert.equal(plan.dispatch.tripTurnaroundHours, 2);
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 1,
+    degradedReserve: 2,
+  });
+  assert.deepEqual(pickTripFields(plan), [
+    {
+      tripNumber: 1,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      departureOffsetHours: 0,
+      stops: [
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 40,
+          forStability: 40,
+          forReserve: 0,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 20,
+          fuelAfterDelivery: 60,
+          projectedHoursAfterDelivery: 12,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 60,
+          runsDryBeforeArrival: false,
+        },
+        {
+          name: 'South Relay',
+          status: 'critical',
+          fuel: 10,
+          forStability: 10,
+          forReserve: 0,
+          arrivalOffsetHours: 0,
+          fuelBeforeArrival: 30,
+          fuelAfterDelivery: 40,
+          projectedHoursAfterDelivery: 8,
+          remainingStabilityGap: 20,
+          remainingReserveGap: 80,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+    {
+      tripNumber: 2,
+      capacity: 50,
+      fuel: 50,
+      remainingCapacity: 0,
+      departureOffsetHours: 2,
+      stops: [
+        {
+          name: 'South Relay',
+          status: 'critical',
+          fuel: 20,
+          forStability: 20,
+          forReserve: 0,
+          arrivalOffsetHours: 2,
+          fuelBeforeArrival: 30,
+          fuelAfterDelivery: 50,
+          projectedHoursAfterDelivery: 10,
+          remainingStabilityGap: 10,
+          remainingReserveGap: 70,
+          runsDryBeforeArrival: false,
+        },
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 30,
+          forStability: 0,
+          forReserve: 30,
+          arrivalOffsetHours: 2,
+          fuelBeforeArrival: 50,
+          fuelAfterDelivery: 80,
+          projectedHoursAfterDelivery: 16,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 40,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+    {
+      tripNumber: 3,
+      capacity: 50,
+      fuel: 30,
+      remainingCapacity: 20,
+      departureOffsetHours: 4,
+      stops: [
+        {
+          name: 'North Gate',
+          status: 'critical',
+          fuel: 30,
+          forStability: 0,
+          forReserve: 30,
+          arrivalOffsetHours: 4,
+          fuelBeforeArrival: 70,
+          fuelAfterDelivery: 100,
+          projectedHoursAfterDelivery: 20,
+          remainingStabilityGap: 0,
+          remainingReserveGap: 20,
+          runsDryBeforeArrival: false,
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      scheduledArrivalOffsetHours: node.scheduledArrivalOffsetHours,
+      scheduledProjectedHoursAfterDispatch: node.scheduledProjectedHoursAfterDispatch,
+      scheduledRemainingStabilityGap: node.scheduledRemainingStabilityGap,
+      scheduledRemainingReserveGap: node.scheduledRemainingReserveGap,
+      scheduledRunsDryBeforeArrival: node.scheduledRunsDryBeforeArrival,
+      usesTripCadence: node.usesTripCadence,
+    })),
+    [
+      {
+        name: 'North Gate',
+        scheduledArrivalOffsetHours: 4,
+        scheduledProjectedHoursAfterDispatch: 20,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 20,
+        scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: true,
+      },
+      {
+        name: 'South Relay',
+        scheduledArrivalOffsetHours: 2,
+        scheduledProjectedHoursAfterDispatch: 10,
+        scheduledRemainingStabilityGap: 10,
+        scheduledRemainingReserveGap: 70,
+        scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: true,
+      },
+      {
+        name: 'Refinery Spine',
+        scheduledArrivalOffsetHours: 0,
+        scheduledProjectedHoursAfterDispatch: 16,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 40,
+        scheduledRunsDryBeforeArrival: false,
+        usesTripCadence: false,
+      },
+    ],
+  );
+});
+
+
+test('planFuel schedules concurrent haulers into the same departure wave', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 20, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'South Relay', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Refinery Spine', currentFuel: 80, maxFuel: 300, burnRatePerHour: 5 },
+  ], 24, 130, 12, 0, 50, 2, 2);
+
+  assert.equal(plan.haulerCount, 2);
+  assert.equal(plan.dispatch.haulerCount, 2);
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 0,
+    degradedReserve: 1,
+  });
+  assert.deepEqual(
+    plan.dispatch.trips.map((trip) => ({
+      tripNumber: trip.tripNumber,
+      departureOffsetHours: trip.departureOffsetHours,
+      arrivalOffsetHours: trip.stops[0].arrivalOffsetHours,
+    })),
+    [
+      { tripNumber: 1, departureOffsetHours: 0, arrivalOffsetHours: 0 },
+      { tripNumber: 2, departureOffsetHours: 0, arrivalOffsetHours: 0 },
+      { tripNumber: 3, departureOffsetHours: 2, arrivalOffsetHours: 2 },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      scheduledArrivalOffsetHours: node.scheduledArrivalOffsetHours,
+      scheduledProjectedHoursAfterDispatch: node.scheduledProjectedHoursAfterDispatch,
+      scheduledRemainingStabilityGap: node.scheduledRemainingStabilityGap,
+      scheduledRemainingReserveGap: node.scheduledRemainingReserveGap,
+      usesTripCadence: node.usesTripCadence,
+    })),
+    [
+      {
+        name: 'North Gate',
+        scheduledArrivalOffsetHours: 2,
+        scheduledProjectedHoursAfterDispatch: 22,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 10,
+        usesTripCadence: true,
+      },
+      {
+        name: 'South Relay',
+        scheduledArrivalOffsetHours: 0,
+        scheduledProjectedHoursAfterDispatch: 12,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 60,
+        usesTripCadence: true,
+      },
+      {
+        name: 'Refinery Spine',
+        scheduledArrivalOffsetHours: 0,
+        scheduledProjectedHoursAfterDispatch: 16,
+        scheduledRemainingStabilityGap: 0,
+        scheduledRemainingReserveGap: 40,
+        usesTripCadence: false,
+      },
+    ],
+  );
+});
+
+test('planFuel prioritizes long-delay critical nodes when trip waves would otherwise deepen stability loss', () => {
+  const plan = planFuel([
+    { name: 'Node 1', currentFuel: 42, maxFuel: 144, burnRatePerHour: 6, deliveryDelayHours: 1, priority: 2 },
+    { name: 'Node 2', currentFuel: 29, maxFuel: 138, burnRatePerHour: 11, deliveryDelayHours: 4, priority: 0 },
+    { name: 'Node 3', currentFuel: 39, maxFuel: 163, burnRatePerHour: 8, deliveryDelayHours: 2, priority: 2 },
+  ], 24, 154, 12, 0, 48, 1, 1);
+
+  assert.deepEqual(plan.dispatch.tripTiming, {
+    nodesAffected: 2,
+    additionalArrivalRisk: 0,
+    degradedStability: 2,
+    degradedReserve: 2,
+  });
+  assert.deepEqual(
+    plan.dispatch.trips.map((trip) => ({
+      tripNumber: trip.tripNumber,
+      departureOffsetHours: trip.departureOffsetHours,
+      stops: trip.stops.map((stop) => ({
+        name: stop.name,
+        fuel: stop.fuel,
+        forStability: stop.forStability,
+        arrivalOffsetHours: stop.arrivalOffsetHours,
+        runsDryBeforeArrival: stop.runsDryBeforeArrival,
+      })),
+    })),
+    [
+      {
+        tripNumber: 1,
+        departureOffsetHours: 0,
+        stops: [
+          {
+            name: 'Node 2',
+            fuel: 45,
+            forStability: 45,
+            arrivalOffsetHours: 4,
+            runsDryBeforeArrival: true,
+          },
+          {
+            name: 'Node 3',
+            fuel: 3,
+            forStability: 3,
+            arrivalOffsetHours: 2,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 2,
+        departureOffsetHours: 1,
+        stops: [
+          {
+            name: 'Node 3',
+            fuel: 48,
+            forStability: 48,
+            arrivalOffsetHours: 3,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 3,
+        departureOffsetHours: 2,
+        stops: [
+          {
+            name: 'Node 1',
+            fuel: 36,
+            forStability: 36,
+            arrivalOffsetHours: 3,
+            runsDryBeforeArrival: false,
+          },
+          {
+            name: 'Node 3',
+            fuel: 12,
+            forStability: 12,
+            arrivalOffsetHours: 4,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+      {
+        tripNumber: 4,
+        departureOffsetHours: 3,
+        stops: [
+          {
+            name: 'Node 3',
+            fuel: 10,
+            forStability: 10,
+            arrivalOffsetHours: 5,
+            runsDryBeforeArrival: false,
+          },
+        ],
+      },
+    ],
+  );
+});
+
+test('parseNodeRows accepts optional priority columns in headers and trailing positional fields', () => {
+  const rows = parseNodeRows([
+    'node,current fuel,max fuel,burn rate,travel hours,rank',
+    'North Gate,120,400,10,2.5,3',
+    'South Relay,60,240,5,,0',
+    'Refinery Spine,110,500,8,4,1.5',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 2.5, priority: 3 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5, priority: 0 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, deliveryDelayHours: 4, priority: 1.5 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows('Forward Tower,90,300,6,1.5,2'),
+    [{ name: 'Forward Tower', currentFuel: 90, maxFuel: 300, burnRatePerHour: 6, deliveryDelayHours: 1.5, priority: 2 }],
+  );
+});
+
+test('parseNodeRows rejects invalid priorities', () => {
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1.5,-1'),
+    /Row 1 has an invalid priority value/,
+  );
+});
+
+test('planFuel uses per-node priority to break ties inside the same alert band', () => {
+  const plan = planFuel([
+    { name: 'Forward Tower', currentFuel: 30, maxFuel: 200, burnRatePerHour: 5 },
+    { name: 'Command Spine', currentFuel: 50, maxFuel: 200, burnRatePerHour: 5, priority: 3 },
+    { name: 'South Relay', currentFuel: 70, maxFuel: 240, burnRatePerHour: 5 },
+  ], 24, 70);
+
+  assert.equal(plan.counts.customPriority, 1);
+  assert.equal(plan.dispatch.allocatedForStability, 40);
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      priority: node.priority,
+      allocatedFuel: node.allocatedFuel,
+      allocatedForStability: node.allocatedForStability,
+      allocatedForReserve: node.allocatedForReserve,
+    })),
+    [
+      {
+        name: 'Command Spine',
+        priority: 3,
+        allocatedFuel: 40,
+        allocatedForStability: 10,
+        allocatedForReserve: 30,
+      },
+      {
+        name: 'Forward Tower',
+        priority: 0,
+        allocatedFuel: 30,
+        allocatedForStability: 30,
+        allocatedForReserve: 0,
+      },
+      {
+        name: 'South Relay',
+        priority: 0,
+        allocatedFuel: 0,
+        allocatedForStability: 0,
+        allocatedForReserve: 0,
+      },
+    ],
+  );
+});
+
+test('parseNodeRows accepts optional stability and reserve hour columns in headers and trailing positional fields', () => {
+  const rows = parseNodeRows([
+    'node,current fuel,max fuel,burn rate,travel hours,rank,critical floor hours,reserve window hours',
+    'North Gate,120,400,10,2.5,3,12,30',
+    'South Relay,60,240,5,,0,,18',
+    'Refinery Spine,110,500,8,4,1.5,16,36',
+  ].join('\n'));
+
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 120, maxFuel: 400, burnRatePerHour: 10, deliveryDelayHours: 2.5, priority: 3, stabilityHours: 12, reserveHours: 30 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5, priority: 0, reserveHours: 18 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, deliveryDelayHours: 4, priority: 1.5, stabilityHours: 16, reserveHours: 36 },
+  ]);
+
+  assert.deepEqual(
+    parseNodeRows('Forward Tower,90,300,6,1.5,2,10,24'),
+    [{ name: 'Forward Tower', currentFuel: 90, maxFuel: 300, burnRatePerHour: 6, deliveryDelayHours: 1.5, priority: 2, stabilityHours: 10, reserveHours: 24 }],
+  );
+});
+
+test('parseNodeRows rejects invalid stability and reserve overrides', () => {
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1.5,2,-1,24'),
+    /Row 1 has an invalid stability-hours value/,
+  );
+
+  assert.throws(
+    () => parseNodeRows('Forward Tower,90,300,6,1.5,2,10,-1'),
+    /Row 1 has an invalid reserve-hours value/,
+  );
+});
+
+test('planFuel applies per-node stability and reserve windows ahead of global defaults', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 90, maxFuel: 400, burnRatePerHour: 10, stabilityHours: 8, reserveHours: 30 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5, reserveHours: 18 },
+    { name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8, stabilityHours: 16 },
+  ], 24, 240, 12, 0);
+
+  assert.equal(plan.counts.customStabilityHours, 2);
+  assert.equal(plan.counts.customReserveHours, 2);
+  assert.equal(plan.totals.fuelToStability, 18);
+  assert.equal(plan.totals.fuelToReserve, 322);
+  assert.deepEqual(
+    plan.perNode.map((node) => ({
+      name: node.name,
+      stabilityHours: node.stabilityHours,
+      reserveHours: node.reserveHours,
+      usesCustomStabilityHours: node.usesCustomStabilityHours,
+      usesCustomReserveHours: node.usesCustomReserveHours,
+      status: node.status,
+      fuelToStability: node.fuelToStability,
+      fuelToReserve: node.fuelToReserve,
+    })),
+    [
+      {
+        name: 'North Gate',
+        stabilityHours: 8,
+        reserveHours: 30,
+        usesCustomStabilityHours: true,
+        usesCustomReserveHours: true,
+        status: 'warning',
+        fuelToStability: 0,
+        fuelToReserve: 210,
+      },
+      {
+        name: 'South Relay',
+        stabilityHours: 12,
+        reserveHours: 18,
+        usesCustomStabilityHours: false,
+        usesCustomReserveHours: true,
+        status: 'warning',
+        fuelToStability: 0,
+        fuelToReserve: 30,
+      },
+      {
+        name: 'Refinery Spine',
+        stabilityHours: 16,
+        reserveHours: 24,
+        usesCustomStabilityHours: true,
+        usesCustomReserveHours: false,
+        status: 'critical',
+        fuelToStability: 18,
+        fuelToReserve: 82,
+      },
+    ],
+  );
+  assert.deepEqual(
+    plan.dispatch.order.map((node) => ({
+      name: node.name,
+      stabilityHours: node.stabilityHours,
+      reserveHours: node.reserveHours,
+      allocatedFuel: node.allocatedFuel,
+      remainingReserveGap: node.remainingReserveGap,
+    })),
+    [
+      {
+        name: 'Refinery Spine',
+        stabilityHours: 16,
+        reserveHours: 24,
+        allocatedFuel: 82,
+        remainingReserveGap: 0,
+      },
+      {
+        name: 'North Gate',
+        stabilityHours: 8,
+        reserveHours: 30,
+        allocatedFuel: 158,
+        remainingReserveGap: 52,
+      },
+      {
+        name: 'South Relay',
+        stabilityHours: 12,
+        reserveHours: 18,
+        allocatedFuel: 0,
+        remainingReserveGap: 30,
+      },
+    ],
+  );
+});
+

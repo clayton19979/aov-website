@@ -753,6 +753,10 @@ input:focus, textarea:focus {
 
 /* ── Assembly sub-toggle ───────────────────────── */
 
+.overlay-toggle--sub {
+  margin-left: 10px;
+}
+
 .overlay-toggle--subsub {
   margin-left: 20px;
   min-height: 28px;
