@@ -61,8 +61,11 @@ const state = {
   showSmartGateLinks: true,
   avoidKills: false,
   overlayAssembliesOnlineOnly: false,
+  overlayAsmTypeFilter: new Set(["Network Node", "Storage Unit", "Assembly", "Turret"]),
   showJumpRange: false,
   showKillLabels: false,
+  showKillShipsOnly: false,
+  showSystemLabels: false,
 };
 
 const els = {
@@ -108,6 +111,10 @@ const els = {
   assembliesOnlineOnlyToggle: document.getElementById("assembliesOnlineOnly"),
   showJumpRangeToggle: document.getElementById("showJumpRange"),
   showKillLabelsToggle: document.getElementById("showKillLabels"),
+  killShipsOnlyToggle: document.getElementById("killShipsOnly"),
+  showSystemLabelsToggle: document.getElementById("showSystemLabels"),
+  asmTypePanel: document.getElementById("asmTypePanel"),
+  asmTypeChecks: document.querySelectorAll(".asm-type-check"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -520,6 +527,7 @@ function draw() {
   if (state.showKills && state.showKillLabels) drawKillLabels();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
+  if (state.showSystemLabels) drawSystemLabels();
   drawRoute();
 
   if (state.selected) drawSystemMarker(state.selected, "#61d5c7", 7);
@@ -1355,6 +1363,14 @@ function routeShareUrl() {
   params.set("jumpDistance", String(Number(els.jumpRange.value || 120)));
   params.set("optimize", new FormData(els.form).get("optimize") || "fuel");
   params.set("useGates", els.useGates.checked ? "1" : "0");
+  // Overlay state
+  if (state.showKills) params.set("ov_k", "1");
+  if (state.overlayKillsTimeWindow !== 24) params.set("ov_kh", String(state.overlayKillsTimeWindow));
+  if (state.showKillLabels) params.set("ov_kl", "1");
+  if (state.showKillShipsOnly) params.set("ov_ks", "1");
+  if (state.showAssemblies) params.set("ov_a", "1");
+  if (state.overlayAssembliesOnlineOnly) params.set("ov_ao", "1");
+  if (state.showPlayerBases) params.set("ov_b", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1400,6 +1416,41 @@ function loadUrlParams() {
   if (["0", "false", "off", "no"].includes(String(useGates).toLowerCase())) {
     els.useGates.checked = false;
   }
+  // Overlay state
+  if (params.get("ov_k") === "1") {
+    els.killsToggle.checked = true;
+    state.showKills = true;
+    els.killTimePanel.style.display = "";
+  }
+  if (params.has("ov_kh")) {
+    const h = Number(params.get("ov_kh"));
+    if (h > 0) {
+      state.overlayKillsTimeWindow = h;
+      updateTimePresets();
+    }
+  }
+  if (params.get("ov_kl") === "1") {
+    els.showKillLabelsToggle && (els.showKillLabelsToggle.checked = true);
+    state.showKillLabels = true;
+  }
+  if (params.get("ov_ks") === "1") {
+    els.killShipsOnlyToggle && (els.killShipsOnlyToggle.checked = true);
+    state.showKillShipsOnly = true;
+  }
+  if (params.get("ov_a") === "1") {
+    els.assembliesToggle.checked = true;
+    state.showAssemblies = true;
+    els.asmTypePanel && (els.asmTypePanel.style.display = "");
+  }
+  if (params.get("ov_ao") === "1") {
+    els.assembliesOnlineOnlyToggle && (els.assembliesOnlineOnlyToggle.checked = true);
+    state.overlayAssembliesOnlineOnly = true;
+  }
+  if (params.get("ov_b") === "1") {
+    els.playerBasesToggle.checked = true;
+    state.showPlayerBases = true;
+  }
+  updateOverlayLegend();
 }
 
 function resolveWaypoint() {
@@ -1640,6 +1691,14 @@ function bindEvents() {
     state.showKillLabels = els.showKillLabelsToggle.checked;
     draw();
   });
+  els.killShipsOnlyToggle?.addEventListener("change", () => {
+    state.showKillShipsOnly = els.killShipsOnlyToggle.checked;
+    draw();
+  });
+  els.showSystemLabelsToggle?.addEventListener("change", () => {
+    state.showSystemLabels = els.showSystemLabelsToggle.checked;
+    draw();
+  });
   document.querySelectorAll('input[name="optimize"]').forEach((field) => {
     field.addEventListener("change", () => {
       if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
@@ -1776,6 +1835,15 @@ function buildKillSystemMap() {
   return map;
 }
 
+function isShipKill(kill) {
+  const t = String(kill.lossType ?? "").toLowerCase();
+  // Heuristic: non-ship types include "turret", "assembly", "structure", "networknode", "storageunit"
+  if (!t || t === "ship" || t === "capsule" || t === "shuttle") return true;
+  if (t.includes("turret") || t.includes("assembly") || t.includes("structure")
+      || t.includes("node") || t.includes("storage") || t.includes("gate")) return false;
+  return true; // default to ship if type is unknown
+}
+
 function drawKillOverlay() {
   const killsBySystem = buildKillSystemMap();
   if (!killsBySystem.size) return;
@@ -1788,18 +1856,44 @@ function drawKillOverlay() {
     const p = project(system);
     const rect = cachedRect || els.canvas.getBoundingClientRect();
     if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
-    const count = kills.length;
+
+    const shipKills = kills.filter(isShipKill);
+    const structKills = kills.filter((k) => !isShipKill(k));
+
+    // Apply ships-only filter
+    const visible = state.showKillShipsOnly ? shipKills : kills;
+    if (!visible.length) continue;
+
+    const count = visible.length;
     const radius = Math.min(12, 4 + Math.log2(count + 1) * 2);
-    // Recency: 1.0 = just happened, 0.0 = at edge of time window
-    const mostRecent = Math.max(...kills.map((k) => k.timestamp));
+    const mostRecent = Math.max(...visible.map((k) => k.timestamp));
     const age = Math.min(1, (now - mostRecent) / windowMs);
     const freshness = 1 - age;
-    // Blend from dim warm-red (old) to bright red (recent)
+
+    // Structure kills layer (purple, behind ship kills)
+    if (!state.showKillShipsOnly && structKills.length > 0) {
+      const sc = structKills.length;
+      const sr = Math.min(10, 3 + Math.log2(sc + 1) * 1.8);
+      const sRecent = Math.max(...structKills.map((k) => k.timestamp));
+      const sFresh = 1 - Math.min(1, (now - sRecent) / windowMs);
+      const sAlpha = 0.35 + sFresh * 0.30;
+      const sGrd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, sr * 3);
+      sGrd.addColorStop(0, `rgba(160, 100, 255, ${sAlpha * 0.6})`);
+      sGrd.addColorStop(1, `rgba(160, 100, 255, 0)`);
+      ctx.fillStyle = sGrd;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, sr * 3, 0, Math.PI * 2);
+      ctx.fill();
+      // Small offset square marker to distinguish from ship kills
+      ctx.fillStyle = `rgba(180, 120, 255, ${sAlpha + 0.1})`;
+      ctx.fillRect(p.x - sr * 0.7, p.y - sr * 0.7, sr * 1.4, sr * 1.4);
+    }
+
+    // Ship kills (red circles, current behavior)
     const r = Math.round(180 + freshness * 75);
     const g = Math.round(40 + freshness * 20);
     const coreAlpha = 0.55 + freshness * 0.35;
     const glowAlpha = 0.20 + freshness * 0.20;
-    // Glow
     const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius * 2.5);
     grd.addColorStop(0, `rgba(${r}, ${g}, 50, ${glowAlpha})`);
     grd.addColorStop(1, `rgba(${r}, ${g}, 50, 0)`);
@@ -1807,12 +1901,11 @@ function drawKillOverlay() {
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius * 2.5, 0, Math.PI * 2);
     ctx.fill();
-    // Core dot
     ctx.fillStyle = `rgba(${r}, ${g}, 50, ${coreAlpha})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fill();
-    // Count label for 2+
+
     if (count > 1 && state.camera.zoom > 0.5) {
       ctx.fillStyle = "rgba(255,255,255,0.95)";
       ctx.font = `bold ${Math.max(8, Math.min(11, radius + 1))}px ui-monospace, monospace`;
@@ -1925,10 +2018,11 @@ async function fetchAssemblyOverlay() {
 function drawAssemblyOverlay() {
   if (!state.overlayAssemblies.length) return;
   ctx.save();
-  // Group by system, respecting the online-only filter
+  // Group by system, respecting the online-only and type filters
   const bySystem = new Map();
   for (const asm of state.overlayAssemblies) {
     if (state.overlayAssembliesOnlineOnly && !asm.online) continue;
+    if (!state.overlayAsmTypeFilter.has(asm.label)) continue;
     if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
     bySystem.get(asm.systemId).push(asm);
   }
@@ -2070,6 +2164,35 @@ function drawPlayerBaseOverlay() {
   ctx.restore();
 }
 
+// ── System name labels ─────────────────────────────────────────────────────
+
+function drawSystemLabels() {
+  const z = state.camera.zoom;
+  if (z < 2.2) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  // At moderate zoom show only bright (rare) stars; at high zoom show medium too; at very high show all
+  const maxTierShown = z >= 5 ? 2 : z >= 3.5 ? 1 : 0;
+  const fontSize = Math.max(7, Math.min(10, z * 2.8));
+  ctx.save();
+  ctx.font = `${fontSize}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (const system of state.systems) {
+    const p = project(system);
+    if (p.x < -80 || p.y < -80 || p.x > rect.width + 80 || p.y > rect.height + 80) continue;
+    const tier = (system.id * 2654435761) >>> 0;
+    const tierNum = (tier % 100) < 3 ? 0 : (tier % 100) < 18 ? 1 : 2;
+    if (tierNum > maxTierShown) continue;
+    const yOff = tierNum === 0 ? 8 : tierNum === 1 ? 5 : 4;
+    // Shadow for readability
+    ctx.fillStyle = "rgba(2,8,12,0.75)";
+    ctx.fillText(system.name, p.x + 0.5, p.y - yOff - 0.5);
+    ctx.fillStyle = "rgba(200,220,240,0.70)";
+    ctx.fillText(system.name, p.x, p.y - yOff - 1);
+  }
+  ctx.restore();
+}
+
 // ── Hover tooltip ─────────────────────────────────────────────────────────
 
 function drawHoverTooltip() {
@@ -2084,8 +2207,16 @@ function drawHoverTooltip() {
 
   if (state.overlayKillsLoaded && state.showKills) {
     const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
-    const n = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff).length;
-    if (n > 0) lines.push({ text: `${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h`, color: "rgba(255,100,100,0.95)", bold: true });
+    const inWindow = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff);
+    const n = inWindow.length;
+    if (n > 0) {
+      const shipN = inWindow.filter(isShipKill).length;
+      const structN = n - shipN;
+      const label = structN > 0 && !state.showKillShipsOnly
+        ? `${n} kill${n > 1 ? "s" : ""} (${shipN} ship, ${structN} struct)`
+        : `${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h`;
+      lines.push({ text: label, color: "rgba(255,100,100,0.95)", bold: true });
+    }
   }
 
   if (state.overlayAssembliesLoaded && (state.showAssemblies || state.showPlayerBases)) {
@@ -2224,8 +2355,20 @@ async function toggleOverlay(name, enabled) {
 
 function bindOverlayEvents() {
   els.killsToggle.addEventListener("change", () => toggleOverlay("kills", els.killsToggle.checked));
-  els.assembliesToggle.addEventListener("change", () => toggleOverlay("assemblies", els.assembliesToggle.checked));
+  els.assembliesToggle.addEventListener("change", () => {
+    const on = els.assembliesToggle.checked;
+    if (els.asmTypePanel) els.asmTypePanel.style.display = on ? "" : "none";
+    toggleOverlay("assemblies", on);
+  });
   els.playerBasesToggle.addEventListener("change", () => toggleOverlay("playerBases", els.playerBasesToggle.checked));
+  els.asmTypeChecks.forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const type = cb.dataset.type;
+      if (cb.checked) state.overlayAsmTypeFilter.add(type);
+      else state.overlayAsmTypeFilter.delete(type);
+      draw();
+    });
+  });
   els.timePresets.forEach((btn) => {
     btn.addEventListener("click", () => {
       state.overlayKillsTimeWindow = Number(btn.dataset.hours);
@@ -2273,6 +2416,9 @@ async function init() {
   fitSystems(state.systems);
   // Load gate network eagerly so links appear on the map immediately
   ensureGateNetwork().catch(() => {});
+  // Restore overlay data for any overlays enabled via URL params
+  if (state.showKills) ensureKillFeed().catch(() => {});
+  if (state.showAssemblies || state.showPlayerBases) ensureAssemblyOverlay().catch(() => {});
   if (els.origin.value && els.destination.value) calculate();
 }
 
