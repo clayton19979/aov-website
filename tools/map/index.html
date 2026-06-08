@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Void Map — AoV</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="map-stage" aria-label="EVE Frontier map">
+        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin."></canvas>
+        <div class="topbar">
+          <div class="status-pill" id="dataStatus">Initializing</div>
+        </div>
+        <div class="map-tools" aria-label="Map controls">
+          <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+          <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+          <button id="fitRoute" title="Fit route" aria-label="Fit route">FIT</button>
+          <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
+          <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
+        </div>
+        <div class="map-legend" aria-label="Route legend">
+          <span><i class="legend-jump"></i>Jump</span>
+          <span><i class="legend-smart-gate"></i>Smart Gate</span>
+          <span><i class="legend-game-gate"></i>Game Gate</span>
+          <span class="legend-overlay-items">
+            <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
+            <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
+            <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
+          </span>
+        </div>
+        <aside class="system-card" id="systemCard" aria-live="polite">
+          <div>
+            <span>Select a system</span>
+            <strong>Click a star or search by name.</strong>
+          </div>
+          <div class="system-actions">
+            <button id="setOrigin" type="button" disabled>Set Origin</button>
+            <button id="setDestination" type="button" disabled>Set Destination</button>
+            <button id="setVia" type="button" disabled>Set Via</button>
+            <button id="centerSystem" type="button" disabled>Center</button>
+          </div>
+        </aside>
+      </section>
+
+      <aside class="control-panel" aria-label="Route controls">
+        <div class="panel-head">
+          <p class="eyebrow">Navigation Console</p>
+          <h2>Plot a Route</h2>
+        </div>
+
+        <section class="overlay-section" aria-label="Map overlays">
+          <div class="section-title">
+            <h3>Map Overlays</h3>
+            <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
+          </div>
+          <div class="overlay-toggles">
+            <label class="overlay-toggle" id="killsToggleLabel">
+              <input type="checkbox" id="killsToggle" />
+              <span class="overlay-dot kills-dot"></span>
+              Kills
+            </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="assembliesToggleLabel">
+              <input type="checkbox" id="assembliesToggle" />
+              <span class="overlay-dot assemblies-dot"></span>
+              Smart Assemblies
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="assembliesOnlineOnlyLabel">
+              <input type="checkbox" id="assembliesOnlineOnly" />
+              <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
+              Online only
+            </label>
+            <label class="overlay-toggle" id="playerBasesToggleLabel">
+              <input type="checkbox" id="playerBasesToggle" />
+              <span class="overlay-dot bases-dot"></span>
+              Player Bases
+            </label>
+          </div>
+          <div id="killTimePanel" class="kill-time-panel" style="display:none">
+            <label class="overlay-sublabel">Time window</label>
+            <div class="time-presets">
+              <button type="button" class="time-preset" data-hours="1">1h</button>
+              <button type="button" class="time-preset" data-hours="6">6h</button>
+              <button type="button" class="time-preset active" data-hours="24">24h</button>
+              <button type="button" class="time-preset" data-hours="168">7d</button>
+            </div>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killLabelsToggleLabel">
+              <input type="checkbox" id="showKillLabels" />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;"></span>
+              Label hot systems (3+)
+            </label>
+          </div>
+          <div id="overlayStatus" class="overlay-status"></div>
+        </section>
+
+        <form id="routeForm" class="route-form">
+          <label>
+            Origin
+            <input id="origin" autocomplete="off" placeholder="System name or ID" aria-controls="originSuggestions" aria-autocomplete="list" />
+            <div id="originSuggestions" class="suggestions" role="listbox"></div>
+          </label>
+          <label>
+            Destination
+            <input id="destination" autocomplete="off" placeholder="System name or ID" aria-controls="destinationSuggestions" aria-autocomplete="list" />
+            <div id="destinationSuggestions" class="suggestions" role="listbox"></div>
+          </label>
+          <label>
+            Via (optional)
+            <input id="via" autocomplete="off" placeholder="Waypoint system name or ID" aria-controls="viaSuggestions" aria-autocomplete="list" />
+            <div id="viaSuggestions" class="suggestions" role="listbox"></div>
+          </label>
+
+          <label>
+            Jump range
+            <input id="jumpRange" type="number" min="1" max="500" step="1" value="120" />
+          </label>
+          <div class="range-presets" aria-label="Jump range presets">
+            <button type="button" data-range="60">60</button>
+            <button type="button" data-range="90">90</button>
+            <button type="button" data-range="120" class="active">120</button>
+            <button type="button" data-range="180">180</button>
+            <button type="button" data-range="250">250</button>
+          </div>
+
+          <div class="segmented" role="radiogroup" aria-label="Optimization mode">
+            <label><input type="radio" name="optimize" value="fuel" checked />Fuel</label>
+            <label><input type="radio" name="optimize" value="jumps" />Jumps</label>
+          </div>
+
+          <div class="toggles">
+            <label><input id="useGates" type="checkbox" checked /> Use Smart Gates for routing</label>
+            <label><input id="showGameGates" type="checkbox" checked /> Show game gate links</label>
+            <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
+            <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
+            <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
+          </div>
+
+          <button class="primary" type="submit">Calculate</button>
+        </form>
+
+        <section class="metrics" id="metrics">
+          <div><span>Systems</span><strong>--</strong></div>
+          <div><span>Distance</span><strong>--</strong></div>
+          <div><span>Fuel index</span><strong>--</strong></div>
+        </section>
+
+        <section class="route-list">
+          <div class="section-title">
+            <h3>Route</h3>
+            <div class="route-actions">
+              <button id="copyRoute" class="copy-route" title="Copy in-game route" aria-label="Copy in-game route" disabled>Copy Route</button>
+              <button id="shareRoute" title="Copy share link" aria-label="Copy share link" disabled>Share</button>
+              <button id="swapRoute" title="Swap origin and destination" aria-label="Swap origin and destination">Swap</button>
+            </div>
+          </div>
+          <ol id="routeSteps"></ol>
+        </section>
+
+        <p class="gate-note" id="gateStatus">Gate network loads automatically when available.</p>
+      </aside>
+    </main>
+
+    <script src="./route-core.js"></script>
+    <script src="./gate-cache.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
