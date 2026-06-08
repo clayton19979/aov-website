@@ -779,6 +779,40 @@ input:focus, textarea:focus {
   gap: 2px;
 }
 
+/* ── Find system panel ──────────────────────────── */
+
+.find-panel {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(300px, calc(100vw - 80px));
+  z-index: 20;
+}
+
+.find-panel input {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-dim);
+  background: rgba(2, 8, 12, 0.94);
+  backdrop-filter: blur(12px);
+  color: var(--text);
+  font-size: 0.82rem;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.find-panel input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.find-panel .suggestions {
+  background: rgba(2, 8, 12, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+}
+
 /* ── Custom time window ─────────────────────────── */
 
 .custom-hours-row {

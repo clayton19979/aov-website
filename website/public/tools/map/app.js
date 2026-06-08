@@ -2113,7 +2113,7 @@ async function ensureKillFeed() {
     } finally {
       state.overlayKillsLoaded = true;
       state.overlayKillsLoading = null;
-      renderDangerPanel();
+      updateDangerPanel();
       draw();
     }
   })();
@@ -2321,7 +2321,7 @@ async function ensureAssemblyOverlay() {
     } finally {
       state.overlayAssembliesLoaded = true;
       state.overlayAssembliesLoading = null;
-      renderAssemblyStats();
+      updateAssemblyStats();
       draw();
     }
   })();
@@ -2564,84 +2564,6 @@ function drawKillLabels() {
 function setOverlayStatus(text) {
   els.overlayStatus.textContent = text;
 }
-// ── Danger Panel ───────────────────────────────────────────────────────────
-
-function renderDangerPanel() {
-  if (!els.dangerPanel) return;
-  if (!state.showKills || !state.overlayKillsLoaded) {
-    els.dangerPanel.style.display = "none";
-    return;
-  }
-
-  const killsBySystem = buildKillSystemMap();
-  const entries = [];
-  for (const [systemId, kills] of killsBySystem) {
-    const system = state.systemsById.get(systemId);
-    if (!system) continue;
-    const visible = state.showKillShipsOnly ? kills.filter(isShipKill) : kills;
-    if (!visible.length) continue;
-    entries.push({ system, count: visible.length, trend: state.showKillTrend ? getKillTrend(systemId) : null });
-  }
-  entries.sort((a, b) => b.count - a.count);
-  const top = entries.slice(0, 15);
-
-  if (els.dangerWindowLabel) els.dangerWindowLabel.textContent = "(" + state.overlayKillsTimeWindow + "h)";
-
-  els.dangerList.innerHTML = "";
-  if (!top.length) {
-    els.dangerList.innerHTML = "<li class="danger-empty">No kills in this window</li>";
-  } else {
-    top.forEach((item, i) => {
-      const li = document.createElement("li");
-      li.className = "danger-item";
-      const trendCls = item.trend === "up" ? "danger-trend--up" : item.trend === "down" ? "danger-trend--down" : "";
-      const trendArrow = item.trend === "up" ? "↑" : item.trend === "down" ? "↓" : "";
-      li.innerHTML =
-        "<span class="danger-rank">" + (i + 1) + "</span>" +
-        "<span class="danger-name">" + escapeHtml(item.system.name) + "</span>" +
-        "<span class="danger-count">" + item.count + "⚠" + (trendArrow ? " <span class="danger-trend " + trendCls + "">" + trendArrow + "</span>" : "") + "</span>";
-      li.addEventListener("click", () => { centerOnSystem(item.system); selectSystem(item.system); });
-      els.dangerList.append(li);
-    });
-  }
-  els.dangerPanel.style.display = "";
-}
-
-// ── Assembly Stats ─────────────────────────────────────────────────────────
-
-function renderAssemblyStats() {
-  if (!els.assemblyStats || !els.assemblyStatsContent) return;
-  if (!state.showAssemblies || !state.overlayAssembliesLoaded || !state.overlayAssemblies.length) {
-    els.assemblyStats.style.display = "none";
-    return;
-  }
-
-  const typeMap = new Map();
-  for (const asm of state.overlayAssemblies) {
-    if (!typeMap.has(asm.label)) typeMap.set(asm.label, { online: 0, total: 0, color: asm.color });
-    const s = typeMap.get(asm.label);
-    s.total++;
-    if (asm.online) s.online++;
-  }
-
-  els.assemblyStatsContent.innerHTML = "<div class="asm-stat-header">Assembly Distribution</div>";
-  for (const [label, s] of typeMap) {
-    const row = document.createElement("div");
-    row.className = "asm-stat-row";
-    row.innerHTML =
-      "<span style="color:" + s.color + "80">● " + escapeHtml(label) + "</span>" +
-      "<span style="color:" + s.color + "">" + s.online + "/" + s.total + "</span>";
-    els.assemblyStatsContent.append(row);
-  }
-  const totalOnline = state.overlayAssemblies.filter((a) => a.online).length;
-  const totalRow = document.createElement("div");
-  totalRow.className = "asm-stat-row";
-  totalRow.style.cssText = "border-top:1px solid rgba(0,180,216,0.12);padding-top:4px;margin-top:2px";
-  totalRow.innerHTML =
-    "<span>Online / Total</span><span style="color:var(--accent)">" + totalOnline + "/" + state.overlayAssemblies.length + "</span>";
-  els.assemblyStatsContent.append(totalRow);
-  els.assemblyStats.style.display = "";
-}
 
 // ── Find System Panel ──────────────────────────────────────────────────────
 
@@ -2678,11 +2600,11 @@ async function toggleOverlay(name, enabled) {
     state.showKills = enabled;
     els.killTimePanel.style.display = enabled ? "" : "none";
     if (enabled) await ensureKillFeed();
-    else renderDangerPanel();
+    else updateDangerPanel();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
     if (enabled) await ensureAssemblyOverlay();
-    else renderAssemblyStats();
+    else updateAssemblyStats();
   } else if (name === "playerBases") {
     state.showPlayerBases = enabled;
     if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
@@ -2711,7 +2633,7 @@ function bindOverlayEvents() {
     btn.addEventListener("click", () => {
       state.overlayKillsTimeWindow = Number(btn.dataset.hours);
       updateTimePresets();
-      renderDangerPanel();
+      updateDangerPanel();
       draw();
     });
   });
@@ -2720,7 +2642,7 @@ function bindOverlayEvents() {
     if (h >= 1 && h <= 720) {
       state.overlayKillsTimeWindow = h;
       updateTimePresets();
-      renderDangerPanel();
+      updateDangerPanel();
       draw();
     }
   });
@@ -2729,7 +2651,7 @@ function bindOverlayEvents() {
   });
   els.showKillTrendToggle?.addEventListener("change", () => {
     state.showKillTrend = els.showKillTrendToggle.checked;
-    renderDangerPanel();
+    updateDangerPanel();
     draw();
   });
   els.killHeatmapToggle?.addEventListener("change", () => {
