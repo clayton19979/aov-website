@@ -639,7 +639,7 @@ input:focus, textarea:focus {
 
 .time-presets {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
 }
 
@@ -765,19 +765,6 @@ input:focus, textarea:focus {
 }
 
 .overlay-toggle--subsub:has(input:checked) { opacity: 1; }
-
-/* ── Assembly type filter panel ────────────────── */
-
-.asm-type-panel {
-  display: grid;
-  gap: 2px;
-  margin-left: 10px;
-}
-
-.asm-type-toggles {
-  display: grid;
-  gap: 2px;
-}
 
 /* ── Responsive ────────────────────────────────── */
 

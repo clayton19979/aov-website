@@ -1,0 +1,8 @@
+{
+  "name": "aov-map-tool",
+  "private": true,
+  "scripts": {
+    "test": "node --test ./route-core.test.mjs ./gate-cache.test.js ./map-state-share.test.js",
+    "check": "node --check ./route-core.js && node --check ./route-worker.js && node --check ./gate-cache.js && node --check ./map-state-share.js && node --check ./app.js"
+  }
+}

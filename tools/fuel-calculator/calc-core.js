@@ -3,6 +3,12 @@ export const CRITICAL_STABILITY_HOURS = 12;
 export const DEFAULT_DELIVERY_DELAY_HOURS = 0;
 export const DEFAULT_TRIP_TURNAROUND_HOURS = 0;
 export const DEFAULT_HAULER_COUNT = 1;
+const QUANTITY_SUFFIXES = {
+  k: 1_000,
+  m: 1_000_000,
+  b: 1_000_000_000,
+  t: 1_000_000_000_000,
+};
 const HEADER_ALIASES = {
   name: ['name', 'node', 'nodename'],
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
@@ -122,14 +128,35 @@ function toFiniteNumber(value) {
     if (trimmed === '') {
       return null;
     }
-
     const normalized = trimmed.replaceAll(',', '').replaceAll('_', '');
     const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+export function parseQuantityValue(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const normalized = trimmed.replaceAll(',', '').replaceAll('_', '');
+  const shorthandMatch = normalized.match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*([kmbt])$/i);
+  if (shorthandMatch) {
+    const amount = Number(shorthandMatch[1]);
+    const multiplier = QUANTITY_SUFFIXES[shorthandMatch[2].toLowerCase()];
+    if (!Number.isFinite(amount) || multiplier === undefined) {
+      return null;
+    }
+    return amount * multiplier;
+  }
+  return toFiniteNumber(normalized);
 }
 
 function parsePercentValue(value) {
@@ -143,6 +170,64 @@ function parsePercentValue(value) {
   }
 
   return toFiniteNumber(trimmed.slice(0, -1));
+}
+
+export function parseHourValue(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return null;
+  }
+
+  const numericValue = toFiniteNumber(trimmed);
+  if (numericValue !== null) {
+    return numericValue;
+  }
+
+  const matches = [...trimmed.toLowerCase().matchAll(/([+-]?\d+(?:\.\d+)?)\s*(d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes)/g)];
+  if (matches.length === 0) {
+    return null;
+  }
+
+  let cursor = 0;
+  let totalHours = 0;
+  for (const match of matches) {
+    const [token, amountRaw, unitRaw] = match;
+    const startIndex = match.index ?? 0;
+    const between = trimmed.slice(cursor, startIndex);
+    if (between.trim().replaceAll(',', '') !== '') {
+      return null;
+    }
+
+    const amount = Number(amountRaw);
+    if (!Number.isFinite(amount)) {
+      return null;
+    }
+
+    const unit = unitRaw[0];
+    if (unit === 'd') {
+      totalHours += amount * 24;
+    } else if (unit === 'h') {
+      totalHours += amount;
+    } else {
+      totalHours += amount / 60;
+    }
+
+    cursor = startIndex + token.length;
+  }
+
+  if (trimmed.slice(cursor).trim().replaceAll(',', '') !== '') {
+    return null;
+  }
+
+  return roundTo(totalHours);
 }
 
 function roundTo(value, digits = 1) {
@@ -196,12 +281,15 @@ export function parseNodeRows(input) {
     const reserveHoursRaw = headerColumnIndexes
       ? (headerColumnIndexes.reserveHours !== undefined ? parts[headerColumnIndexes.reserveHours] : '')
       : (parts[7] ?? '');
-    const maxFuel = toFiniteNumber(maxFuelRaw);
-    const burnRatePerHour = toFiniteNumber(burnRateRaw);
+    const maxFuel = parseQuantityValue(maxFuelRaw);
+    const burnRatePerHour = parseQuantityValue(burnRateRaw);
     const currentFuelPercent = currentFuelPercentRaw === '' ? null : toFiniteNumber(currentFuelPercentRaw);
-    const runtimeHours = runtimeHoursRaw === '' ? null : toFiniteNumber(runtimeHoursRaw);
+    const hasRuntimeHoursValue = typeof runtimeHoursRaw === 'string'
+      ? runtimeHoursRaw.trim() !== ''
+      : runtimeHoursRaw !== undefined && runtimeHoursRaw !== null;
+    const runtimeHours = hasRuntimeHoursValue ? parseHourValue(runtimeHoursRaw) : null;
     const inlinePercent = parsePercentValue(currentFuelRaw);
-    const currentFuelCandidate = inlinePercent === null ? toFiniteNumber(currentFuelRaw) : null;
+    const currentFuelCandidate = inlinePercent === null ? parseQuantityValue(currentFuelRaw) : null;
     const currentFuel = currentFuelCandidate
       ?? (inlinePercent !== null && maxFuel !== null ? roundTo((maxFuel * inlinePercent) / 100) : null)
       ?? (currentFuelPercent !== null && maxFuel !== null ? roundTo((maxFuel * currentFuelPercent) / 100) : null)
@@ -209,7 +297,7 @@ export function parseNodeRows(input) {
     const hasDeliveryDelayValue = typeof deliveryDelayRaw === 'string'
       ? deliveryDelayRaw.trim() !== ''
       : deliveryDelayRaw !== undefined && deliveryDelayRaw !== null;
-    const deliveryDelayHours = hasDeliveryDelayValue ? toFiniteNumber(deliveryDelayRaw) : null;
+    const deliveryDelayHours = hasDeliveryDelayValue ? parseHourValue(deliveryDelayRaw) : null;
     const hasPriorityValue = typeof priorityRaw === 'string'
       ? priorityRaw.trim() !== ''
       : priorityRaw !== undefined && priorityRaw !== null;
@@ -217,11 +305,11 @@ export function parseNodeRows(input) {
     const hasStabilityHoursValue = typeof stabilityHoursRaw === 'string'
       ? stabilityHoursRaw.trim() !== ''
       : stabilityHoursRaw !== undefined && stabilityHoursRaw !== null;
-    const stabilityHours = hasStabilityHoursValue ? toFiniteNumber(stabilityHoursRaw) : null;
+    const stabilityHours = hasStabilityHoursValue ? parseHourValue(stabilityHoursRaw) : null;
     const hasReserveHoursValue = typeof reserveHoursRaw === 'string'
       ? reserveHoursRaw.trim() !== ''
       : reserveHoursRaw !== undefined && reserveHoursRaw !== null;
-    const reserveHours = hasReserveHoursValue ? toFiniteNumber(reserveHoursRaw) : null;
+    const reserveHours = hasReserveHoursValue ? parseHourValue(reserveHoursRaw) : null;
 
     if (!name) {
       throw new Error(`Row ${index + 1} is missing a node name`);
@@ -236,6 +324,9 @@ export function parseNodeRows(input) {
     }
     if (burnRatePerHour === null || burnRatePerHour < 0) {
       throw new Error(`Row ${index + 1} has an invalid burn-per-hour value`);
+    }
+    if (hasRuntimeHoursValue && runtimeHours === null) {
+      throw new Error(`Row ${index + 1} has an invalid runtime-hours value`);
     }
     if (currentFuelCandidate === null && inlinePercent === null && currentFuelPercent === null && runtimeHours === null) {
       throw new Error(`Row ${index + 1} has an invalid current fuel value`);
@@ -326,6 +417,9 @@ function projectNodeArrival(node, state, arrivalOffsetHours) {
   const fuelBeforeArrival = roundTo(Math.max(0, state.fuel - burnSinceLastStop));
   const runsDryBeforeArrival = node.burnRatePerHour > 0
     && state.fuel / node.burnRatePerHour < elapsedHours;
+  const outageHoursBeforeArrival = runsDryBeforeArrival
+    ? roundTo(Math.max(0, elapsedHours - (state.fuel / node.burnRatePerHour)))
+    : 0;
   const projectedHoursBeforeDelivery = node.burnRatePerHour === 0
     ? Number.POSITIVE_INFINITY
     : roundTo(fuelBeforeArrival / node.burnRatePerHour);
@@ -333,6 +427,7 @@ function projectNodeArrival(node, state, arrivalOffsetHours) {
   return {
     fuelBeforeArrival,
     runsDryBeforeArrival,
+    outageHoursBeforeArrival,
     projectedHoursBeforeDelivery,
   };
 }
@@ -353,6 +448,7 @@ function applyScheduledStop(node, state, arrivalOffsetHours, fuel) {
   state.remainingReserveGap = remainingReserveGap;
   state.scheduledArrivalOffsetHours = arrivalOffsetHours;
   state.scheduledRunsDryBeforeArrival = state.scheduledRunsDryBeforeArrival || projection.runsDryBeforeArrival;
+  state.totalOutageHours = roundTo((state.totalOutageHours ?? 0) + projection.outageHoursBeforeArrival);
   state.allocatedStops += 1;
 
   return {
@@ -363,6 +459,7 @@ function applyScheduledStop(node, state, arrivalOffsetHours, fuel) {
     remainingStabilityGap,
     remainingReserveGap,
     runsDryBeforeArrival: projection.runsDryBeforeArrival,
+    outageHoursBeforeArrival: projection.outageHoursBeforeArrival,
   };
 }
 
@@ -407,13 +504,13 @@ export function buildDispatchTrips(
   tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
   haulerCount = DEFAULT_HAULER_COUNT,
 ) {
-  const normalizedTripCapacity = toFiniteNumber(tripCapacity);
+  const normalizedTripCapacity = parseQuantityValue(tripCapacity);
   if (normalizedTripCapacity === null || normalizedTripCapacity <= 0) {
     return [];
   }
   const normalizedTripTurnaroundHours = Math.max(
     0,
-    toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
+    parseHourValue(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
   );
   const normalizedHaulerCount = Math.max(1, Math.floor(toFiniteNumber(haulerCount) ?? DEFAULT_HAULER_COUNT));
   const dispatchIndexMap = new Map(dispatchOrder.map((node, index) => [node.name, index]));
@@ -546,7 +643,7 @@ function applyTripSchedule(
 ) {
   const normalizedTripTurnaroundHours = Math.max(
     0,
-    toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
+    parseHourValue(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
   );
   const normalizedHaulerCount = Math.max(1, Math.floor(toFiniteNumber(haulerCount) ?? DEFAULT_HAULER_COUNT));
   const nodeMap = new Map(dispatchOrder.map((node) => [node.name, node]));
@@ -560,6 +657,7 @@ function applyTripSchedule(
       remainingReserveGap: node.remainingReserveGap,
       scheduledArrivalOffsetHours: node.deliveryDelayHours,
       scheduledRunsDryBeforeArrival: node.runsDryBeforeArrival,
+      totalOutageHours: 0,
       allocatedStops: 0,
     },
   ]));
@@ -599,6 +697,7 @@ function applyTripSchedule(
       scheduledRemainingStabilityGap: state.remainingStabilityGap,
       scheduledRemainingReserveGap: state.remainingReserveGap,
       scheduledRunsDryBeforeArrival: state.scheduledRunsDryBeforeArrival,
+      scheduledOutageHours: state.allocatedStops > 0 ? state.totalOutageHours : node.outageHoursBeforeArrival,
       usesTripCadence,
     };
   });
@@ -641,33 +740,33 @@ export function planFuel(
   tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
   haulerCount = DEFAULT_HAULER_COUNT,
 ) {
-  const normalizedReserveHours = Math.max(0, toFiniteNumber(reserveHours) ?? DEFAULT_RESERVE_HOURS);
-  const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
-  const normalizedStabilityHours = Math.max(0, toFiniteNumber(stabilityHours) ?? CRITICAL_STABILITY_HOURS);
-  const normalizedDeliveryDelayHours = Math.max(0, toFiniteNumber(deliveryDelayHours) ?? DEFAULT_DELIVERY_DELAY_HOURS);
+  const normalizedReserveHours = Math.max(0, parseHourValue(reserveHours) ?? DEFAULT_RESERVE_HOURS);
+  const normalizedAvailableFuel = Math.max(0, parseQuantityValue(availableFuel) ?? Infinity);
+  const normalizedStabilityHours = Math.max(0, parseHourValue(stabilityHours) ?? CRITICAL_STABILITY_HOURS);
+  const normalizedDeliveryDelayHours = Math.max(0, parseHourValue(deliveryDelayHours) ?? DEFAULT_DELIVERY_DELAY_HOURS);
   const normalizedTripCapacity = (() => {
-    const parsed = toFiniteNumber(tripCapacity);
+    const parsed = parseQuantityValue(tripCapacity);
     return parsed !== null && parsed > 0 ? parsed : null;
   })();
   const normalizedTripTurnaroundHours = Math.max(
     0,
-    toFiniteNumber(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
+    parseHourValue(tripTurnaroundHours) ?? DEFAULT_TRIP_TURNAROUND_HOURS,
   );
   const normalizedHaulerCount = Math.max(1, Math.floor(toFiniteNumber(haulerCount) ?? DEFAULT_HAULER_COUNT));
 
   const perNode = nodes.map((node) => {
     const nodeDeliveryDelayHours = Math.max(
       0,
-      toFiniteNumber(node.deliveryDelayHours) ?? normalizedDeliveryDelayHours,
+      parseHourValue(node.deliveryDelayHours) ?? normalizedDeliveryDelayHours,
     );
     const nodePriority = Math.max(0, toFiniteNumber(node.priority) ?? 0);
     const nodeStabilityHours = Math.max(
       0,
-      toFiniteNumber(node.stabilityHours) ?? normalizedStabilityHours,
+      parseHourValue(node.stabilityHours) ?? normalizedStabilityHours,
     );
     const nodeReserveHours = Math.max(
       0,
-      toFiniteNumber(node.reserveHours) ?? normalizedReserveHours,
+      parseHourValue(node.reserveHours) ?? normalizedReserveHours,
     );
     const hoursRemaining = node.burnRatePerHour === 0
       ? Number.POSITIVE_INFINITY
@@ -691,6 +790,9 @@ export function planFuel(
     const projectedStabilityShortfall = Math.max(0, stabilityFuel - node.maxFuel);
     const projectedShortfall = Math.max(0, reserveFuel - node.maxFuel);
     const runsDryBeforeArrival = node.burnRatePerHour > 0 && hoursRemaining < nodeDeliveryDelayHours;
+    const outageHoursBeforeArrival = runsDryBeforeArrival
+      ? roundTo(Math.max(0, nodeDeliveryDelayHours - hoursRemaining))
+      : 0;
     const status = node.burnRatePerHour === 0
       ? 'stable'
       : hoursAtArrival < nodeStabilityHours
@@ -722,6 +824,7 @@ export function planFuel(
       projectedStabilityShortfall: roundTo(projectedStabilityShortfall),
       projectedShortfall: roundTo(projectedShortfall),
       runsDryBeforeArrival,
+      outageHoursBeforeArrival,
       survivesUntilArrival: !runsDryBeforeArrival,
       status,
     };
@@ -806,6 +909,7 @@ export function planFuel(
         stabilityCapacityLimited: node.projectedStabilityShortfall > 0,
         capacityLimited: node.projectedShortfall > 0,
         runsDryBeforeArrival: node.runsDryBeforeArrival,
+        outageHoursBeforeArrival: node.outageHoursBeforeArrival,
         survivesUntilArrival: node.survivesUntilArrival,
         remainingStabilityGap,
         remainingSupplyGap,
@@ -817,6 +921,7 @@ export function planFuel(
         scheduledRemainingStabilityGap: remainingStabilityGap,
         scheduledRemainingReserveGap: remainingReserveGap,
         scheduledRunsDryBeforeArrival: node.runsDryBeforeArrival,
+        scheduledOutageHours: node.outageHoursBeforeArrival,
         usesTripCadence: false,
       };
     });
@@ -835,6 +940,7 @@ export function planFuel(
       fuelToFull: roundTo(accumulator.fuelToFull + node.fuelToFull),
       projectedStabilityShortfall: roundTo(accumulator.projectedStabilityShortfall + node.projectedStabilityShortfall),
       projectedShortfall: roundTo(accumulator.projectedShortfall + node.projectedShortfall),
+      outageHoursBeforeArrival: roundTo(accumulator.outageHoursBeforeArrival + node.outageHoursBeforeArrival),
     }),
     {
       currentFuel: 0,
@@ -849,6 +955,7 @@ export function planFuel(
       fuelToFull: 0,
       projectedStabilityShortfall: 0,
       projectedShortfall: 0,
+      outageHoursBeforeArrival: 0,
     },
   );
 
@@ -930,6 +1037,10 @@ export function planFuel(
     ...node,
     ...(scheduledOutcomeMap.get(node.name) ?? {}),
   }));
+  totals.scheduledOutageHours = roundTo(scheduledDispatchOrder.reduce(
+    (sum, node) => sum + (node.scheduledOutageHours ?? node.outageHoursBeforeArrival),
+    0,
+  ));
 
   return {
     stabilityHours: normalizedStabilityHours,

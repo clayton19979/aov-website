@@ -5,9 +5,18 @@ import {
   DEFAULT_RESERVE_HOURS,
   DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
+  parseHourValue,
+  parseQuantityValue,
   parseNodeRows,
   planFuel,
 } from './calc-core.js';
+import {
+  buildDispatchTextReport,
+  buildNodeTableTsv,
+  buildTripManifestTsv,
+} from './report-export.js';
+import { buildExportFiles, downloadExportFiles } from './download-pack.js';
+import { clearDraft, loadDraft, normalizeFormState, saveDraft } from './local-draft.js';
 import { buildShareUrl, parseShareState } from './state-share.js';
 
 const sampleRows = [
@@ -18,6 +27,17 @@ const sampleRows = [
   'Refinery Spine\t110\t500\t8\t\t4\t16\t36',
   'Dormant Backup\t50\t100\t0\t0\t0\t0\t0',
 ].join('\n');
+
+const defaultFormState = {
+  nodes: sampleRows,
+  stabilityHours: String(CRITICAL_STABILITY_HOURS),
+  reserveHours: String(DEFAULT_RESERVE_HOURS),
+  deliveryDelayHours: '3',
+  availableFuel: '220',
+  tripCapacity: '90',
+  tripTurnaroundHours: '2',
+  haulerCount: '2',
+};
 
 const form = document.querySelector('[data-fuel-form]');
 const textarea = document.querySelector('[data-node-input]');
@@ -35,9 +55,15 @@ const tableBody = document.querySelector('[data-table-body]');
 const feedback = document.querySelector('[data-feedback]');
 const fillSampleButton = document.querySelector('[data-fill-sample]');
 const copyReportButton = document.querySelector('[data-copy-report]');
+const copyNodeTsvButton = document.querySelector('[data-copy-node-tsv]');
+const copyTripTsvButton = document.querySelector('[data-copy-trip-tsv]');
 const copyShareLinkButton = document.querySelector('[data-copy-share-link]');
+const downloadPackButton = document.querySelector('[data-download-pack]');
+const clearDraftButton = document.querySelector('[data-clear-draft]');
 const floorNeedHeader = document.querySelector('[data-floor-need-label]');
 const floorGapHeader = document.querySelector('[data-floor-gap-label]');
+
+let currentPlan = null;
 
 function formatNumber(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(value);
@@ -57,6 +83,14 @@ function formatOffsetLabel(value) {
 
 function formatTripCapacity(value) {
   return value === null ? 'Direct dispatch' : `${formatNumber(value)} / trip`;
+}
+
+function formatOutageHours(value) {
+  return value > 0 ? formatHourLabel(value) : '0h';
+}
+
+function formatOutageSummary(count, hours) {
+  return count === 0 ? 'Clear' : `${count} node${count === 1 ? '' : 's'} / ${formatOutageHours(hours)}`;
 }
 
 function formatPriority(value) {
@@ -161,6 +195,10 @@ function getTripSummaryLabel(plan) {
   return `${plan.dispatch.tripCount} trip${plan.dispatch.tripCount === 1 ? '' : 's'} @ ${formatTripCapacity(plan.dispatch.tripCapacity)} | ${haulerLabel}`;
 }
 
+function getScheduledOutageNodeCount(plan) {
+  return plan.dispatch.order.filter((node) => (node.scheduledOutageHours ?? node.outageHoursBeforeArrival) > 0).length;
+}
+
 function createSummaryMarkup(plan) {
   const cards = [
     ['Tracked Nodes', plan.perNode.length],
@@ -172,6 +210,8 @@ function createSummaryMarkup(plan) {
     ['Trip Manifests', getTripSummaryLabel(plan)],
     ['Trip Cadence', getTripCadenceLabel(plan)],
     ['Trip Timing Risk', getTripRiskLabel(plan)],
+    ['Base Outage', formatOutageSummary(plan.counts.arrivalRisk, plan.totals.outageHoursBeforeArrival)],
+    ['Scheduled Outage', formatOutageSummary(getScheduledOutageNodeCount(plan), plan.totals.scheduledOutageHours)],
     ['Fuel Burned Before Arrival', formatNumber(plan.totals.fuelConsumedBeforeArrival)],
     ['Fuel To Stabilize', formatNumber(plan.totals.fuelToStability)],
     ['Fuel Remaining', formatFuelBudget(plan.dispatch.remainingFuel)],
@@ -217,12 +257,19 @@ function getDisplayRunsDry(plan, node) {
     : node.scheduledRunsDryBeforeArrival;
 }
 
+function getDisplayOutageHours(plan, node) {
+  return plan.dispatch.tripCapacity === null
+    ? node.outageHoursBeforeArrival
+    : node.scheduledOutageHours;
+}
+
 function createDispatchMarkup(plan) {
   return plan.dispatch.order.map((node) => {
     const stabilityGap = getDisplayStabilityGap(plan, node);
     const reserveGap = getDisplayReserveGap(plan, node);
     const projectedHours = getDisplayProjectedHours(plan, node);
     const runsDryBeforeArrival = getDisplayRunsDry(plan, node);
+    const outageHours = getDisplayOutageHours(plan, node);
     const allocationParts = [
       `Send ${formatNumber(node.allocatedFuel)}`,
       node.allocatedForStability > 0 ? `${formatNumber(node.allocatedForStability)} to ${formatHourLabel(node.stabilityHours)} floor` : null,
@@ -252,7 +299,7 @@ function createDispatchMarkup(plan) {
         <div class="dispatch-metrics">
           <span>${escapeHtml(allocationParts.join(' | '))}</span>
           <span>${plan.dispatch.tripCapacity !== null ? escapeHtml(cadenceLabel) : (runsDryBeforeArrival ? 'Runs dry before arrival' : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before arrival`)}</span>
-          <span>${runsDryBeforeArrival ? 'Runs dry before scheduled drop' : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before first arrival`}</span>
+          <span>${runsDryBeforeArrival ? `Offline ${escapeHtml(formatOutageHours(outageHours))} before ${plan.dispatch.tripCapacity !== null ? 'scheduled drop' : 'arrival'}` : `Burns ${escapeHtml(formatNumber(node.fuelConsumedBeforeArrival))} before first arrival`}</span>
           <span>${stabilityGap > 0 ? `${escapeHtml(formatHourLabel(node.stabilityHours))} gap ${escapeHtml(formatNumber(stabilityGap))}` : `${escapeHtml(formatHourLabel(node.stabilityHours))} floor covered`}</span>
           <span>${reserveGap > 0 ? `Reserve gap ${escapeHtml(formatNumber(reserveGap))}` : 'Reserve covered'}</span>
           ${node.capacityLimited ? `<span>Max capacity leaves ${escapeHtml(formatNumber(node.projectedShortfall))} reserve uncovered</span>` : ''}
@@ -288,7 +335,7 @@ function createTripMarkup(plan) {
         outcomeParts.push(`${formatNumber(stop.remainingReserveGap)} reserve gap`);
       }
       if (stop.runsDryBeforeArrival) {
-        outcomeParts.push('runs dry before arrival');
+        outcomeParts.push(`offline ${formatOutageHours(stop.outageHoursBeforeArrival)} before arrival`);
       }
 
       return `
@@ -323,6 +370,7 @@ function createTableMarkup(plan) {
     const lastDrop = dispatch && dispatch.allocatedFuel > 0 && plan.dispatch.tripCapacity !== null
       ? formatOffsetLabel(dispatch.scheduledArrivalOffsetHours)
       : '--';
+    const scheduledOutageHours = dispatch ? dispatch.scheduledOutageHours : node.outageHoursBeforeArrival;
 
     return `
       <tr class="tone-${node.status}">
@@ -338,7 +386,9 @@ function createTableMarkup(plan) {
         <td>${escapeHtml(formatHourLabel(node.stabilityHours))} / ${escapeHtml(formatHourLabel(node.reserveHours))}</td>
         <td>${escapeHtml(formatHours(node.hoursRemaining))}</td>
         <td>${escapeHtml(formatHours(node.hoursAtArrival))}</td>
+        <td>${escapeHtml(formatOutageHours(node.outageHoursBeforeArrival))}</td>
         <td>${escapeHtml(lastDrop)}</td>
+        <td>${escapeHtml(formatOutageHours(scheduledOutageHours))}</td>
         <td>${escapeHtml(formatNumber(node.fuelToStability))}</td>
         <td>${escapeHtml(formatNumber(stabilityGap))}</td>
         <td>${escapeHtml(formatNumber(node.fuelToReserve))}</td>
@@ -351,78 +401,34 @@ function createTableMarkup(plan) {
   }).join('');
 }
 
-function createReport(plan) {
-  const header = [
-    `Delivery timing: ${getDelayCoverageLabel(plan)}`,
-    `Priority overrides: ${getPriorityCoverageLabel(plan)}`,
-    `Critical floors: ${getStabilityCoverageLabel(plan)}`,
-    `Reserve windows: ${getReserveCoverageLabel(plan)}`,
-    `Fuel on hand: ${plan.availableFuel === null ? 'Open' : formatNumber(plan.availableFuel)}`,
-    `Trip capacity: ${formatTripCapacity(plan.dispatch.tripCapacity)}`,
-    `Trip turnaround: ${plan.dispatch.tripTurnaroundHours === null ? 'Not batched' : formatHourLabel(plan.dispatch.tripTurnaroundHours)}`,
-    `Haulers: ${plan.dispatch.haulerCount === null ? 'Not batched' : formatNumber(plan.dispatch.haulerCount)}`,
-    `Trip count: ${plan.dispatch.tripCount === null ? 'Not batched' : plan.dispatch.tripCount}`,
-    `Trip timing risk: ${getTripRiskLabel(plan)}`,
-    `Fuel burned before arrival: ${formatNumber(plan.totals.fuelConsumedBeforeArrival)}`,
-    `Fuel needed to stabilize: ${formatNumber(plan.totals.fuelToStability)}`,
-    `Fuel needed to reserve: ${formatNumber(plan.totals.fuelToReserve)}`,
-    `Uncovered critical gap: ${formatNumber(plan.dispatch.uncoveredStability)}`,
-    `Uncovered reserve gap: ${formatNumber(plan.dispatch.uncoveredReserve)}`,
-    `Arrival outage risk: ${plan.counts.arrivalRisk}`,
-    `Trip-added arrival risk: ${plan.dispatch.tripTiming.additionalArrivalRisk}`,
-    `Trip-degraded floor coverage: ${plan.dispatch.tripTiming.degradedStability}`,
-    `Trip-degraded reserve coverage: ${plan.dispatch.tripTiming.degradedReserve}`,
-    `Critical: ${plan.counts.critical}, Warning: ${plan.counts.warning}, Stable: ${plan.counts.stable}, Capacity-limited: ${plan.counts.capacityLimited}`,
-  ];
-
-  const rows = plan.dispatch.order.map((node) => [
-    node.name,
-    node.status.toUpperCase(),
-    `priority ${formatPriority(node.priority)}`,
-    `delay ${formatHourLabel(node.deliveryDelayHours)}`,
-    `coverage ${formatHourLabel(node.stabilityHours)} floor / ${formatHourLabel(node.reserveHours)} reserve`,
-    `remaining ${formatHours(node.hoursRemaining)}`,
-    `arrival ${formatHours(node.hoursAtArrival)}`,
-    `last drop ${node.allocatedFuel > 0 && plan.dispatch.tripCapacity !== null ? formatOffsetLabel(node.scheduledArrivalOffsetHours) : 'n/a'}`,
-    `after ${formatHours(getDisplayProjectedHours(plan, node))}`,
-    `send ${formatNumber(node.allocatedFuel)}`,
-    `${formatHourLabel(node.stabilityHours)} ${getDisplayStabilityGap(plan, node) > 0 ? `gap ${formatNumber(getDisplayStabilityGap(plan, node))}` : 'covered'}`,
-    getDisplayRunsDry(plan, node) ? 'offline before scheduled drop' : `burns ${formatNumber(node.fuelConsumedBeforeArrival)} before arrival`,
-    node.capacityLimited ? `reserve cap gap ${formatNumber(node.projectedShortfall)}` : 'reserve cap ok',
-    getDisplayReserveGap(plan, node) > 0 ? `reserve gap ${formatNumber(getDisplayReserveGap(plan, node))}` : 'reserve covered',
-  ].join(' | '));
-
-  const tripRows = plan.dispatch.tripCapacity === null
-    ? ['Trip manifests: set a trip capacity to generate them.']
-    : plan.dispatch.trips.map((trip) => {
-      const stops = trip.stops
-        .map((stop) => {
-          const stopNode = getDispatchRecord(plan, stop.name);
-          const parts = [
-            `${stop.name} ${formatNumber(stop.fuel)}`,
-            stopNode ? `${formatHourLabel(stopNode.stabilityHours)} floor / ${formatHourLabel(stopNode.reserveHours)} reserve` : null,
-            `arrives ${formatOffsetLabel(stop.arrivalOffsetHours)}`,
-            `before ${formatNumber(stop.fuelBeforeArrival)}`,
-            `after ${formatNumber(stop.fuelAfterDelivery)}`,
-            `runtime ${formatHours(stop.projectedHoursAfterDelivery)}`,
-            stop.forStability > 0 ? `${formatNumber(stop.forStability)} floor` : null,
-            stop.forReserve > 0 ? `${formatNumber(stop.forReserve)} reserve` : null,
-            stop.remainingReserveGap > 0 ? `${formatNumber(stop.remainingReserveGap)} reserve gap` : 'reserve covered',
-            stop.runsDryBeforeArrival ? 'offline before arrival' : null,
-          ].filter(Boolean);
-          return parts.join(' / ');
-        })
-        .join(' ; ');
-      return `Trip ${trip.tripNumber} | depart ${formatOffsetLabel(trip.departureOffsetHours)} | load ${formatNumber(trip.fuel)} / ${formatNumber(trip.capacity)} | remaining ${formatNumber(trip.remainingCapacity)} | ${stops}`;
-    });
-
-  return [...header, '', 'Dispatch order:', ...rows, '', 'Trip manifests:', ...tripRows].join('\n');
-}
-
 function setFeedback(message, tone = 'info') {
   feedback.textContent = message;
   feedback.dataset.tone = tone;
 }
+
+async function copyDatasetValue(button, key, successMessage, failureMessage) {
+  const value = button.dataset[key] || '';
+  if (!value) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    setFeedback(successMessage, 'stable');
+  } catch {
+    setFeedback(failureMessage, 'warning');
+  }
+}
+
+function getDraftStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const draftStorage = getDraftStorage();
 
 function getFormState() {
   return {
@@ -438,14 +444,23 @@ function getFormState() {
 }
 
 function applyFormState(formState) {
-  textarea.value = formState.nodes;
-  stabilityInput.value = formState.stabilityHours;
-  reserveInput.value = formState.reserveHours;
-  deliveryDelayInput.value = formState.deliveryDelayHours;
-  availableFuelInput.value = formState.availableFuel;
-  tripCapacityInput.value = formState.tripCapacity;
-  tripTurnaroundInput.value = formState.tripTurnaroundHours;
-  haulerCountInput.value = formState.haulerCount;
+  const normalizedFormState = normalizeFormState(formState);
+  textarea.value = normalizedFormState.nodes;
+  stabilityInput.value = normalizedFormState.stabilityHours;
+  reserveInput.value = normalizedFormState.reserveHours;
+  deliveryDelayInput.value = normalizedFormState.deliveryDelayHours;
+  availableFuelInput.value = normalizedFormState.availableFuel;
+  tripCapacityInput.value = normalizedFormState.tripCapacity;
+  tripTurnaroundInput.value = normalizedFormState.tripTurnaroundHours;
+  haulerCountInput.value = normalizedFormState.haulerCount;
+}
+
+function syncDraftControls(hasSavedDraft) {
+  clearDraftButton.disabled = !hasSavedDraft;
+}
+
+function persistDraftState() {
+  syncDraftControls(saveDraft(draftStorage, getFormState()));
 }
 
 function syncShareState() {
@@ -462,17 +477,23 @@ function renderPlan(plan) {
   tripList.innerHTML = createTripMarkup(plan);
   tableBody.innerHTML = createTableMarkup(plan);
   copyReportButton.disabled = false;
-  copyReportButton.dataset.report = createReport(plan);
+  copyReportButton.dataset.report = buildDispatchTextReport(plan);
+  copyNodeTsvButton.disabled = false;
+  copyNodeTsvButton.dataset.tsv = buildNodeTableTsv(plan);
+  copyTripTsvButton.disabled = plan.dispatch.trips.length === 0;
+  copyTripTsvButton.dataset.tsv = plan.dispatch.trips.length === 0 ? '' : buildTripManifestTsv(plan);
+  currentPlan = plan;
+  downloadPackButton.disabled = false;
   syncShareState();
 
   if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.additionalArrivalRisk > 0) {
-    setFeedback(`${plan.dispatch.tripTiming.additionalArrivalRisk} node(s) stay online in the base plan but run dry once later trip departures are applied. Reduce trip turnaround, add haulers, or re-balance the manifests.`, 'critical');
+    setFeedback(`${plan.dispatch.tripTiming.additionalArrivalRisk} node(s) stay online in the base plan but run dry once later trip departures are applied, adding ${formatOutageHours(Math.max(0, plan.totals.scheduledOutageHours - plan.totals.outageHoursBeforeArrival))} of downtime across the queue. Reduce trip turnaround, add haulers, or re-balance the manifests.`, 'critical');
   } else if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.degradedStability > 0) {
     setFeedback(`${plan.dispatch.tripTiming.degradedStability} node(s) lose critical-floor coverage once convoy timing is applied. Increase trip capacity, add haulers, reduce turnaround, or move those drops earlier.`, 'critical');
   } else if (plan.dispatch.tripCapacity !== null && plan.dispatch.tripTiming.degradedReserve > 0) {
     setFeedback(`${plan.dispatch.tripTiming.degradedReserve} node(s) lose reserve coverage once convoy timing is applied. The base allocation is valid, but later manifests land too late to preserve the full reserve window.`, 'warning');
   } else if (plan.counts.arrivalRisk > 0) {
-    setFeedback(`${plan.counts.arrivalRisk} node(s) run dry before fuel arrives with the ${describeDelayContext(plan)}. Dispatch can recover them after arrival but cannot prevent that outage.`, 'critical');
+    setFeedback(`${plan.counts.arrivalRisk} node(s) spend ${formatOutageHours(plan.totals.outageHoursBeforeArrival)} offline before fuel arrives with the ${describeDelayContext(plan)}. Dispatch can recover them after arrival but cannot prevent that outage.`, 'critical');
   } else if (plan.dispatch.uncoveredStability > 0) {
     const reason = plan.counts.stabilityCapacityLimited > 0
       ? `${plan.counts.stabilityCapacityLimited} node(s) cannot physically hold enough fuel for the ${describeStabilityContext(plan)}.`
@@ -495,18 +516,18 @@ function renderPlan(plan) {
 function updatePlan() {
   try {
     const nodes = parseNodeRows(textarea.value);
-    const stabilityHours = Number(stabilityInput.value || CRITICAL_STABILITY_HOURS);
-    const reserveHours = Number(reserveInput.value || DEFAULT_RESERVE_HOURS);
-    const deliveryDelayHours = Number(deliveryDelayInput.value || DEFAULT_DELIVERY_DELAY_HOURS);
+    const stabilityHours = parseHourValue(stabilityInput.value) ?? CRITICAL_STABILITY_HOURS;
+    const reserveHours = parseHourValue(reserveInput.value) ?? DEFAULT_RESERVE_HOURS;
+    const deliveryDelayHours = parseHourValue(deliveryDelayInput.value) ?? DEFAULT_DELIVERY_DELAY_HOURS;
     const availableFuel = availableFuelInput.value.trim() === ''
       ? Infinity
-      : Number(availableFuelInput.value);
+      : parseQuantityValue(availableFuelInput.value);
     const tripCapacity = tripCapacityInput.value.trim() === ''
       ? null
-      : Number(tripCapacityInput.value);
+      : parseQuantityValue(tripCapacityInput.value);
     const tripTurnaroundHours = tripTurnaroundInput.value.trim() === ''
       ? DEFAULT_TRIP_TURNAROUND_HOURS
-      : Number(tripTurnaroundInput.value);
+      : (parseHourValue(tripTurnaroundInput.value) ?? Number.NaN);
     const haulerCount = haulerCountInput.value.trim() === ''
       ? DEFAULT_HAULER_COUNT
       : Number(haulerCountInput.value);
@@ -526,8 +547,14 @@ function updatePlan() {
     dispatchList.innerHTML = '';
     tripList.innerHTML = '';
     tableBody.innerHTML = '';
+    currentPlan = null;
     copyReportButton.disabled = true;
     copyReportButton.dataset.report = '';
+    copyNodeTsvButton.disabled = true;
+    copyNodeTsvButton.dataset.tsv = '';
+    copyTripTsvButton.disabled = true;
+    copyTripTsvButton.dataset.tsv = '';
+    downloadPackButton.disabled = true;
     copyShareLinkButton.disabled = true;
     copyShareLinkButton.dataset.shareUrl = '';
     setFeedback(error instanceof Error ? error.message : 'Could not calculate fuel plan.', 'critical');
@@ -535,29 +562,36 @@ function updatePlan() {
 }
 
 fillSampleButton.addEventListener('click', () => {
-  textarea.value = sampleRows;
-  stabilityInput.value = String(CRITICAL_STABILITY_HOURS);
-  reserveInput.value = String(DEFAULT_RESERVE_HOURS);
-  deliveryDelayInput.value = '3';
-  availableFuelInput.value = '220';
-  tripCapacityInput.value = '90';
-  tripTurnaroundInput.value = '2';
-  haulerCountInput.value = '2';
+  applyFormState(defaultFormState);
+  persistDraftState();
   updatePlan();
 });
 
 copyReportButton.addEventListener('click', async () => {
-  const report = copyReportButton.dataset.report || '';
-  if (!report) {
-    return;
-  }
+  await copyDatasetValue(
+    copyReportButton,
+    'report',
+    'Copied fuel dispatch report to clipboard.',
+    'Clipboard write failed. Copy the table manually.',
+  );
+});
 
-  try {
-    await navigator.clipboard.writeText(report);
-    setFeedback('Copied fuel dispatch report to clipboard.', 'stable');
-  } catch {
-    setFeedback('Clipboard write failed. Copy the table manually.', 'warning');
-  }
+copyNodeTsvButton.addEventListener('click', async () => {
+  await copyDatasetValue(
+    copyNodeTsvButton,
+    'tsv',
+    'Copied node status TSV to clipboard.',
+    'Clipboard write failed. Copy the node table manually.',
+  );
+});
+
+copyTripTsvButton.addEventListener('click', async () => {
+  await copyDatasetValue(
+    copyTripTsvButton,
+    'tsv',
+    'Copied trip manifest TSV to clipboard.',
+    'Clipboard write failed. Copy the trip manifests manually.',
+  );
 });
 
 copyShareLinkButton.addEventListener('click', async () => {
@@ -574,27 +608,45 @@ copyShareLinkButton.addEventListener('click', async () => {
   }
 });
 
+downloadPackButton.addEventListener('click', () => {
+  if (!currentPlan) {
+    return;
+  }
+
+  try {
+    const files = buildExportFiles(currentPlan, getFormState(), {
+      generatedAt: new Date(),
+      shareUrl: copyShareLinkButton.dataset.shareUrl || '',
+    });
+    const downloaded = downloadExportFiles(files);
+    setFeedback(`Downloaded ${downloaded} export file${downloaded === 1 ? '' : 's'} for handoff.`, 'stable');
+  } catch {
+    setFeedback('Could not build the export pack. Try recalculating the plan first.', 'warning');
+  }
+});
+
+form.addEventListener('input', () => {
+  persistDraftState();
+});
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   updatePlan();
 });
 
+clearDraftButton.addEventListener('click', () => {
+  clearDraft(draftStorage);
+  syncDraftControls(false);
+  setFeedback('Cleared the saved local draft. The current workspace stays loaded until you replace or refresh it.', 'stable');
+});
+
 const sharedState = parseShareState(window.location.href);
 const hasSharedState = Object.values(sharedState).some((value) => value !== '');
+const savedDraftState = loadDraft(draftStorage);
 
+syncDraftControls(savedDraftState !== null);
 applyFormState(hasSharedState
   ? sharedState
-  : {
-    nodes: sampleRows,
-    stabilityHours: String(CRITICAL_STABILITY_HOURS),
-    reserveHours: String(DEFAULT_RESERVE_HOURS),
-    deliveryDelayHours: '3',
-    availableFuel: '220',
-    tripCapacity: '90',
-    tripTurnaroundHours: '2',
-    haulerCount: '2',
-  });
+  : (savedDraftState ?? defaultFormState));
 updatePlan();
-
-
 

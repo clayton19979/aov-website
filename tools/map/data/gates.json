@@ -1,0 +1,50 @@
+[
+  {
+    "fromSystemId": 30001548,
+    "destinationSystemId": 30001550,
+    "status": "online",
+    "kind": "game",
+    "count": 2,
+    "name": "OF3-C44 to EFH-784 gate chain"
+  },
+  {
+    "fromSystemId": 30014167,
+    "destinationSystemId": 30014185,
+    "status": "online",
+    "kind": "game",
+    "count": 5,
+    "name": "E47-FR3 to ET8-QB3 gate chain"
+  },
+  {
+    "fromSystemId": 30014186,
+    "destinationSystemId": 30014173,
+    "status": "online",
+    "kind": "game",
+    "count": 4,
+    "name": "EN7-NF3 to EKL-TB4 gate chain"
+  },
+  {
+    "fromSystemId": 30013306,
+    "destinationSystemId": 30013383,
+    "status": "online",
+    "kind": "game",
+    "count": 9,
+    "name": "E0D-JV4 to I76-VQ9 gate chain"
+  },
+  {
+    "fromSystemId": 30023806,
+    "destinationSystemId": 30023718,
+    "status": "online",
+    "kind": "game",
+    "count": 1,
+    "name": "IQ0-36C to EPB-BCC gate"
+  },
+  {
+    "fromSystemId": 30023823,
+    "destinationSystemId": 30023778,
+    "status": "online",
+    "kind": "game",
+    "count": 3,
+    "name": "O5J-1RC to O4M-72F gate chain"
+  }
+]

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test ./calc-core.test.mjs ./state-share.test.mjs",
-    "check": "node --check ./calc-core.js && node --check ./state-share.js && node --check ./app.js"
+    "test": "node --test ./calc-core.test.mjs ./state-share.test.mjs ./report-export.test.mjs ./local-draft.test.mjs ./download-pack.test.mjs",
+    "check": "node --check ./calc-core.js && node --check ./state-share.js && node --check ./report-export.js && node --check ./local-draft.js && node --check ./download-pack.js && node --check ./app.js"
   }
 }

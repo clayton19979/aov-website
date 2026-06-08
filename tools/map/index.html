@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Void Map — AoV</title>
+    <title>Void Map &mdash; AoV</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -16,7 +16,7 @@
         </div>
         <div class="map-tools" aria-label="Map controls">
           <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
-          <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+          <button id="zoomOut" title="Zoom out" aria-label="Zoom out">&minus;</button>
           <button id="fitRoute" title="Fit route" aria-label="Fit route">FIT</button>
           <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
           <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
@@ -54,7 +54,7 @@
         <section class="overlay-section" aria-label="Map overlays">
           <div class="section-title">
             <h3>Map Overlays</h3>
-            <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
+            <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">&#8635;</button>
           </div>
           <div class="overlay-toggles">
             <label class="overlay-toggle" id="killsToggleLabel">
@@ -72,31 +72,6 @@
               <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
               Online only
             </label>
-            <div id="asmTypePanel" class="asm-type-panel" style="display:none">
-              <label class="overlay-sublabel" style="margin-left:20px">Types shown</label>
-              <div class="asm-type-toggles">
-                <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
-                  <input type="checkbox" class="asm-type-check" data-type="Network Node" checked />
-                  <span class="overlay-dot" style="width:6px;height:6px;background:#00b4d8;"></span>
-                  Network Nodes
-                </label>
-                <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
-                  <input type="checkbox" class="asm-type-check" data-type="Storage Unit" checked />
-                  <span class="overlay-dot" style="width:6px;height:6px;background:#61d5c7;"></span>
-                  Storage Units
-                </label>
-                <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
-                  <input type="checkbox" class="asm-type-check" data-type="Assembly" checked />
-                  <span class="overlay-dot" style="width:6px;height:6px;background:#9b8dff;"></span>
-                  Assemblies
-                </label>
-                <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
-                  <input type="checkbox" class="asm-type-check" data-type="Turret" checked />
-                  <span class="overlay-dot" style="width:6px;height:6px;background:#ff9f40;"></span>
-                  Turrets
-                </label>
-              </div>
-            </div>
             <label class="overlay-toggle" id="playerBasesToggleLabel">
               <input type="checkbox" id="playerBasesToggle" />
               <span class="overlay-dot bases-dot"></span>
@@ -106,7 +81,6 @@
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>
             <div class="time-presets">
-              <button type="button" class="time-preset" data-hours="0.5">30m</button>
               <button type="button" class="time-preset" data-hours="1">1h</button>
               <button type="button" class="time-preset" data-hours="6">6h</button>
               <button type="button" class="time-preset active" data-hours="24">24h</button>
@@ -116,11 +90,6 @@
               <input type="checkbox" id="showKillLabels" />
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;"></span>
               Label hot systems (3+)
-            </label>
-            <label class="overlay-toggle overlay-toggle--subsub" id="killTypeFilterLabel">
-              <input type="checkbox" id="killShipsOnly" />
-              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;"></span>
-              Ships only (hide structure kills)
             </label>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
@@ -166,7 +135,6 @@
             <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
-            <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>
           </div>
 
           <button class="primary" type="submit">Calculate</button>
@@ -195,6 +163,8 @@
     </main>
 
     <script src="./route-core.js"></script>
+    <script src="./gate-cache.js"></script>
+    <script src="./map-state-share.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
