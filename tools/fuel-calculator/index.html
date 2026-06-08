@@ -12,8 +12,8 @@
         <p class="eyebrow">Architects of the Void</p>
         <h1>Network Node Fuel Calculator</h1>
         <p class="lede">
-          Paste node fuel snapshots, set a reserve window, and turn a limited fuel cache into an actionable dispatch brief.
-          Critical nodes are now stabilized to a 12-hour floor before the planner spends remaining fuel on the broader reserve target.
+          Paste node fuel snapshots, set an emergency floor and reserve window, and turn a limited fuel cache into an actionable dispatch brief.
+          Critical nodes are stabilized to your chosen floor before the planner spends remaining fuel on the broader reserve target.
         </p>
       </header>
 
@@ -25,8 +25,18 @@
           </div>
 
           <label class="field">
+            <span>Critical Floor (hours)</span>
+            <input data-stability-hours type="number" min="0" step="1" />
+          </label>
+
+          <label class="field">
             <span>Reserve Window (hours)</span>
             <input data-reserve-hours type="number" min="0" step="1" />
+          </label>
+
+          <label class="field">
+            <span>Delivery Delay (hours)</span>
+            <input data-delivery-delay-hours type="number" min="0" step="1" />
           </label>
 
           <label class="field">
@@ -44,7 +54,7 @@
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code>. Header rows, tab-separated exports, and <code># comments</code> are accepted.</p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, extra spreadsheet columns, and <code># comments</code> are accepted. Each node name must appear only once per run. Delivery delay applies burn before any dispatched fuel lands.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>
@@ -74,9 +84,10 @@
                   <th>Current</th>
                   <th>Max</th>
                   <th>Burn / hr</th>
-                  <th>Runtime</th>
-                  <th>To 12h</th>
-                  <th>12h Gap</th>
+                  <th>Runtime Now</th>
+                  <th>At Arrival</th>
+                  <th data-floor-need-label>To Floor</th>
+                  <th data-floor-gap-label>Floor Gap</th>
                   <th>To Reserve</th>
                   <th>Cap Gap</th>
                   <th>Allocated</th>

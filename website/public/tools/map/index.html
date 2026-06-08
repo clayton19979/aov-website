@@ -23,8 +23,8 @@
         </div>
         <div class="map-legend" aria-label="Route legend">
           <span><i class="legend-jump"></i>Jump</span>
-          <span><i class="legend-smart"></i>Smart Gate</span>
-          <span><i class="legend-game"></i>Game Gate</span>
+          <span><i class="legend-smart-gate"></i>Smart Gate</span>
+          <span><i class="legend-game-gate"></i>Game Gate</span>
           <span class="legend-overlay-items">
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
@@ -62,10 +62,15 @@
               <span class="overlay-dot kills-dot"></span>
               Kills
             </label>
-            <label class="overlay-toggle" id="assembliesToggleLabel">
+            <label class="overlay-toggle overlay-toggle--sub" id="assembliesToggleLabel">
               <input type="checkbox" id="assembliesToggle" />
               <span class="overlay-dot assemblies-dot"></span>
               Smart Assemblies
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="assembliesOnlineOnlyLabel">
+              <input type="checkbox" id="assembliesOnlineOnly" />
+              <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
+              Online only
             </label>
             <label class="overlay-toggle" id="playerBasesToggleLabel">
               <input type="checkbox" id="playerBasesToggle" />
@@ -120,7 +125,10 @@
           </div>
 
           <div class="toggles">
-            <label><input id="useGates" type="checkbox" checked /> Use Smart Gates</label>
+            <label><input id="useGates" type="checkbox" checked /> Use Smart Gates for routing</label>
+            <label><input id="showGameGates" type="checkbox" checked /> Show game gate links</label>
+            <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
+            <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
           </div>
 
           <button class="primary" type="submit">Calculate</button>

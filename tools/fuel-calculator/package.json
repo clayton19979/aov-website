@@ -1,5 +1,9 @@
 {
   "name": "aov-fuel-calculator",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "node --test ./calc-core.test.mjs",
+    "check": "node --check ./calc-core.js && node --check ./app.js"
+  }
 }
