@@ -3,6 +3,12 @@ export const CRITICAL_STABILITY_HOURS = 12;
 export const DEFAULT_DELIVERY_DELAY_HOURS = 0;
 export const DEFAULT_TRIP_TURNAROUND_HOURS = 0;
 export const DEFAULT_HAULER_COUNT = 1;
+const QUANTITY_SUFFIXES = {
+  k: 1_000,
+  m: 1_000_000,
+  b: 1_000_000_000,
+  t: 1_000_000_000_000,
+};
 const HEADER_ALIASES = {
   name: ['name', 'node', 'nodename'],
   currentFuel: ['currentfuel', 'fuel', 'current', 'currentfuelunits'],
@@ -122,14 +128,35 @@ function toFiniteNumber(value) {
     if (trimmed === '') {
       return null;
     }
-
     const normalized = trimmed.replaceAll(',', '').replaceAll('_', '');
     const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : null;
   }
-
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+export function parseQuantityValue(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const normalized = trimmed.replaceAll(',', '').replaceAll('_', '');
+  const shorthandMatch = normalized.match(/^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*([kmbt])$/i);
+  if (shorthandMatch) {
+    const amount = Number(shorthandMatch[1]);
+    const multiplier = QUANTITY_SUFFIXES[shorthandMatch[2].toLowerCase()];
+    if (!Number.isFinite(amount) || multiplier === undefined) {
+      return null;
+    }
+    return amount * multiplier;
+  }
+  return toFiniteNumber(normalized);
 }
 
 function parsePercentValue(value) {
@@ -254,15 +281,15 @@ export function parseNodeRows(input) {
     const reserveHoursRaw = headerColumnIndexes
       ? (headerColumnIndexes.reserveHours !== undefined ? parts[headerColumnIndexes.reserveHours] : '')
       : (parts[7] ?? '');
-    const maxFuel = toFiniteNumber(maxFuelRaw);
-    const burnRatePerHour = toFiniteNumber(burnRateRaw);
+    const maxFuel = parseQuantityValue(maxFuelRaw);
+    const burnRatePerHour = parseQuantityValue(burnRateRaw);
     const currentFuelPercent = currentFuelPercentRaw === '' ? null : toFiniteNumber(currentFuelPercentRaw);
     const hasRuntimeHoursValue = typeof runtimeHoursRaw === 'string'
       ? runtimeHoursRaw.trim() !== ''
       : runtimeHoursRaw !== undefined && runtimeHoursRaw !== null;
     const runtimeHours = hasRuntimeHoursValue ? parseHourValue(runtimeHoursRaw) : null;
     const inlinePercent = parsePercentValue(currentFuelRaw);
-    const currentFuelCandidate = inlinePercent === null ? toFiniteNumber(currentFuelRaw) : null;
+    const currentFuelCandidate = inlinePercent === null ? parseQuantityValue(currentFuelRaw) : null;
     const currentFuel = currentFuelCandidate
       ?? (inlinePercent !== null && maxFuel !== null ? roundTo((maxFuel * inlinePercent) / 100) : null)
       ?? (currentFuelPercent !== null && maxFuel !== null ? roundTo((maxFuel * currentFuelPercent) / 100) : null)
@@ -477,7 +504,7 @@ export function buildDispatchTrips(
   tripTurnaroundHours = DEFAULT_TRIP_TURNAROUND_HOURS,
   haulerCount = DEFAULT_HAULER_COUNT,
 ) {
-  const normalizedTripCapacity = toFiniteNumber(tripCapacity);
+  const normalizedTripCapacity = parseQuantityValue(tripCapacity);
   if (normalizedTripCapacity === null || normalizedTripCapacity <= 0) {
     return [];
   }
@@ -714,11 +741,11 @@ export function planFuel(
   haulerCount = DEFAULT_HAULER_COUNT,
 ) {
   const normalizedReserveHours = Math.max(0, parseHourValue(reserveHours) ?? DEFAULT_RESERVE_HOURS);
-  const normalizedAvailableFuel = Math.max(0, toFiniteNumber(availableFuel) ?? Infinity);
+  const normalizedAvailableFuel = Math.max(0, parseQuantityValue(availableFuel) ?? Infinity);
   const normalizedStabilityHours = Math.max(0, parseHourValue(stabilityHours) ?? CRITICAL_STABILITY_HOURS);
   const normalizedDeliveryDelayHours = Math.max(0, parseHourValue(deliveryDelayHours) ?? DEFAULT_DELIVERY_DELAY_HOURS);
   const normalizedTripCapacity = (() => {
-    const parsed = toFiniteNumber(tripCapacity);
+    const parsed = parseQuantityValue(tripCapacity);
     return parsed !== null && parsed > 0 ? parsed : null;
   })();
   const normalizedTripTurnaroundHours = Math.max(

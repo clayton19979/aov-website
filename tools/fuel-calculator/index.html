@@ -41,12 +41,12 @@
 
           <label class="field">
             <span>Fuel On Hand for This Run</span>
-            <input data-available-fuel type="number" min="0" step="1" placeholder="Leave blank for unlimited" />
+            <input data-available-fuel type="text" inputmode="decimal" placeholder="Leave blank for unlimited or use 220k / 1.5m" />
           </label>
 
           <label class="field">
             <span>Trip Capacity (optional)</span>
-            <input data-trip-capacity type="number" min="0" step="1" placeholder="Split dispatch into hauler-sized trips" />
+            <input data-trip-capacity type="text" inputmode="decimal" placeholder="Split dispatch into hauler-sized trips (for example 90k)" />
           </label>
 
           <label class="field">
@@ -69,7 +69,7 @@
             ></textarea>
           </label>
 
-          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours][,priority][,stabilityHours][,reserveHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code>, inline fuel percentages like <code>37.5%</code>, percent columns such as <code>fuelPercent</code>, runtime columns such as <code>hoursRemaining</code>, extra spreadsheet columns, and <code># comments</code> are accepted. Hour-based values can be plain numbers or duration strings like <code>36h</code>, <code>1d 12h</code>, and <code>90m</code>. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. If a row includes <code>priority</code>, higher values break ties inside the same alert band and critical-floor queue. If a row includes <code>stabilityHours</code> or <code>reserveHours</code>, that node carries its own coverage targets for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing alert-band precedence. Trip turnaround delays each later manifest departure so you can spot batching risk before launch. Hauler count lets multiple ships launch in parallel before the next turnaround wave. Each node name must appear only once per run. Unsaved edits are cached locally on this device until you clear the saved draft.</p>
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours][,priority][,stabilityHours][,reserveHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code> and shorthand quantities like <code>220k</code> or <code>1.5m</code>, inline fuel percentages like <code>37.5%</code>, percent columns such as <code>fuelPercent</code>, runtime columns such as <code>hoursRemaining</code>, extra spreadsheet columns, and <code># comments</code> are accepted. Hour-based values can be plain numbers or duration strings like <code>36h</code>, <code>1d 12h</code>, and <code>90m</code>. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. If a row includes <code>priority</code>, higher values break ties inside the same alert band and critical-floor queue. If a row includes <code>stabilityHours</code> or <code>reserveHours</code>, that node carries its own coverage targets for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing alert-band precedence. Trip turnaround delays each later manifest departure so you can spot batching risk before launch. Hauler count lets multiple ships launch in parallel before the next turnaround wave. Each node name must appear only once per run. Unsaved edits are cached locally on this device until you clear the saved draft.</p>
 
           <div class="actions">
             <button type="submit" class="primary-button">Calculate Fuel Plan</button>

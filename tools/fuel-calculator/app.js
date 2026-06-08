@@ -6,6 +6,7 @@ import {
   DEFAULT_TRIP_TURNAROUND_HOURS,
   formatHours,
   parseHourValue,
+  parseQuantityValue,
   parseNodeRows,
   planFuel,
 } from './calc-core.js';
@@ -520,10 +521,10 @@ function updatePlan() {
     const deliveryDelayHours = parseHourValue(deliveryDelayInput.value) ?? DEFAULT_DELIVERY_DELAY_HOURS;
     const availableFuel = availableFuelInput.value.trim() === ''
       ? Infinity
-      : Number(availableFuelInput.value);
+      : parseQuantityValue(availableFuelInput.value);
     const tripCapacity = tripCapacityInput.value.trim() === ''
       ? null
-      : Number(tripCapacityInput.value);
+      : parseQuantityValue(tripCapacityInput.value);
     const tripTurnaroundHours = tripTurnaroundInput.value.trim() === ''
       ? DEFAULT_TRIP_TURNAROUND_HOURS
       : (parseHourValue(tripTurnaroundInput.value) ?? Number.NaN);

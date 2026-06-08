@@ -10,6 +10,7 @@ import {
   formatHours,
   parseHourValue,
   parseNodeRows,
+  parseQuantityValue,
   planFuel,
 } from './calc-core.js';
 
@@ -104,6 +105,13 @@ test('parseNodeRows maps aliased headers in any order and ignores extra columns'
   ]);
 });
 
+test('parseQuantityValue accepts shorthand suffixes for fuel-scale inputs', () => {
+  assert.equal(parseQuantityValue('220k'), 220000);
+  assert.equal(parseQuantityValue('1.5m'), 1500000);
+  assert.equal(parseQuantityValue('2B'), 2000000000);
+  assert.equal(parseQuantityValue('bad data'), null);
+});
+
 test('parseNodeRows accepts quoted CSV fields and formatted numeric values', () => {
   const rows = parseNodeRows([
     'name,currentFuel,maxFuel,burnPerHour',
@@ -157,6 +165,18 @@ test('parseNodeRows accepts percent-based fuel snapshots from inline values and 
     ].join('\n')),
     [{ name: 'Refinery Spine', currentFuel: 110, maxFuel: 500, burnRatePerHour: 8 }],
   );
+});
+
+test('parseNodeRows accepts shorthand quantities for fuel and burn values', () => {
+  const rows = parseNodeRows([
+    'name,currentFuel,maxFuel,burnPerHour',
+    'North Gate,220k,1.5m,12.5k',
+    'South Relay,600,1_200,5',
+  ].join('\n'));
+  assert.deepEqual(rows, [
+    { name: 'North Gate', currentFuel: 220000, maxFuel: 1500000, burnRatePerHour: 12500 },
+    { name: 'South Relay', currentFuel: 600, maxFuel: 1200, burnRatePerHour: 5 },
+  ]);
 });
 
 test('parseNodeRows accepts runtime-hour snapshots when current fuel is not provided', () => {
@@ -1495,6 +1515,17 @@ test('parseNodeRows rejects malformed duration strings in runtime and override c
     () => parseNodeRows('Forward Tower,90,300,6,1h,2,10h,tomorrow'),
     /Row 1 has an invalid reserve-hours value/,
   );
+});
+
+test('planFuel accepts shorthand quantities for stockpile and trip capacity inputs', () => {
+  const plan = planFuel([
+    { name: 'North Gate', currentFuel: 90, maxFuel: 400, burnRatePerHour: 10 },
+    { name: 'South Relay', currentFuel: 60, maxFuel: 240, burnRatePerHour: 5 },
+  ], 24, '220k', 12, 0, '90k', 2, 1);
+  assert.equal(plan.availableFuel, 220000);
+  assert.equal(plan.dispatch.tripCapacity, 90000);
+  assert.equal(plan.dispatch.remainingFuel, 219790);
+  assert.equal(plan.dispatch.tripCount, 1);
 });
 
 test('planFuel accepts duration strings for global and per-node hour inputs', () => {
