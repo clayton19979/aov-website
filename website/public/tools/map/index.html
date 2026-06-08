@@ -112,6 +112,10 @@
               <button type="button" class="time-preset active" data-hours="24">24h</button>
               <button type="button" class="time-preset" data-hours="168">7d</button>
             </div>
+            <div class="custom-hours-row">
+              <input type="number" id="customHours" min="1" max="720" placeholder="Custom h" class="custom-hours-input" />
+              <button type="button" id="applyCustomHours" class="time-preset">Set</button>
+            </div>
             <label class="overlay-toggle overlay-toggle--subsub" id="killLabelsToggleLabel">
               <input type="checkbox" id="showKillLabels" />
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;"></span>
@@ -122,9 +126,24 @@
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;"></span>
               Ships only (hide structure kills)
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killTrendToggleLabel">
+              <input type="checkbox" id="showKillTrend" checked />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;opacity:0.7;"></span>
+              Show activity trend arrows
+            </label>
+          </div>
+          <div id="assemblyStats" class="assembly-stats" style="display:none">
+            <div id="assemblyStatsContent" class="assembly-stats-content"></div>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
+
+        <div id="dangerPanel" class="danger-panel" style="display:none">
+          <div class="section-title">
+            <h3>Hot Systems <span id="dangerWindowLabel" class="danger-window-label"></span></h3>
+          </div>
+          <ol id="dangerList" class="danger-list"></ol>
+        </div>
 
         <form id="routeForm" class="route-form">
           <label>

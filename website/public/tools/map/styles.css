@@ -779,6 +779,135 @@ input:focus, textarea:focus {
   gap: 2px;
 }
 
+/* ── Custom time window ─────────────────────────── */
+
+.custom-hours-row {
+  display: grid;
+  grid-template-columns: 1fr 52px;
+  gap: 4px;
+}
+
+.custom-hours-input {
+  height: 28px !important;
+  font-size: 0.68rem;
+}
+
+/* ── Danger panel ──────────────────────────────── */
+
+.danger-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.danger-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.danger-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 50, 50, 0.10);
+  background: rgba(255, 20, 20, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.danger-item:hover {
+  border-color: rgba(255, 80, 80, 0.35);
+  background: rgba(255, 30, 30, 0.10);
+}
+
+.danger-rank {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.danger-name {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.80);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.danger-count {
+  font-size: 0.70rem;
+  color: rgba(255, 100, 100, 0.90);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.danger-trend {
+  font-size: 0.65rem;
+  margin-left: 3px;
+}
+
+.danger-trend--up   { color: rgba(255, 140, 60, 0.95); }
+.danger-trend--down { color: rgba(100, 220, 100, 0.90); }
+
+.danger-empty {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 0.70rem;
+  text-align: center;
+  list-style: none;
+}
+
+.danger-window-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+/* ── Assembly stats ─────────────────────────────── */
+
+.assembly-stats {
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 8px 10px;
+}
+
+.assembly-stats-content {
+  display: grid;
+  gap: 5px;
+}
+
+.asm-stat-header {
+  font-size: 0.66rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+
+.asm-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.70rem;
+  color: var(--muted);
+}
+
+.asm-stat-row span:last-child {
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
 /* ── Responsive ────────────────────────────────── */
 
 @media (max-width: 900px) {

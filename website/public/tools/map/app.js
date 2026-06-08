@@ -65,6 +65,8 @@ const state = {
   showJumpRange: false,
   showKillLabels: false,
   showKillShipsOnly: false,
+  showKillTrend: true,
+  killHeatmap: false,
   showSystemLabels: false,
 };
 
@@ -112,6 +114,19 @@ const els = {
   showJumpRangeToggle: document.getElementById("showJumpRange"),
   showKillLabelsToggle: document.getElementById("showKillLabels"),
   killShipsOnlyToggle: document.getElementById("killShipsOnly"),
+  showKillTrendToggle: document.getElementById("showKillTrend"),
+  killHeatmapToggle: document.getElementById("killHeatmap"),
+  findSystemBtn: document.getElementById("findSystem"),
+  findPanel: document.getElementById("findPanel"),
+  findInput: document.getElementById("findInput"),
+  findSuggestions: document.getElementById("findSuggestions"),
+  customHours: document.getElementById("customHours"),
+  applyCustomHours: document.getElementById("applyCustomHours"),
+  dangerPanel: document.getElementById("dangerPanel"),
+  dangerList: document.getElementById("dangerList"),
+  dangerWindowLabel: document.getElementById("dangerWindowLabel"),
+  assemblyStats: document.getElementById("assemblyStats"),
+  assemblyStatsContent: document.getElementById("assemblyStatsContent"),
   showSystemLabelsToggle: document.getElementById("showSystemLabels"),
   asmTypePanel: document.getElementById("asmTypePanel"),
   asmTypeChecks: document.querySelectorAll(".asm-type-check"),
@@ -523,8 +538,11 @@ function draw() {
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
   if (state.showJumpRange) drawJumpRangeCircle();
-  if (state.showKills) drawKillOverlay();
-  if (state.showKills && state.showKillLabels) drawKillLabels();
+  if (state.showKills) {
+    if (state.killHeatmap) drawKillHeatmap();
+    else drawKillOverlay();
+    if (state.showKillLabels) drawKillLabels();
+  }
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   if (state.showSystemLabels) drawSystemLabels();
@@ -1368,9 +1386,11 @@ function routeShareUrl() {
   if (state.overlayKillsTimeWindow !== 24) params.set("ov_kh", String(state.overlayKillsTimeWindow));
   if (state.showKillLabels) params.set("ov_kl", "1");
   if (state.showKillShipsOnly) params.set("ov_ks", "1");
+  if (!state.showKillTrend) params.set("ov_kt", "0");
   if (state.showAssemblies) params.set("ov_a", "1");
   if (state.overlayAssembliesOnlineOnly) params.set("ov_ao", "1");
   if (state.showPlayerBases) params.set("ov_b", "1");
+  if (state.killHeatmap) params.set("ov_km", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1437,6 +1457,10 @@ function loadUrlParams() {
     els.killShipsOnlyToggle && (els.killShipsOnlyToggle.checked = true);
     state.showKillShipsOnly = true;
   }
+  if (params.get("ov_kt") === "0") {
+    els.showKillTrendToggle && (els.showKillTrendToggle.checked = false);
+    state.showKillTrend = false;
+  }
   if (params.get("ov_a") === "1") {
     els.assembliesToggle.checked = true;
     state.showAssemblies = true;
@@ -1449,6 +1473,10 @@ function loadUrlParams() {
   if (params.get("ov_b") === "1") {
     els.playerBasesToggle.checked = true;
     state.showPlayerBases = true;
+  }
+  if (params.get("ov_km") === "1") {
+    state.killHeatmap = true;
+    els.killHeatmapToggle && (els.killHeatmapToggle.checked = true);
   }
   updateOverlayLegend();
 }
@@ -1638,6 +1666,21 @@ function bindEvents() {
   setupSystemSearch(els.origin, els.originSuggestions);
   setupSystemSearch(els.destination, els.destinationSuggestions);
   setupSystemSearch(els.via, els.viaSuggestions);
+  // Find system panel search
+  if (els.findInput && els.findSuggestions) {
+    setupSystemSearch(els.findInput, els.findSuggestions);
+    els.findInput.addEventListener("change", () => {
+      const system = parseSystem(els.findInput.value);
+      if (system) { centerOnSystem(system); selectSystem(system); closeFindPanel(); }
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.findPanelOpen) closeFindPanel();
+    if ((e.key === "/" || e.key === "f") && !e.ctrlKey && !e.metaKey && !e.target.matches("input, textarea")) {
+      e.preventDefault();
+      state.findPanelOpen ? closeFindPanel() : openFindPanel();
+    }
+  });
   els.form.addEventListener("submit", (event) => {
     event.preventDefault();
     calculate();
@@ -1681,6 +1724,7 @@ function bindEvents() {
   });
   els.assembliesOnlineOnlyToggle?.addEventListener("change", () => {
     state.overlayAssembliesOnlineOnly = els.assembliesOnlineOnlyToggle.checked;
+    updateAssemblyStats();
     draw();
   });
   els.showJumpRangeToggle?.addEventListener("change", () => {
@@ -1835,6 +1879,96 @@ function buildKillSystemMap() {
   return map;
 }
 
+function buildKillTrendMap() {
+  const now = Date.now();
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
+  const midpoint = now - windowMs / 2;
+  const trends = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < now - windowMs) continue;
+    if (!trends.has(kill.systemId)) trends.set(kill.systemId, { recent: 0, older: 0 });
+    const t = trends.get(kill.systemId);
+    if (kill.timestamp >= midpoint) t.recent++;
+    else t.older++;
+  }
+  return trends;
+}
+
+function updateDangerPanel() {
+  if (!state.showKills || !state.overlayKillsLoaded) {
+    els.dangerPanel.style.display = "none";
+    return;
+  }
+  els.dangerPanel.style.display = "";
+  const w = state.overlayKillsTimeWindow;
+  els.dangerWindowLabel.textContent = w < 1 ? `/ ${Math.round(w * 60)}m` : w >= 24 ? `/ ${Math.round(w / 24)}d` : `/ ${w}h`;
+
+  const killsBySystem = buildKillSystemMap();
+  const trendMap = buildKillTrendMap();
+  const sorted = [...killsBySystem.entries()]
+    .filter(([id]) => state.systemsById.has(id))
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 10);
+
+  if (!sorted.length) {
+    els.dangerList.innerHTML = '<li class="danger-empty">No kills in this time window</li>';
+    return;
+  }
+
+  els.dangerList.innerHTML = sorted.map(([systemId, kills], idx) => {
+    const system = state.systemsById.get(systemId);
+    const name = escapeHtml(system.name);
+    const count = kills.length;
+    const trend = trendMap.get(systemId);
+    let trendHtml = "";
+    if (trend) {
+      if (trend.recent > trend.older + 1) trendHtml = `<span class="danger-trend danger-trend--up">↑</span>`;
+      else if (trend.older > trend.recent + 1) trendHtml = `<span class="danger-trend danger-trend--down">↓</span>`;
+    }
+    return `<li class="danger-item" data-system-id="${systemId}">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count">${count}${trendHtml}</span>
+    </li>`;
+  }).join("");
+
+  els.dangerList.querySelectorAll(".danger-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const system = state.systemsById.get(Number(li.dataset.systemId));
+      if (system) { selectSystem(system); centerOnSystem(system); }
+    });
+  });
+}
+
+function updateAssemblyStats() {
+  if (!state.overlayAssembliesLoaded || !state.showAssemblies || !state.overlayAssemblies.length) {
+    els.assemblyStats.style.display = "none";
+    return;
+  }
+  els.assemblyStats.style.display = "";
+
+  const byType = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (!byType.has(asm.label)) byType.set(asm.label, { total: 0, online: 0, color: asm.color });
+    const t = byType.get(asm.label);
+    t.total++;
+    if (asm.online) t.online++;
+  }
+
+  const systemsWithAsm = new Set(state.overlayAssemblies.map((a) => a.systemId)).size;
+  const rows = [...byType.entries()].map(([label, stats]) =>
+    `<div class="asm-stat-row">
+      <span>${escapeHtml(label)}</span>
+      <span><span style="color:${escapeHtml(stats.color)}">${stats.online}</span>/${stats.total}</span>
+    </div>`
+  ).join("");
+
+  els.assemblyStatsContent.innerHTML = `
+    <div class="asm-stat-header">Online / Total — ${systemsWithAsm} system${systemsWithAsm !== 1 ? "s" : ""}</div>
+    ${rows}
+  `;
+}
+
 function isShipKill(kill) {
   const t = String(kill.lossType ?? "").toLowerCase();
   // Heuristic: non-ship types include "turret", "assembly", "structure", "networknode", "storageunit"
@@ -1844,9 +1978,25 @@ function isShipKill(kill) {
   return true; // default to ship if type is unknown
 }
 
+function getKillTrend(systemId) {
+  if (!state.overlayKillsLoaded) return null;
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  const mid = now - windowMs / 2;
+  const kills = state.overlayKills.filter((k) => k.systemId === systemId && k.timestamp >= cutoff);
+  if (kills.length < 3) return null;
+  const recent = kills.filter((k) => k.timestamp >= mid).length;
+  const older = kills.filter((k) => k.timestamp < mid).length;
+  if (recent >= older * 2 && recent >= 2) return "up";
+  if (older >= recent * 2 && older >= 2) return "down";
+  return null;
+}
+
 function drawKillOverlay() {
   const killsBySystem = buildKillSystemMap();
   if (!killsBySystem.size) return;
+  const trendMap = state.showKillTrend && state.camera.zoom > 0.5 ? buildKillTrendMap() : null;
   const now = Date.now();
   const windowMs = state.overlayKillsTimeWindow * 3_600_000;
   ctx.save();
@@ -1913,6 +2063,33 @@ function drawKillOverlay() {
       ctx.textBaseline = "middle";
       ctx.fillText(count > 99 ? "99+" : String(count), p.x, p.y);
     }
+
+    // Trend arrow
+    if (trendMap) {
+      const trend = trendMap.get(systemId);
+      if (trend) {
+        const isRising = trend.recent > trend.older + 1;
+        const isFalling = trend.older > trend.recent + 1;
+        if (isRising || isFalling) {
+          const ax = p.x + radius + 5;
+          const ay = p.y;
+          const as = 4;
+          ctx.fillStyle = isRising ? "rgba(255, 140, 60, 0.92)" : "rgba(100, 220, 100, 0.85)";
+          ctx.beginPath();
+          if (isRising) {
+            ctx.moveTo(ax, ay - as);
+            ctx.lineTo(ax + as * 0.6, ay + as * 0.5);
+            ctx.lineTo(ax - as * 0.6, ay + as * 0.5);
+          } else {
+            ctx.moveTo(ax, ay + as);
+            ctx.lineTo(ax + as * 0.6, ay - as * 0.5);
+            ctx.lineTo(ax - as * 0.6, ay - as * 0.5);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    }
   }
   ctx.restore();
 }
@@ -1936,10 +2113,68 @@ async function ensureKillFeed() {
     } finally {
       state.overlayKillsLoaded = true;
       state.overlayKillsLoading = null;
+      renderDangerPanel();
       draw();
     }
   })();
   return state.overlayKillsLoading;
+}
+
+
+// ── Kill Heatmap ───────────────────────────────────────────────────────────
+
+let _heatmapCanvas = null;
+
+function drawKillHeatmap() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const W = Math.floor(rect.width);
+  const H = Math.floor(rect.height);
+
+  if (!_heatmapCanvas || _heatmapCanvas.width !== W || _heatmapCanvas.height !== H) {
+    _heatmapCanvas = document.createElement("canvas");
+    _heatmapCanvas.width = W;
+    _heatmapCanvas.height = H;
+  }
+  const oc = _heatmapCanvas.getContext("2d");
+  oc.clearRect(0, 0, W, H);
+  oc.globalCompositeOperation = "lighter";
+
+  const now = Date.now();
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
+
+  for (const [systemId, kills] of killsBySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -120 || p.y < -120 || p.x > W + 120 || p.y > H + 120) continue;
+
+    const visible = state.showKillShipsOnly ? kills.filter(isShipKill) : kills;
+    if (!visible.length) continue;
+
+    const count = visible.length;
+    const mostRecent = Math.max(...visible.map((k) => k.timestamp));
+    const freshness = 1 - Math.min(1, (now - mostRecent) / windowMs);
+    const r = Math.min(100, 22 + count * 9 + freshness * 18);
+    const alpha = Math.min(0.30, 0.05 + freshness * 0.14 + Math.log2(count + 1) * 0.025);
+
+    const grd = oc.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+    grd.addColorStop(0,    "rgba(255, 60, 30, " + alpha + ")");
+    grd.addColorStop(0.40, "rgba(255, 110, 30, " + (alpha * 0.52) + ")");
+    grd.addColorStop(0.75, "rgba(255, 160, 20, " + (alpha * 0.18) + ")");
+    grd.addColorStop(1,    "rgba(0, 0, 0, 0)");
+    oc.fillStyle = grd;
+    oc.beginPath();
+    oc.arc(p.x, p.y, r, 0, Math.PI * 2);
+    oc.fill();
+  }
+
+  oc.globalCompositeOperation = "source-over";
+  ctx.save();
+  ctx.globalAlpha = 0.82;
+  ctx.drawImage(_heatmapCanvas, 0, 0);
+  ctx.restore();
 }
 
 // ── Overlay: Smart Assemblies ──────────────────────────────────────────────
@@ -2086,6 +2321,7 @@ async function ensureAssemblyOverlay() {
     } finally {
       state.overlayAssembliesLoaded = true;
       state.overlayAssembliesLoading = null;
+      renderAssemblyStats();
       draw();
     }
   })();
@@ -2212,9 +2448,11 @@ function drawHoverTooltip() {
     if (n > 0) {
       const shipN = inWindow.filter(isShipKill).length;
       const structN = n - shipN;
+      const trend = state.showKillTrend ? getKillTrend(system.id) : null;
+      const trendStr = trend === "up" ? " ↑" : trend === "down" ? " ↓" : "";
       const label = structN > 0 && !state.showKillShipsOnly
-        ? `${n} kill${n > 1 ? "s" : ""} (${shipN} ship, ${structN} struct)`
-        : `${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h`;
+        ? `${n} kill${n > 1 ? "s" : ""} (${shipN} ship, ${structN} struct)${trendStr}`
+        : `${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h${trendStr}`;
       lines.push({ text: label, color: "rgba(255,100,100,0.95)", bold: true });
     }
   }
@@ -2309,12 +2547,14 @@ function drawKillLabels() {
     const p = project(system);
     if (p.x < -50 || p.y < -50 || p.x > rect.width + 50 || p.y > rect.height + 50) continue;
     const radius = Math.min(12, 4 + Math.log2(kills.length + 1) * 2);
+    const trend = state.showKillTrend ? getKillTrend(systemId) : null;
+    const label = trend === "up" ? system.name + " ↑" : trend === "down" ? system.name + " ↓" : system.name;
     ctx.font = "bold 9px ui-monospace, monospace";
     // Shadow for readability
     ctx.fillStyle = "rgba(2,8,12,0.70)";
-    ctx.fillText(system.name, p.x + 1, p.y - radius - 1);
-    ctx.fillStyle = "rgba(255, 130, 130, 0.92)";
-    ctx.fillText(system.name, p.x, p.y - radius - 2);
+    ctx.fillText(label, p.x + 1, p.y - radius - 1);
+    ctx.fillStyle = trend === "up" ? "rgba(255, 160, 80, 0.92)" : trend === "down" ? "rgba(130, 230, 130, 0.92)" : "rgba(255, 130, 130, 0.92)";
+    ctx.fillText(label, p.x, p.y - radius - 2);
   }
   ctx.restore();
 }
@@ -2324,6 +2564,102 @@ function drawKillLabels() {
 function setOverlayStatus(text) {
   els.overlayStatus.textContent = text;
 }
+// ── Danger Panel ───────────────────────────────────────────────────────────
+
+function renderDangerPanel() {
+  if (!els.dangerPanel) return;
+  if (!state.showKills || !state.overlayKillsLoaded) {
+    els.dangerPanel.style.display = "none";
+    return;
+  }
+
+  const killsBySystem = buildKillSystemMap();
+  const entries = [];
+  for (const [systemId, kills] of killsBySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const visible = state.showKillShipsOnly ? kills.filter(isShipKill) : kills;
+    if (!visible.length) continue;
+    entries.push({ system, count: visible.length, trend: state.showKillTrend ? getKillTrend(systemId) : null });
+  }
+  entries.sort((a, b) => b.count - a.count);
+  const top = entries.slice(0, 15);
+
+  if (els.dangerWindowLabel) els.dangerWindowLabel.textContent = "(" + state.overlayKillsTimeWindow + "h)";
+
+  els.dangerList.innerHTML = "";
+  if (!top.length) {
+    els.dangerList.innerHTML = "<li class="danger-empty">No kills in this window</li>";
+  } else {
+    top.forEach((item, i) => {
+      const li = document.createElement("li");
+      li.className = "danger-item";
+      const trendCls = item.trend === "up" ? "danger-trend--up" : item.trend === "down" ? "danger-trend--down" : "";
+      const trendArrow = item.trend === "up" ? "↑" : item.trend === "down" ? "↓" : "";
+      li.innerHTML =
+        "<span class="danger-rank">" + (i + 1) + "</span>" +
+        "<span class="danger-name">" + escapeHtml(item.system.name) + "</span>" +
+        "<span class="danger-count">" + item.count + "⚠" + (trendArrow ? " <span class="danger-trend " + trendCls + "">" + trendArrow + "</span>" : "") + "</span>";
+      li.addEventListener("click", () => { centerOnSystem(item.system); selectSystem(item.system); });
+      els.dangerList.append(li);
+    });
+  }
+  els.dangerPanel.style.display = "";
+}
+
+// ── Assembly Stats ─────────────────────────────────────────────────────────
+
+function renderAssemblyStats() {
+  if (!els.assemblyStats || !els.assemblyStatsContent) return;
+  if (!state.showAssemblies || !state.overlayAssembliesLoaded || !state.overlayAssemblies.length) {
+    els.assemblyStats.style.display = "none";
+    return;
+  }
+
+  const typeMap = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (!typeMap.has(asm.label)) typeMap.set(asm.label, { online: 0, total: 0, color: asm.color });
+    const s = typeMap.get(asm.label);
+    s.total++;
+    if (asm.online) s.online++;
+  }
+
+  els.assemblyStatsContent.innerHTML = "<div class="asm-stat-header">Assembly Distribution</div>";
+  for (const [label, s] of typeMap) {
+    const row = document.createElement("div");
+    row.className = "asm-stat-row";
+    row.innerHTML =
+      "<span style="color:" + s.color + "80">● " + escapeHtml(label) + "</span>" +
+      "<span style="color:" + s.color + "">" + s.online + "/" + s.total + "</span>";
+    els.assemblyStatsContent.append(row);
+  }
+  const totalOnline = state.overlayAssemblies.filter((a) => a.online).length;
+  const totalRow = document.createElement("div");
+  totalRow.className = "asm-stat-row";
+  totalRow.style.cssText = "border-top:1px solid rgba(0,180,216,0.12);padding-top:4px;margin-top:2px";
+  totalRow.innerHTML =
+    "<span>Online / Total</span><span style="color:var(--accent)">" + totalOnline + "/" + state.overlayAssemblies.length + "</span>";
+  els.assemblyStatsContent.append(totalRow);
+  els.assemblyStats.style.display = "";
+}
+
+// ── Find System Panel ──────────────────────────────────────────────────────
+
+function openFindPanel() {
+  state.findPanelOpen = true;
+  if (els.findPanel) {
+    els.findPanel.style.display = "";
+    els.findInput && els.findInput.focus();
+  }
+}
+
+function closeFindPanel() {
+  state.findPanelOpen = false;
+  if (els.findPanel) els.findPanel.style.display = "none";
+  if (els.findInput) { els.findInput.value = ""; els.findSuggestions && hideSuggestions(els.findSuggestions); }
+}
+
+
 
 function updateOverlayLegend() {
   els.legendKill.style.display = state.showKills ? "" : "none";
@@ -2342,9 +2678,11 @@ async function toggleOverlay(name, enabled) {
     state.showKills = enabled;
     els.killTimePanel.style.display = enabled ? "" : "none";
     if (enabled) await ensureKillFeed();
+    else renderDangerPanel();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
     if (enabled) await ensureAssemblyOverlay();
+    else renderAssemblyStats();
   } else if (name === "playerBases") {
     state.showPlayerBases = enabled;
     if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
@@ -2373,8 +2711,34 @@ function bindOverlayEvents() {
     btn.addEventListener("click", () => {
       state.overlayKillsTimeWindow = Number(btn.dataset.hours);
       updateTimePresets();
+      renderDangerPanel();
       draw();
     });
+  });
+  els.applyCustomHours?.addEventListener("click", () => {
+    const h = Number(els.customHours?.value || 0);
+    if (h >= 1 && h <= 720) {
+      state.overlayKillsTimeWindow = h;
+      updateTimePresets();
+      renderDangerPanel();
+      draw();
+    }
+  });
+  els.customHours?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") els.applyCustomHours?.click();
+  });
+  els.showKillTrendToggle?.addEventListener("change", () => {
+    state.showKillTrend = els.showKillTrendToggle.checked;
+    renderDangerPanel();
+    draw();
+  });
+  els.killHeatmapToggle?.addEventListener("change", () => {
+    state.killHeatmap = Boolean(els.killHeatmapToggle?.checked);
+    draw();
+  });
+  els.findSystemBtn?.addEventListener("click", () => {
+    if (state.findPanelOpen) closeFindPanel();
+    else openFindPanel();
   });
   els.refreshOverlays.addEventListener("click", () => {
     state.overlayKillsLoaded = false;
