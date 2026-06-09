@@ -182,6 +182,36 @@
               <span class="overlay-sublabel">Min kills shown</span>
               <input type="number" id="killMinCount" min="1" max="999" value="1" class="custom-hours-input" style="text-align:center" />
             </div>
+            <div class="player-filter-row">
+              <span class="overlay-sublabel">Filter by player (wallet)</span>
+              <div class="player-filter-input-row">
+                <input type="text" id="killPlayerFilter" placeholder="0x..." class="player-filter-input" autocomplete="off" spellcheck="false" />
+                <button type="button" id="clearPlayerFilter" class="time-preset" title="Clear filter">×</button>
+              </div>
+            </div>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showRecentKillsLabel">
+              <input type="checkbox" id="showRecentKills" />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff6060;"></span>
+              Show recent kills feed
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showRegionKillsLabel">
+              <input type="checkbox" id="showRegionKills" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ffaa40;border-radius:2px;"></span>
+              Region kill ranking
+            </label>
+          </div>
+          <div id="recentKillsPanel" class="recent-kills-panel" style="display:none">
+            <div class="section-title">
+              <h3>Recent Kills</h3>
+              <span id="recentKillsCount" class="danger-window-label"></span>
+            </div>
+            <ol id="recentKillsList" class="recent-kills-list"></ol>
+          </div>
+          <div id="regionKillPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Region Activity <span id="regionKillWindowLabel" class="danger-window-label"></span></h3>
+            </div>
+            <ol id="regionKillList" class="danger-list"></ol>
           </div>
           <div id="assemblyStats" class="assembly-stats" style="display:none">
             <div id="assemblyStatsContent" class="assembly-stats-content"></div>
