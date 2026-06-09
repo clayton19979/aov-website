@@ -79,6 +79,13 @@
               <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
               Labels (zoom ≥ 1.8×)
             </label>
+            <div id="walletFilterRow" class="wallet-filter-row" style="display:none">
+              <span class="overlay-sublabel">Highlight by owner wallet</span>
+              <div class="wallet-filter-input-row">
+                <input id="walletFilterInput" type="text" placeholder="0x… wallet address" autocomplete="off" spellcheck="false" />
+                <button type="button" id="walletFilterClear" title="Clear filter">×</button>
+              </div>
+            </div>
             <div id="asmTypePanel" class="asm-type-panel" style="display:none">
               <label class="overlay-sublabel" style="margin-left:20px">Types shown</label>
               <div class="asm-type-toggles">
@@ -129,6 +136,11 @@
               <span class="overlay-dot" style="width:8px;height:8px;background:hsla(200,65%,58%,0.7);border-radius:2px;"></span>
               Territory (assembly ownership)
             </label>
+            <label class="overlay-toggle" id="regionShadingToggleLabel">
+              <input type="checkbox" id="regionShadingToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(80,120,200,0.55);border-radius:2px;"></span>
+              Region color tint
+            </label>
             <label class="overlay-toggle" id="reachabilityToggleLabel">
               <input type="checkbox" id="reachabilityToggle" />
               <span class="overlay-dot" style="width:8px;height:8px;background:rgba(68,255,160,0.75);border-radius:50%;"></span>
@@ -165,6 +177,11 @@
               <input type="checkbox" id="showHotPanel" />
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff4444;"></span>
               Hot systems panel
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="battlesToggleLabel">
+              <input type="checkbox" id="battlesToggle" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,200,50,0.9);border-radius:50%;"></span>
+              Battles (3+ kills/hr)
             </label>
             <label class="overlay-toggle overlay-toggle--subsub" id="killHeatmapLabel">
               <input type="checkbox" id="showKillHeatmap" />
@@ -203,6 +220,12 @@
               <h3>Kills by Region <span id="regionStatsPanelLabel" class="danger-window-label"></span></h3>
             </div>
             <ol id="regionStatsList" class="danger-list"></ol>
+          </div>
+          <div id="battlesPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Active Battles <span class="danger-window-label">(3+ kills/hr)</span></h3>
+            </div>
+            <ol id="battlesList" class="danger-list"></ol>
           </div>
           <div id="hubPanel" class="danger-panel" style="display:none">
             <div class="section-title">
