@@ -37,6 +37,7 @@
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
             <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
+            <span id="legendHub" style="display:none"><i class="legend-hub"></i>Hubs</span>
             <span id="legendBookmark" style="display:none"><i class="legend-bookmark"></i>Bookmarks</span>
           </span>
         </div>
@@ -123,6 +124,11 @@
               <span class="overlay-dot bases-dot"></span>
               Player Bases
             </label>
+            <label class="overlay-toggle" id="smartGateHubsToggleLabel">
+              <input type="checkbox" id="smartGateHubsToggle" />
+              <span class="overlay-dot hubs-dot"></span>
+              Smart Gate Hubs
+            </label>
           </div>
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>
@@ -162,12 +168,33 @@
               <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,60,60,0.65);border-radius:50%;"></span>
               Danger reach radius (jump range)
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="constellationKillsLabel">
+              <input type="checkbox" id="constellationKillsToggle" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,120,60,0.65);border-radius:2px;"></span>
+              Constellation kill zones
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killAutoRefreshLabel">
+              <input type="checkbox" id="killAutoRefresh" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#00ff88;border-radius:50%;"></span>
+              Auto-refresh (5m)
+            </label>
+            <div class="min-kills-row">
+              <span class="overlay-sublabel">Min kills shown</span>
+              <input type="number" id="killMinCount" min="1" max="999" value="1" class="custom-hours-input" style="text-align:center" />
+            </div>
           </div>
           <div id="assemblyStats" class="assembly-stats" style="display:none">
             <div id="assemblyStatsContent" class="assembly-stats-content"></div>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
+
+        <div id="hubPanel" class="hub-panel" style="display:none">
+          <div class="section-title">
+            <h3>Gate Hubs <span class="danger-window-label">(3+ connections)</span></h3>
+          </div>
+          <ol id="hubList" class="danger-list"></ol>
+        </div>
 
         <div id="dangerPanel" class="danger-panel" style="display:none">
           <div class="section-title">
