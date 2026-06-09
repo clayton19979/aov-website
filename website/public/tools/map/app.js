@@ -80,6 +80,10 @@ const state = {
   killPlayerFilter: "",
   showRecentKills: false,
   showRegionKills: false,
+  showMinimap: true,
+  showConstellationBoundaries: false,
+  overlayAsmNameFilter: "",
+  systemNotes: {},
 };
 
 const els = {
@@ -174,6 +178,15 @@ const els = {
   regionKillWindowLabel: document.getElementById("regionKillWindowLabel"),
   dangerNeighborsPanel: document.getElementById("dangerNeighborsPanel"),
   copySystemIdBtn: document.getElementById("copySystemId"),
+  minimapCanvas: document.getElementById("minimap"),
+  toggleMinimapBtn: document.getElementById("toggleMinimap"),
+  constellationBoundariesToggle: document.getElementById("constellationBoundariesToggle"),
+  asmNameFilterInput: document.getElementById("asmNameFilter"),
+  clearAsmNameFilterBtn: document.getElementById("clearAsmNameFilter"),
+  asmNameFilterRow: document.getElementById("asmNameFilterRow"),
+  systemNoteWrap: document.getElementById("systemNoteWrap"),
+  systemNoteInput: document.getElementById("systemNote"),
+  saveSystemNoteBtn: document.getElementById("saveSystemNote"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -652,16 +665,20 @@ function draw() {
     if (state.showDangerRadius) drawDangerRadius();
     if (state.showKillLabels) drawKillLabels();
   }
+  if (state.showConstellationBoundaries) drawConstellationBoundaries();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   if (state.showSmartGateHubs) drawSmartGateHubOverlay();
   if (state.showSystemLabels) drawSystemLabels();
   if (state.showBookmarks && state.bookmarks.length) drawBookmarks();
+  drawSystemNoteMarkers();
   drawRoute();
 
   if (state.selected) drawSystemMarker(state.selected, "#61d5c7", 7);
   if (state.hovered && state.hovered !== state.selected) drawSystemMarker(state.hovered, "#f1b84b", 5);
   if (state.hovered) drawHoverTooltip();
+
+  if (state.showMinimap) drawMinimap(rect);
 }
 
 function drawSystemMarker(system, color, size) {
@@ -1114,6 +1131,9 @@ function selectSystem(system) {
   const base = state.overlayPlayerBases.find((b) => b.systemId === system.id);
   if (base) stats.push(`<span class="sys-stat sys-stat--base">Player Base · ${base.assemblyCount} asm</span>`);
 
+  const note = state.systemNotes[system.id];
+  if (note) stats.push(`<span class="sys-stat sys-stat--note" title="${escapeHtml(note)}">📝 Note</span>`);
+
   const statsHtml = stats.length ? `<div class="sys-stats">${stats.join("")}</div>` : "";
   const sparkline = killSparklineStr(system.id);
   const sparklineHtml = sparkline
@@ -1135,6 +1155,7 @@ function selectSystem(system) {
   updateSelectedRouteStep();
   updateDangerNeighborsPanel(system);
   if (els.copySystemIdBtn) els.copySystemIdBtn.disabled = false;
+  updateSystemNotePanel(system);
   draw();
 }
 
@@ -2750,11 +2771,13 @@ async function fetchAssemblyOverlay() {
 function drawAssemblyOverlay() {
   if (!state.overlayAssemblies.length) return;
   ctx.save();
-  // Group by system, respecting the online-only and type filters
+  const nameFilter = state.overlayAsmNameFilter.trim().toLowerCase();
+  // Group by system, respecting the online-only, type, and name filters
   const bySystem = new Map();
   for (const asm of state.overlayAssemblies) {
     if (state.overlayAssembliesOnlineOnly && !asm.online) continue;
     if (!state.overlayAsmTypeFilter.has(asm.label)) continue;
+    if (nameFilter && !asm.name.toLowerCase().includes(nameFilter)) continue;
     if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
     bySystem.get(asm.systemId).push(asm);
   }
@@ -3374,6 +3397,9 @@ function updateOverlayLegend() {
   els.legendBase.style.display = state.showPlayerBases ? "" : "none";
   if (els.legendHub) els.legendHub.style.display = state.showSmartGateHubs ? "" : "none";
   if (els.legendBookmark) els.legendBookmark.style.display = (state.showBookmarks && state.bookmarks.length) ? "" : "none";
+  if (els.asmNameFilterRow) {
+    els.asmNameFilterRow.style.display = state.showAssemblies ? "" : "none";
+  }
 }
 
 function updateTimePresets() {
@@ -3395,7 +3421,7 @@ async function toggleOverlay(name, enabled) {
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
     if (enabled) await ensureAssemblyOverlay();
-    else updateAssemblyStats();
+    else { updateAssemblyStats(); if (els.asmNameFilterRow) els.asmNameFilterRow.style.display = "none"; }
   } else if (name === "playerBases") {
     state.showPlayerBases = enabled;
     if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
@@ -3528,10 +3554,332 @@ function bindOverlayEvents() {
   });
 }
 
+// ── Minimap ────────────────────────────────────────────────────────────────
+// Always drawn top-down (X/Z projection, ignoring 3D rotation) for a stable
+// overview regardless of current 3D camera angle.
+
+const minimapCtx = els.minimapCanvas ? els.minimapCanvas.getContext("2d") : null;
+const MM_W = 160;
+const MM_H = 110;
+
+function minimapWorldToLocal(worldX, worldZ) {
+  const b = state.bounds;
+  if (!b) return { x: 0, y: 0 };
+  const pad = 6;
+  const scaleX = (MM_W - pad * 2) / Math.max(1, b.maxX - b.minX);
+  const scaleZ = (MM_H - pad * 2) / Math.max(1, b.maxZ - b.minZ);
+  const scale = Math.min(scaleX, scaleZ);
+  const centerX = (b.minX + b.maxX) / 2;
+  const centerZ = (b.minZ + b.maxZ) / 2;
+  return {
+    x: MM_W / 2 + (worldX - centerX) * scale,
+    y: MM_H / 2 + (worldZ - centerZ) * scale,
+  };
+}
+
+function drawMinimap(rect) {
+  if (!minimapCtx || !state.systems.length || !state.bounds) return;
+  const mc = minimapCtx;
+  const b = state.bounds;
+
+  // Clear
+  mc.clearRect(0, 0, MM_W, MM_H);
+
+  // Background
+  mc.fillStyle = "rgba(2, 8, 15, 0.90)";
+  mc.fillRect(0, 0, MM_W, MM_H);
+
+  // All systems as tiny dots (skip every N for performance)
+  const step = state.systems.length > 10000 ? 3 : 1;
+  mc.fillStyle = "rgba(140, 170, 220, 0.28)";
+  mc.beginPath();
+  for (let i = 0; i < state.systems.length; i += step) {
+    const s = state.systems[i];
+    const p = minimapWorldToLocal(s.x, s.z);
+    mc.moveTo(p.x + 0.7, p.y);
+    mc.arc(p.x, p.y, 0.7, 0, Math.PI * 2);
+  }
+  mc.fill();
+
+  // Kill hotspots
+  if (state.showKills && state.overlayKillsLoaded) {
+    const killMap = buildKillSystemMap();
+    for (const [systemId, kills] of killMap) {
+      const sys = state.systemsById.get(systemId);
+      if (!sys) continue;
+      const p = minimapWorldToLocal(sys.x, sys.z);
+      const r = Math.min(4, 1.5 + Math.log2(kills.length + 1) * 0.8);
+      mc.fillStyle = `rgba(255, 60, 30, ${0.5 + Math.min(0.4, kills.length * 0.04)})`;
+      mc.beginPath();
+      mc.arc(p.x, p.y, r, 0, Math.PI * 2);
+      mc.fill();
+    }
+  }
+
+  // Route line
+  if (state.route.length > 1) {
+    mc.strokeStyle = "rgba(97, 213, 199, 0.75)";
+    mc.lineWidth = 1.2;
+    mc.beginPath();
+    for (let i = 0; i < state.route.length; i++) {
+      const p = minimapWorldToLocal(state.route[i].x, state.route[i].z);
+      i === 0 ? mc.moveTo(p.x, p.y) : mc.lineTo(p.x, p.y);
+    }
+    mc.stroke();
+  }
+
+  // Selected system dot
+  if (state.selected) {
+    const sp = minimapWorldToLocal(state.selected.x, state.selected.z);
+    mc.strokeStyle = "rgba(97, 213, 199, 0.95)";
+    mc.lineWidth = 1.2;
+    mc.beginPath();
+    mc.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
+    mc.stroke();
+  }
+
+  // Viewport rectangle (top-down approximation)
+  const width = Math.max(1, b.maxX - b.minX);
+  const height = Math.max(1, b.maxZ - b.minZ);
+  const projBase = Math.min(rect.width / width, rect.height / height) * 0.84;
+  const projScale = projBase * state.camera.zoom;
+  const worldCenterX = (b.minX + b.maxX) / 2;
+  const worldCenterZ = (b.minZ + b.maxZ) / 2;
+
+  const screenToWorld = (sx, sy) => ({
+    wx: (sx - rect.width / 2 - state.camera.x) / projScale + worldCenterX,
+    wz: (sy - rect.height / 2 - state.camera.y) / projScale + worldCenterZ,
+  });
+  const tl = screenToWorld(0, 0);
+  const br = screenToWorld(rect.width, rect.height);
+  const mmTL = minimapWorldToLocal(tl.wx, tl.wz);
+  const mmBR = minimapWorldToLocal(br.wx, br.wz);
+  const vw = mmBR.x - mmTL.x;
+  const vh = mmBR.y - mmTL.y;
+
+  mc.strokeStyle = "rgba(0, 180, 216, 0.50)";
+  mc.lineWidth = 1;
+  mc.setLineDash([2, 2]);
+  mc.strokeRect(mmTL.x, mmTL.y, vw, vh);
+  mc.setLineDash([]);
+
+  // Border
+  mc.strokeStyle = "rgba(0, 180, 216, 0.20)";
+  mc.lineWidth = 1;
+  mc.strokeRect(0.5, 0.5, MM_W - 1, MM_H - 1);
+
+  // Copy to on-page canvas element (if using separate canvas)
+  // The minimap canvas is a separate DOM element — it draws itself.
+}
+
+// Minimap click navigation
+if (els.minimapCanvas) {
+  els.minimapCanvas.addEventListener("click", (e) => {
+    if (!state.systems.length || !state.bounds) return;
+    const rect = els.minimapCanvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (MM_W / rect.width);
+    const my = (e.clientY - rect.top) * (MM_H / rect.height);
+
+    const b = state.bounds;
+    const pad = 6;
+    const scaleX = (MM_W - pad * 2) / Math.max(1, b.maxX - b.minX);
+    const scaleZ = (MM_H - pad * 2) / Math.max(1, b.maxZ - b.minZ);
+    const scale = Math.min(scaleX, scaleZ);
+    const centerX = (b.minX + b.maxX) / 2;
+    const centerZ = (b.minZ + b.maxZ) / 2;
+
+    const worldX = (mx - MM_W / 2) / scale + centerX;
+    const worldZ = (my - MM_H / 2) / scale + centerZ;
+
+    const mainRect = els.canvas.getBoundingClientRect();
+    const width = Math.max(1, b.maxX - b.minX);
+    const height = Math.max(1, b.maxZ - b.minZ);
+    const projBase = Math.min(mainRect.width / width, mainRect.height / height) * 0.84;
+    const projScale = projBase * state.camera.zoom;
+
+    state.camera.x = mainRect.width / 2 - worldX * projScale + ((b.minX + b.maxX) / 2) * projScale - mainRect.width / 2;
+    state.camera.y = mainRect.height / 2 - worldZ * projScale + ((b.minZ + b.maxZ) / 2) * projScale - mainRect.height / 2;
+    scheduleDraw();
+  });
+}
+
+// ── Constellation Boundaries ────────────────────────────────────────────────
+
+// Compute 2D convex hull (Graham scan) for a set of {x,y} points.
+function convexHull2D(pts) {
+  if (pts.length < 3) return pts;
+  const sorted = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [], upper = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
+
+// Cache constellation groups so we don't re-compute on every frame.
+let _constellGroupCache = null;
+let _constellGroupSystemCount = 0;
+
+function getConstellationGroups() {
+  if (_constellGroupCache && _constellGroupSystemCount === state.systems.length) return _constellGroupCache;
+  const groups = new Map();
+  for (const s of state.systems) {
+    if (!groups.has(s.constellationId)) groups.set(s.constellationId, []);
+    groups.get(s.constellationId).push(s);
+  }
+  _constellGroupCache = groups;
+  _constellGroupSystemCount = state.systems.length;
+  return groups;
+}
+
+function drawConstellationBoundaries() {
+  if (!state.systems.length || !state.bounds) return;
+  const z = state.camera.zoom;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const groups = getConstellationGroups();
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+
+  for (const [cid, systems] of groups) {
+    if (systems.length < 2) continue;
+    const pts = systems.map((s) => project(s));
+    const hull = convexHull2D(pts);
+    if (hull.length < 2) continue;
+
+    // Skip fully off-screen hulls
+    const onScreen = hull.some(
+      (p) => p.x > -20 && p.y > -20 && p.x < rect.width + 20 && p.y < rect.height + 20,
+    );
+    if (!onScreen) continue;
+
+    const h = constellationHue(cid);
+    const alpha = 0.18 + Math.min(0.12, z * 0.06);
+    ctx.strokeStyle = `hsla(${h}, 75%, 65%, ${alpha})`;
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([3, 6]);
+    ctx.beginPath();
+    ctx.moveTo(hull[0].x, hull[0].y);
+    for (let i = 1; i < hull.length; i++) ctx.lineTo(hull[i].x, hull[i].y);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  ctx.setLineDash([]);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// ── System Notes ────────────────────────────────────────────────────────────
+
+const NOTES_KEY = "frontier-gps.notes.v1";
+
+function loadSystemNotes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NOTES_KEY) || "{}");
+    state.systemNotes = typeof saved === "object" && saved !== null ? saved : {};
+  } catch {
+    state.systemNotes = {};
+  }
+}
+
+function saveSystemNotes() {
+  try {
+    localStorage.setItem(NOTES_KEY, JSON.stringify(state.systemNotes));
+  } catch {}
+}
+
+function updateSystemNotePanel(system) {
+  if (!els.systemNoteWrap || !els.systemNoteInput) return;
+  if (!system) {
+    els.systemNoteWrap.style.display = "none";
+    return;
+  }
+  els.systemNoteWrap.style.display = "";
+  els.systemNoteInput.value = state.systemNotes[system.id] || "";
+}
+
+function drawSystemNoteMarkers() {
+  const ids = Object.keys(state.systemNotes).map(Number).filter((id) => state.systemNotes[id]);
+  if (!ids.length) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const z = state.camera.zoom;
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 220, 80, 0.80)";
+  ctx.font = `${Math.max(8, Math.min(11, z * 4))}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  for (const id of ids) {
+    const sys = state.systemsById.get(id);
+    if (!sys) continue;
+    const p = project(sys);
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    ctx.fillText("📝", p.x, p.y - 8);
+  }
+  ctx.restore();
+}
+
+// ── New overlay bindings ────────────────────────────────────────────────────
+
+function bindNewOverlayEvents() {
+  // Minimap toggle
+  els.toggleMinimapBtn?.addEventListener("click", () => {
+    state.showMinimap = !state.showMinimap;
+    if (els.minimapCanvas) els.minimapCanvas.style.display = state.showMinimap ? "" : "none";
+    els.toggleMinimapBtn.classList.toggle("active-bookmark", state.showMinimap);
+    scheduleDraw();
+  });
+
+  // Constellation boundaries toggle
+  els.constellationBoundariesToggle?.addEventListener("change", () => {
+    state.showConstellationBoundaries = els.constellationBoundariesToggle.checked;
+    scheduleDraw();
+  });
+
+  // Assembly name filter
+  els.asmNameFilterInput?.addEventListener("input", () => {
+    state.overlayAsmNameFilter = els.asmNameFilterInput.value;
+    scheduleDraw();
+  });
+  els.clearAsmNameFilterBtn?.addEventListener("click", () => {
+    state.overlayAsmNameFilter = "";
+    if (els.asmNameFilterInput) els.asmNameFilterInput.value = "";
+    scheduleDraw();
+  });
+
+  // System notes save
+  els.saveSystemNoteBtn?.addEventListener("click", () => {
+    if (!state.selected) return;
+    const note = els.systemNoteInput?.value?.trim() || "";
+    if (note) {
+      state.systemNotes[state.selected.id] = note;
+    } else {
+      delete state.systemNotes[state.selected.id];
+    }
+    saveSystemNotes();
+    const btn = els.saveSystemNoteBtn;
+    const orig = btn.textContent;
+    btn.textContent = "Saved!";
+    setTimeout(() => { btn.textContent = orig; }, 1000);
+    // Re-render system card to update note badge
+    selectSystem(state.selected);
+  });
+}
+
 async function init() {
   loadBookmarks();
+  loadSystemNotes();
   bindEvents();
   bindOverlayEvents();
+  bindNewOverlayEvents();
   updateTimePresets();
   loadUrlParams();
   updateRangePresets();

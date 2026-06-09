@@ -26,6 +26,7 @@
           <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
           <button id="findSystem" title="Find and jump to a system (/ or F)" aria-label="Find system">FIND</button>
           <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
+          <button id="toggleMinimap" title="Toggle minimap overview" aria-label="Toggle minimap">MAP</button>
         </div>
         <div class="map-legend" aria-label="Route legend">
           <span><i class="legend-jump"></i>Jump</span>
@@ -41,6 +42,7 @@
             <span id="legendBookmark" style="display:none"><i class="legend-bookmark"></i>Bookmarks</span>
           </span>
         </div>
+        <canvas id="minimap" width="160" height="110" aria-label="Map overview minimap" title="Minimap — click to navigate"></canvas>
         <aside class="system-card" id="systemCard" aria-live="polite">
           <div>
             <span>Select a system</span>
@@ -48,6 +50,10 @@
           </div>
           <div id="assemblyDetailList" class="asm-detail-list" style="display:none"></div>
           <div id="dangerNeighborsPanel" class="danger-neighbors-panel" style="display:none"></div>
+          <div id="systemNoteWrap" class="system-note-wrap" style="display:none">
+            <textarea id="systemNote" class="system-note-input" rows="2" placeholder="Add a note for this system…" maxlength="280"></textarea>
+            <button id="saveSystemNote" type="button" class="time-preset system-note-save">Save note</button>
+          </div>
           <div class="system-actions">
             <button id="setOrigin" type="button" disabled>Set Origin</button>
             <button id="setDestination" type="button" disabled>Set Destination</button>
@@ -131,6 +137,18 @@
               <span class="overlay-dot hubs-dot"></span>
               Smart Gate Hubs
             </label>
+            <label class="overlay-toggle" id="constellationBoundariesToggleLabel">
+              <input type="checkbox" id="constellationBoundariesToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:transparent;border:1.5px solid rgba(130,200,255,0.7);border-radius:2px;"></span>
+              Constellation Bounds
+            </label>
+          </div>
+          <div id="asmNameFilterRow" class="asm-name-filter-row" style="display:none">
+            <span class="overlay-sublabel">Filter assemblies by name</span>
+            <div class="player-filter-input-row">
+              <input type="text" id="asmNameFilter" placeholder="Name…" class="player-filter-input" autocomplete="off" spellcheck="false" />
+              <button type="button" id="clearAsmNameFilter" class="time-preset" title="Clear filter">×</button>
+            </div>
           </div>
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>

@@ -1399,6 +1399,63 @@ button.active-bookmark {
   color: var(--muted);
 }
 
+/* ── Assembly name filter row ──────────────────── */
+
+.asm-name-filter-row {
+  padding: 6px 0 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+/* ── System notes ──────────────────────────────── */
+
+.system-note-wrap {
+  padding: 6px 0 4px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.system-note-input {
+  width: 100%;
+  background: rgba(0, 180, 216, 0.04);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  resize: vertical;
+  min-height: 36px;
+}
+
+.system-note-input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.system-note-save {
+  align-self: flex-end;
+}
+
+.sys-stat--note {
+  background: rgba(255, 220, 80, 0.10);
+  border-color: rgba(255, 220, 80, 0.30);
+  color: rgba(255, 220, 80, 0.85);
+}
+
+/* ── Minimap canvas overlay ────────────────────── */
+
+#minimap {
+  position: absolute;
+  bottom: 48px;
+  right: 10px;
+  border: 1px solid rgba(0, 180, 216, 0.25);
+  border-radius: 4px;
+  background: rgba(2, 8, 15, 0.85);
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
 @media (max-width: 520px) {
   .topbar { left: 10px; right: 10px; top: 10px; }
   .control-panel { padding: 14px; }
