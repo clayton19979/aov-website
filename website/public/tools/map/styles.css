@@ -186,7 +186,7 @@ button:disabled {
 
 .system-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
   gap: 6px;
 }
 
@@ -1036,6 +1036,107 @@ input:focus, textarea:focus {
 
 .danger-struct {
   color: rgba(180, 120, 255, 0.75);
+}
+
+/* ── Constellation colors ──────────────────────── */
+
+.constellation-colors-dot {
+  background: conic-gradient(#60a5fa, #a78bfa, #34d399, #fbbf24, #f87171, #60a5fa);
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+}
+
+.legend-constellation {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: conic-gradient(#60a5fa, #a78bfa, #34d399, #fbbf24, #f87171, #60a5fa);
+}
+
+/* ── Bookmark legend + button ──────────────────── */
+
+.legend-bookmark {
+  display: block;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(50% 0%, 65% 35%, 100% 35%, 75% 57%, 85% 100%, 50% 75%, 15% 100%, 25% 57%, 0% 35%, 35% 35%);
+  background: rgba(255, 220, 80, 0.85);
+}
+
+button.active-bookmark {
+  border-color: rgba(255, 220, 80, 0.55) !important;
+  color: rgba(255, 220, 80, 0.90) !important;
+}
+
+/* ── Bookmarks panel ───────────────────────────── */
+
+.bookmarks-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.bookmarks-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bookmark-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 220, 80, 0.15);
+  background: rgba(255, 200, 50, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.bookmark-item:hover {
+  border-color: rgba(255, 220, 80, 0.35);
+  background: rgba(255, 200, 50, 0.10);
+}
+
+.bookmark-name {
+  font-size: 0.75rem;
+  color: rgba(255, 220, 80, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-region {
+  font-size: 0.62rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.bookmark-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  min-width: 0;
+  border: 1px solid rgba(255, 220, 80, 0.20);
+  background: transparent;
+  color: rgba(255, 220, 80, 0.45);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.bookmark-remove:hover {
+  color: rgba(255, 100, 100, 0.85);
+  border-color: rgba(255, 100, 100, 0.35);
 }
 
 /* ── Responsive ────────────────────────────────── */
