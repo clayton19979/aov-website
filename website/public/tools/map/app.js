@@ -75,6 +75,11 @@ const state = {
   showAssemblyLabels: false,
   avoidContested: false,
   showRegionStats: false,
+  // v4 features
+  showReachability: false,
+  reachabilityMaxHops: 1,
+  showTerritory: false,
+  showHubPanel: false,
 };
 
 const els = {
@@ -146,6 +151,14 @@ const els = {
   regionStatsPanel: document.getElementById("regionStatsPanel"),
   regionStatsList: document.getElementById("regionStatsList"),
   regionStatsPanelLabel: document.getElementById("regionStatsPanelLabel"),
+  // v4 elements
+  reachabilityToggle: document.getElementById("reachabilityToggle"),
+  reachabilityPanel: document.getElementById("reachabilityPanel"),
+  reachabilityHopBtns: document.querySelectorAll(".reach-hop-btn"),
+  territoryToggle: document.getElementById("territoryToggle"),
+  hubPanelToggle: document.getElementById("showHubPanel"),
+  hubPanel: document.getElementById("hubPanel"),
+  hubList: document.getElementById("hubList"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -553,6 +566,8 @@ function draw() {
 
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
+  if (state.showReachability) drawReachabilityOverlay();
+  if (state.showTerritory && state.overlayAssembliesLoaded) drawTerritoryOverlay();
   if (state.showJumpRange) drawJumpRangeCircle();
   if (state.showKills && state.showKillHeatmap) drawKillHeatmap();
   if (state.showKills) drawKillOverlay();
@@ -982,7 +997,10 @@ function selectSystem(system) {
   if (base) stats.push(`<span class="sys-stat sys-stat--base">Player Base · ${base.assemblyCount} asm</span>`);
 
   const statsHtml = stats.length ? `<div class="sys-stats">${stats.join("")}</div>` : "";
-  els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>${statsHtml}`;
+  const timelineHtml = state.overlayKillsLoaded && state.overlayKills.some((k) => k.systemId === system.id)
+    ? renderKillTimelineHtml(system.id)
+    : "";
+  els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>${statsHtml}${timelineHtml}`;
   updateSystemActions();
   updateSelectedRouteStep();
   draw();
@@ -2062,6 +2080,8 @@ async function fetchAssemblyOverlay() {
       const online = String(a?.status?.status?.["@variant"] ?? a?.status?.["@variant"] ?? a?.status ?? "").toUpperCase() === "ONLINE";
       // NetworkNode exposes connected_assembly_ids — use for player-base detection
       const connectedCount = Array.isArray(a.connected_assembly_ids) ? a.connected_assembly_ids.length : 0;
+      // Extract owner address — try multiple common Sui Move field names
+      const ownerId = a.owner_id?.account_address ?? a.owner_id?.item_id ?? a.owner?.account_address ?? a.owner_address ?? null;
       return {
         id: a.id,
         systemId,
@@ -2070,6 +2090,7 @@ async function fetchAssemblyOverlay() {
         online,
         name: a.metadata?.name || a._typeLabel,
         connectedCount,
+        ownerId,
       };
     })
     .filter((a) => a.systemId);
@@ -2147,6 +2168,7 @@ async function ensureAssemblyOverlay() {
       state.overlayAssembliesLoaded = true;
       state.overlayAssembliesLoading = null;
       updateOfflinePanel();
+      updateHubPanel();
       draw();
     }
   })();
@@ -2760,6 +2782,213 @@ function getKillTrend(systemId) {
   return "→";
 }
 
+// ── v4: Jump Reachability Overlay ─────────────────────────────────────────
+
+function computeReachability(origin, maxHops, jumpRange) {
+  const visited = new Map(); // systemId → hop count
+  if (!origin || !state.systems.length) return visited;
+  if (!state.spatialIndexes.has(jumpRange)) {
+    state.spatialIndexes.set(jumpRange, RouteCore.makeSpatialIndex(state.systems, jumpRange));
+  }
+  const index = state.spatialIndexes.get(jumpRange);
+  visited.set(origin.id, 0);
+  let frontier = [origin];
+  for (let hop = 1; hop <= maxHops; hop++) {
+    const nextFrontier = [];
+    for (const sys of frontier) {
+      const jumpNeighbors = RouteCore.nearbySystems(sys, index, jumpRange);
+      const gateNeighbors = state.gateAdjacency.get(sys.id) || [];
+      for (const edge of [...jumpNeighbors, ...gateNeighbors]) {
+        const neighbor = edge.system;
+        if (!visited.has(neighbor.id)) {
+          visited.set(neighbor.id, hop);
+          nextFrontier.push(neighbor);
+        }
+      }
+    }
+    frontier = nextFrontier;
+    if (!frontier.length) break;
+  }
+  return visited;
+}
+
+function drawReachabilityOverlay() {
+  const origin = parseSystem(els.origin.value);
+  if (!origin) return;
+  const range = Number(els.jumpRange.value || 120);
+  const reachable = computeReachability(origin, state.reachabilityMaxHops, range);
+  if (reachable.size <= 1) return;
+
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+
+  // Hop colors: 1=teal-green, 2=cyan, 3=indigo
+  const hopPalette = [
+    null,
+    { fill: "rgba(68, 255, 160, 0.18)", ring: "rgba(68, 255, 160, 0.55)" },
+    { fill: "rgba(0, 200, 255, 0.12)", ring: "rgba(0, 200, 255, 0.38)" },
+    { fill: "rgba(140, 100, 255, 0.08)", ring: "rgba(140, 100, 255, 0.28)" },
+  ];
+
+  for (const [systemId, hopCount] of reachable) {
+    if (hopCount === 0) continue;
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    const pal = hopPalette[hopCount];
+    if (!pal) continue;
+    const r = Math.max(3, 5 - hopCount);
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.8);
+    grd.addColorStop(0, pal.ring);
+    grd.addColorStop(0.5, pal.fill);
+    grd.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 2.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Draw the origin pulse ring
+  const op = project(origin);
+  ctx.strokeStyle = "rgba(68, 255, 160, 0.70)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.arc(op.x, op.y, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.restore();
+}
+
+// ── v4: Corporation Territory Overlay ─────────────────────────────────────
+
+function ownerDisplayColor(addr, alpha = 0.22) {
+  // Deterministic hue from address hash
+  let h = 0;
+  for (let i = 2; i < addr.length; i += 4) h = ((h * 31) ^ addr.charCodeAt(i)) >>> 0;
+  return `hsla(${h % 360}, 65%, 58%, ${alpha})`;
+}
+
+function buildTerritoryMap() {
+  const bySystem = new Map(); // systemId → Map<ownerId, count>
+  for (const asm of state.overlayAssemblies) {
+    if (!asm.ownerId) continue;
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, new Map());
+    const om = bySystem.get(asm.systemId);
+    om.set(asm.ownerId, (om.get(asm.ownerId) || 0) + 1);
+  }
+  const result = new Map();
+  for (const [systemId, om] of bySystem) {
+    let top = null, topN = 0;
+    for (const [owner, n] of om) { if (n > topN) { top = owner; topN = n; } }
+    if (top) result.set(systemId, { owner: top, count: topN, total: [...om.values()].reduce((s, v) => s + v, 0) });
+  }
+  return result;
+}
+
+function drawTerritoryOverlay() {
+  const territory = buildTerritoryMap();
+  if (!territory.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  const z = state.camera.zoom;
+  for (const [systemId, data] of territory) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = Math.max(6, 8 + Math.min(6, data.total));
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2);
+    grd.addColorStop(0, ownerDisplayColor(data.owner, 0.38));
+    grd.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 2, 0, Math.PI * 2);
+    ctx.fill();
+    if (z > 1.4) {
+      ctx.strokeStyle = ownerDisplayColor(data.owner, 0.55);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// ── v4: Assembly Hub Panel ─────────────────────────────────────────────────
+
+function updateHubPanel() {
+  if (!els.hubPanel || !els.hubList) return;
+  if (!state.showHubPanel || !state.overlayAssembliesLoaded) {
+    els.hubPanel.style.display = "none";
+    return;
+  }
+  // Group assemblies by system and count
+  const bySystem = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, { total: 0, online: 0, types: new Set() });
+    const entry = bySystem.get(asm.systemId);
+    entry.total++;
+    if (asm.online) entry.online++;
+    entry.types.add(asm.label);
+  }
+  const sorted = [...bySystem.entries()]
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 15);
+  if (!sorted.length) {
+    els.hubPanel.style.display = "none";
+    return;
+  }
+  els.hubPanel.style.display = "";
+  els.hubList.innerHTML = sorted.map(([systemId, data], idx) => {
+    const sys = state.systemsById.get(systemId);
+    const name = sys?.name ?? `#${systemId}`;
+    const typeStr = [...data.types].slice(0, 2).map((t) => t.split(" ")[0]).join("+");
+    const onlineColor = data.online > 0 ? "rgba(0,200,180,0.85)" : "rgba(140,150,170,0.6)";
+    return `<li class="danger-item" data-system-id="${systemId}" style="cursor:pointer">
+      <span class="danger-rank" style="color:rgba(150,200,255,0.7)">${idx + 1}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count" style="color:${onlineColor}">${data.online}/${data.total}</span>
+      <span style="color:rgba(140,160,180,0.55);font-size:9px;flex-shrink:0">${typeStr}</span>
+    </li>`;
+  }).join("");
+  els.hubList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
+// ── v4: Kill activity timeline bar (used in system card) ──────────────────
+
+function buildKillTimeline(systemId, buckets = 24) {
+  const now = Date.now();
+  const windowMs = buckets * 3_600_000;
+  const counts = new Array(buckets).fill(0);
+  for (const k of state.overlayKills) {
+    if (k.systemId !== systemId) continue;
+    const age = now - k.timestamp;
+    if (age < 0 || age > windowMs) continue;
+    const idx = Math.min(buckets - 1, Math.floor((age / windowMs) * buckets));
+    counts[buckets - 1 - idx]++; // most recent = right
+  }
+  return counts;
+}
+
+function renderKillTimelineHtml(systemId) {
+  const counts = buildKillTimeline(systemId);
+  const max = Math.max(1, ...counts);
+  const bars = counts.map((c) => {
+    const h = Math.round((c / max) * 12);
+    const alpha = c > 0 ? 0.4 + (c / max) * 0.55 : 0.12;
+    return `<span class="ktl-bar" style="height:${Math.max(2, h)}px;background:rgba(255,80,80,${alpha.toFixed(2)})" title="${c} kills"></span>`;
+  }).join("");
+  return `<div class="kill-timeline" title="Kill activity (last 24h, right=recent)">${bars}</div>`;
+}
+
 // ── Overlay UI helpers ─────────────────────────────────────────────────────
 
 function setOverlayStatus(text) {
@@ -2770,6 +2999,10 @@ function updateOverlayLegend() {
   els.legendKill.style.display = state.showKills ? "" : "none";
   els.legendAssembly.style.display = state.showAssemblies ? "" : "none";
   els.legendBase.style.display = state.showPlayerBases ? "" : "none";
+  const legendReach = document.getElementById("legendReach");
+  const legendTerritory = document.getElementById("legendTerritory");
+  if (legendReach) legendReach.style.display = state.showReachability ? "" : "none";
+  if (legendTerritory) legendTerritory.style.display = state.showTerritory ? "" : "none";
 }
 
 function updateTimePresets() {
@@ -2914,6 +3147,39 @@ function bindOverlayEvents() {
     } else {
       updateRegionStatsPanel();
     }
+  });
+
+  // v4 bindings
+  els.reachabilityToggle?.addEventListener("change", () => {
+    state.showReachability = els.reachabilityToggle.checked;
+    if (els.reachabilityPanel) els.reachabilityPanel.style.display = state.showReachability ? "" : "none";
+    updateOverlayLegend();
+    scheduleDraw();
+  });
+
+  els.reachabilityHopBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.reachabilityMaxHops = Number(btn.dataset.hops);
+      els.reachabilityHopBtns.forEach((b) => b.classList.toggle("active", b === btn));
+      scheduleDraw();
+    });
+  });
+
+  els.territoryToggle?.addEventListener("change", async () => {
+    state.showTerritory = els.territoryToggle.checked;
+    if (state.showTerritory && !state.overlayAssembliesLoaded) {
+      await ensureAssemblyOverlay();
+    }
+    updateOverlayLegend();
+    scheduleDraw();
+  });
+
+  els.hubPanelToggle?.addEventListener("change", async () => {
+    state.showHubPanel = els.hubPanelToggle.checked;
+    if (state.showHubPanel && !state.overlayAssembliesLoaded) {
+      await ensureAssemblyOverlay();
+    }
+    updateHubPanel();
   });
 }
 
