@@ -148,6 +148,16 @@
               <span class="overlay-dot" style="width:8px;height:8px;background:rgba(0,220,255,0.5);border-radius:50%;"></span>
               Smart Gate Reach (from selected)
             </label>
+            <label class="overlay-toggle" id="showTerritoryOwnershipToggleLabel">
+              <input type="checkbox" id="showTerritoryOwnership" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:linear-gradient(135deg,hsl(200,75%,58%),hsl(30,75%,58%),hsl(150,75%,58%));border-radius:50%;"></span>
+              Territory (by owner)
+            </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="showCoverageRadiusToggleLabel">
+              <input type="checkbox" id="showCoverageRadius" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(241,184,75,0.4);border:1px dashed rgba(241,184,75,0.7);border-radius:50%;"></span>
+              Base coverage radius
+            </label>
           </div>
           <div id="asmNameFilterRow" class="asm-name-filter-row" style="display:none">
             <span class="overlay-sublabel">Filter assemblies by name</span>
@@ -230,12 +240,34 @@
               <span class="overlay-dot" style="width:6px;height:6px;background:#ff4488;border-radius:50%;"></span>
               Escalating systems
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showKillFlashLabel">
+              <input type="checkbox" id="showKillFlash" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff3232;border-radius:50%;box-shadow:0 0 4px #ff3232;"></span>
+              Live kill flashes (15m)
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showKillHourlyLabel">
+              <input type="checkbox" id="showKillHourly" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff9040;border-radius:2px;"></span>
+              24h kill distribution
+            </label>
           </div>
           <div id="escalatingPanel" class="danger-panel" style="display:none">
             <div class="section-title">
               <h3>Escalating <span class="danger-window-label">(rising fast)</span></h3>
             </div>
             <ol id="escalatingList" class="danger-list"></ol>
+          </div>
+          <div id="killHourlyPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Kill Activity <span class="danger-window-label">(UTC hour, 7d)</span></h3>
+            </div>
+            <div id="killHourlyChart" class="kill-hourly-chart"></div>
+          </div>
+          <div id="territoryPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Territory Control <span class="danger-window-label">(by assembly count)</span></h3>
+            </div>
+            <ol id="territoryList" class="danger-list"></ol>
           </div>
           <div id="recentKillsPanel" class="recent-kills-panel" style="display:none">
             <div class="section-title">
