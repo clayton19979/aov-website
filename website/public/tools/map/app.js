@@ -84,6 +84,9 @@ const state = {
   showConstellationBoundaries: false,
   overlayAsmNameFilter: "",
   systemNotes: {},
+  showReachableHighlight: false,
+  showKillEscalating: false,
+  showGateReach: false,
 };
 
 const els = {
@@ -187,6 +190,12 @@ const els = {
   systemNoteWrap: document.getElementById("systemNoteWrap"),
   systemNoteInput: document.getElementById("systemNote"),
   saveSystemNoteBtn: document.getElementById("saveSystemNote"),
+  showReachableHighlightToggle: document.getElementById("showReachableHighlight"),
+  showKillEscalatingToggle: document.getElementById("showKillEscalating"),
+  escalatingPanel: document.getElementById("escalatingPanel"),
+  escalatingList: document.getElementById("escalatingList"),
+  nearbyBasesPanel: document.getElementById("nearbyBasesPanel"),
+  showGateReachToggle: document.getElementById("showGateReach"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -666,6 +675,8 @@ function draw() {
     if (state.showKillLabels) drawKillLabels();
   }
   if (state.showConstellationBoundaries) drawConstellationBoundaries();
+  if (state.showReachableHighlight && state.selected) drawReachableHighlight();
+  if (state.showGateReach && state.selected) drawGateReachOverlay();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   if (state.showSmartGateHubs) drawSmartGateHubOverlay();
@@ -1154,6 +1165,7 @@ function selectSystem(system) {
   updateBookmarkButton(system);
   updateSelectedRouteStep();
   updateDangerNeighborsPanel(system);
+  updateNearbyBasesPanel(system);
   if (els.copySystemIdBtn) els.copySystemIdBtn.disabled = false;
   updateSystemNotePanel(system);
   draw();
@@ -1595,6 +1607,7 @@ function routeShareUrl() {
   if (state.killPlayerFilter) params.set("ov_kpf", state.killPlayerFilter);
   if (state.showRecentKills) params.set("ov_rk", "1");
   if (state.showRegionKills) params.set("ov_rgk", "1");
+  if (state.showKillEscalating) params.set("ov_ke", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1721,6 +1734,10 @@ function loadUrlParams() {
   if (params.get("ov_rgk") === "1") {
     state.showRegionKills = true;
     els.showRegionKillsToggle && (els.showRegionKillsToggle.checked = true);
+  }
+  if (params.get("ov_ke") === "1") {
+    state.showKillEscalating = true;
+    els.showKillEscalatingToggle && (els.showKillEscalatingToggle.checked = true);
   }
   updateOverlayLegend();
 }
@@ -1939,7 +1956,7 @@ function bindEvents() {
     field.addEventListener("input", scheduleRouteUpdate);
     field.addEventListener("change", scheduleRouteUpdate);
   });
-  els.jumpRange.addEventListener("input", () => { updateRangePresets(); if (state.showJumpRange) scheduleDraw(); });
+  els.jumpRange.addEventListener("input", () => { updateRangePresets(); if (state.showJumpRange || state.showReachableHighlight) scheduleDraw(); });
   els.jumpRange.addEventListener("change", updateRangePresets);
   els.rangePresets.forEach((button) => {
     button.addEventListener("click", () => {
@@ -2239,6 +2256,7 @@ function updateDangerPanel() {
   });
   updateRecentKillsPanel();
   updateRegionKillPanel();
+  updateEscalatingPanel();
 }
 
 function updateRecentKillsPanel() {
@@ -2842,6 +2860,7 @@ async function ensureAssemblyOverlay() {
       state.overlayAssembliesLoaded = true;
       state.overlayAssembliesLoading = null;
       updateAssemblyStats();
+      if (state.selected) updateNearbyBasesPanel(state.selected);
       draw();
     }
   })();
@@ -3827,6 +3846,189 @@ function drawSystemNoteMarkers() {
   ctx.restore();
 }
 
+// ── Reachable stars highlight ───────────────────────────────────────────────
+
+function drawReachableHighlight() {
+  if (!state.selected || !state.systems.length) return;
+  const range = Number(els.jumpRange.value || 120);
+  const origin = state.selected;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const sys of state.systems) {
+    if (sys.id === origin.id) continue;
+    const dist = RouteCore.distance(sys, origin);
+    if (dist > range) continue;
+    const p = project(sys);
+    if (p.x < -10 || p.y < -10 || p.x > rect.width + 10 || p.y > rect.height + 10) continue;
+    const proximity = 1 - dist / range;
+    const alpha = 0.08 + proximity * 0.22;
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 6);
+    grd.addColorStop(0, `rgba(0, 220, 200, ${alpha})`);
+    grd.addColorStop(1, `rgba(0, 220, 200, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// ── Smart gate reach overlay ────────────────────────────────────────────────
+
+function computeGateReach(systemId) {
+  const reached = new Set();
+  const queue = [systemId];
+  reached.add(systemId);
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const gate of state.gates) {
+      if (gate.kind !== "smart") continue;
+      let neighbor = null;
+      if (gate.from === cur) neighbor = gate.to;
+      else if (gate.to === cur) neighbor = gate.from;
+      if (neighbor && !reached.has(neighbor)) {
+        reached.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+  reached.delete(systemId);
+  return reached;
+}
+
+function drawGateReachOverlay() {
+  if (!state.selected || !state.gates.length) return;
+  const reached = computeGateReach(state.selected.id);
+  if (!reached.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const sysId of reached) {
+    const sys = state.systemsById.get(sysId);
+    if (!sys) continue;
+    const p = project(sys);
+    if (p.x < -10 || p.y < -10 || p.x > rect.width + 10 || p.y > rect.height + 10) continue;
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 7);
+    grd.addColorStop(0, "rgba(0, 200, 255, 0.28)");
+    grd.addColorStop(1, "rgba(0, 200, 255, 0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// ── Kill escalation panel ────────────────────────────────────────────────────
+
+function updateEscalatingPanel() {
+  if (!els.escalatingPanel || !els.escalatingList) return;
+  if (!state.showKills || !state.overlayKillsLoaded || !state.showKillEscalating) {
+    els.escalatingPanel.style.display = "none";
+    return;
+  }
+  els.escalatingPanel.style.display = "";
+  const now = Date.now();
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
+  const cutoff = now - windowMs;
+  const midpoint = now - windowMs / 2;
+
+  const bySystem = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    if (!killPassesPlayerFilter(kill)) continue;
+    const id = kill.systemId;
+    if (!bySystem.has(id)) bySystem.set(id, { recent: 0, older: 0 });
+    const t = bySystem.get(id);
+    if (kill.timestamp >= midpoint) t.recent++;
+    else t.older++;
+  }
+
+  const escalating = [];
+  for (const [id, counts] of bySystem) {
+    if (counts.recent < 2) continue;
+    const ratio = counts.recent / Math.max(1, counts.older);
+    if (ratio < 1.5) continue;
+    escalating.push({ systemId: id, recent: counts.recent, older: counts.older, ratio });
+  }
+  escalating.sort((a, b) => b.ratio - a.ratio || b.recent - a.recent);
+
+  if (!escalating.length) {
+    els.escalatingList.innerHTML = '<li class="danger-empty">No escalating activity in this window</li>';
+    return;
+  }
+
+  els.escalatingList.innerHTML = escalating.slice(0, 8).map(({ systemId, recent, older, ratio }, idx) => {
+    const system = state.systemsById.get(systemId);
+    if (!system) return "";
+    const name = escapeHtml(system.name);
+    const ratioStr = ratio >= 10 ? "10×+" : `${ratio.toFixed(1)}×`;
+    return `<li class="danger-item" data-system-id="${systemId}">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="danger-name">${name}<span class="escalating-old"> +${older}</span></span>
+      <span class="danger-count escalating-rising">+${recent} <span class="escalating-ratio">${ratioStr}</span></span>
+    </li>`;
+  }).filter(Boolean).join("");
+
+  els.escalatingList.querySelectorAll(".danger-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const system = state.systemsById.get(Number(li.dataset.systemId));
+      if (system) { selectSystem(system); centerOnSystem(system); }
+    });
+  });
+}
+
+// ── Nearby player bases panel ────────────────────────────────────────────────
+
+function updateNearbyBasesPanel(system) {
+  if (!els.nearbyBasesPanel) return;
+  if (!system || !state.overlayPlayerBases.length || !state.showPlayerBases) {
+    els.nearbyBasesPanel.style.display = "none";
+    return;
+  }
+  const range = Number(els.jumpRange.value || 120) * 3;
+  const nearby = state.overlayPlayerBases
+    .filter((b) => b.systemId !== system.id)
+    .map((b) => {
+      const s = state.systemsById.get(b.systemId);
+      if (!s) return null;
+      return { base: b, system: s, dist: RouteCore.distance(s, system) };
+    })
+    .filter((item) => item && item.dist <= range)
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, 5);
+
+  if (!nearby.length) {
+    els.nearbyBasesPanel.style.display = "none";
+    return;
+  }
+  els.nearbyBasesPanel.style.display = "";
+  els.nearbyBasesPanel.innerHTML = `
+    <div class="danger-neighbors-header">Nearby bases <span class="danger-window-label">/ ${Math.round(range)} LY</span></div>
+    <ol class="danger-neighbors-list">
+      ${nearby.map(({ base, system: s, dist }) => {
+        const active = base.onlineCount > 0;
+        const activeClass = active ? " nearby-base--active" : "";
+        return `<li class="danger-neighbor-item nearby-base-item${activeClass}" data-system-id="${s.id}">
+          <span class="danger-neighbor-name">${escapeHtml(s.name)}</span>
+          <span class="danger-neighbor-meta">
+            <span class="nearby-base-count">${base.assemblyCount}⬡</span>
+            <span class="danger-neighbor-dist">${dist.toFixed(0)} LY</span>
+          </span>
+        </li>`;
+      }).join("")}
+    </ol>`;
+  els.nearbyBasesPanel.querySelectorAll(".nearby-base-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const s = state.systemsById.get(Number(li.dataset.systemId));
+      if (s) { selectSystem(s); centerOnSystem(s); }
+    });
+  });
+}
+
 // ── New overlay bindings ────────────────────────────────────────────────────
 
 function bindNewOverlayEvents() {
@@ -3853,6 +4055,24 @@ function bindNewOverlayEvents() {
     state.overlayAsmNameFilter = "";
     if (els.asmNameFilterInput) els.asmNameFilterInput.value = "";
     scheduleDraw();
+  });
+
+  // Reachable highlight toggle
+  els.showReachableHighlightToggle?.addEventListener("change", () => {
+    state.showReachableHighlight = els.showReachableHighlightToggle.checked;
+    scheduleDraw();
+  });
+
+  // Smart gate reach toggle
+  els.showGateReachToggle?.addEventListener("change", () => {
+    state.showGateReach = els.showGateReachToggle.checked;
+    scheduleDraw();
+  });
+
+  // Kill escalation toggle
+  els.showKillEscalatingToggle?.addEventListener("change", () => {
+    state.showKillEscalating = els.showKillEscalatingToggle.checked;
+    updateEscalatingPanel();
   });
 
   // System notes save
