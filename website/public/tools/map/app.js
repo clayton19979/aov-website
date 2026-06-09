@@ -172,6 +172,8 @@ const els = {
   regionKillPanel: document.getElementById("regionKillPanel"),
   regionKillList: document.getElementById("regionKillList"),
   regionKillWindowLabel: document.getElementById("regionKillWindowLabel"),
+  dangerNeighborsPanel: document.getElementById("dangerNeighborsPanel"),
+  copySystemIdBtn: document.getElementById("copySystemId"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -789,6 +791,41 @@ function drawRoute() {
     const color = index === state.activeRouteIndex ? "#f1b84b" : index === 0 || index === state.route.length - 1 ? "#ffffff" : "#61d5c7";
     drawSystemMarker(system, color, index === state.activeRouteIndex ? 7 : 4);
   });
+
+  // Kill warning triangle markers on hot route waypoints
+  if (state.showKills && state.overlayKillsLoaded) {
+    const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+    for (const system of state.route) {
+      let count = 0;
+      for (const k of state.overlayKills) {
+        if (k.systemId !== system.id || k.timestamp < cutoff) continue;
+        if (state.showKillShipsOnly && !isShipKill(k)) continue;
+        count++;
+      }
+      if (count < 1) continue;
+      const p = project(system);
+      const ts = Math.min(6, 3 + Math.log2(count + 1) * 1.4);
+      const killRgb = count >= 6 ? "255,48,48" : count >= 3 ? "255,130,32" : "255,204,40";
+      ctx.fillStyle = `rgba(${killRgb},0.88)`;
+      ctx.strokeStyle = `rgba(${killRgb},0.50)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - ts - 8);
+      ctx.lineTo(p.x + ts, p.y - 3);
+      ctx.lineTo(p.x - ts, p.y - 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (ts >= 4 && state.camera.zoom > 0.5) {
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.font = `bold ${Math.max(6, Math.round(ts))}px ui-monospace, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("!", p.x, p.y - ts / 2 - 8);
+      }
+    }
+  }
+
   ctx.restore();
 }
 
@@ -1078,7 +1115,11 @@ function selectSystem(system) {
   if (base) stats.push(`<span class="sys-stat sys-stat--base">Player Base · ${base.assemblyCount} asm</span>`);
 
   const statsHtml = stats.length ? `<div class="sys-stats">${stats.join("")}</div>` : "";
-  els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>${statsHtml}`;
+  const sparkline = killSparklineStr(system.id);
+  const sparklineHtml = sparkline
+    ? `<div class="sys-sparkline"><span class="sys-sparkline-label">Activity (old→new)</span><span class="sys-sparkline-bars">${escapeHtml(sparkline)}</span></div>`
+    : "";
+  els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>${statsHtml}${sparklineHtml}`;
 
   if (els.assemblyDetailList) {
     if (assemblyDetailHtml) {
@@ -1092,6 +1133,8 @@ function selectSystem(system) {
   updateSystemActions();
   updateBookmarkButton(system);
   updateSelectedRouteStep();
+  updateDangerNeighborsPanel(system);
+  if (els.copySystemIdBtn) els.copySystemIdBtn.disabled = false;
   draw();
 }
 
@@ -1956,6 +1999,27 @@ function bindEvents() {
   els.setVia.addEventListener("click", () => setSelectedRouteField(els.via));
   els.centerSystem.addEventListener("click", () => centerOnSystem(state.selected));
   els.bookmarkSystemBtn?.addEventListener("click", () => toggleBookmark(state.selected));
+  els.copySystemIdBtn?.addEventListener("click", async () => {
+    if (!state.selected) return;
+    const text = `${state.selected.name} (${state.selected.id})`;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const scratch = document.createElement("textarea");
+      scratch.value = text;
+      scratch.setAttribute("readonly", "");
+      scratch.style.position = "fixed";
+      scratch.style.left = "-9999px";
+      document.body.append(scratch);
+      scratch.select();
+      document.execCommand("copy");
+      scratch.remove();
+    }
+    const btn = els.copySystemIdBtn;
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = orig; }, 1200);
+  });
   els.showBookmarksToggle?.addEventListener("change", () => {
     state.showBookmarks = els.showBookmarksToggle.checked;
     updateOverlayLegend();
@@ -2295,6 +2359,82 @@ function isShipKill(kill) {
   return true; // default to ship if type is unknown
 }
 
+// Returns a 10-character Unicode sparkline showing kill distribution across the
+// selected time window, oldest (left) to newest (right). Returns "" if no data.
+function killSparklineStr(systemId) {
+  if (!state.overlayKillsLoaded) return "";
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
+  const now = Date.now();
+  const BUCKETS = 10;
+  const buckets = new Array(BUCKETS).fill(0);
+  for (const kill of state.overlayKills) {
+    if (kill.systemId !== systemId) continue;
+    const age = now - kill.timestamp;
+    if (age < 0 || age > windowMs) continue;
+    const idx = Math.min(BUCKETS - 1, Math.floor((age / windowMs) * BUCKETS));
+    buckets[BUCKETS - 1 - idx]++;
+  }
+  if (!buckets.some((b) => b > 0)) return "";
+  const maxB = Math.max(1, ...buckets);
+  const chars = "▁▂▃▄▅▆▇█";
+  return buckets.map((b) => (b === 0 ? "·" : chars[Math.min(7, Math.round((b / maxB) * 7))])).join("");
+}
+
+// Returns up to `limit` systems within the current jump range of `system`
+// that have kills in the active time window, sorted by kill count desc.
+function getDangerNeighbors(system, limit = 5) {
+  if (!state.overlayKillsLoaded || !state.showKills || !state.overlayKills.length) return [];
+  const range = Number(els.jumpRange.value || 120);
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+  const killMap = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    if (state.showKillShipsOnly && !isShipKill(kill)) continue;
+    killMap.set(kill.systemId, (killMap.get(kill.systemId) || 0) + 1);
+  }
+  if (!killMap.size) return [];
+  const results = [];
+  for (const [systemId, count] of killMap) {
+    if (systemId === system.id) continue;
+    const other = state.systemsById.get(systemId);
+    if (!other) continue;
+    const dist = RouteCore.distance(other, system);
+    if (dist <= range) results.push({ system: other, count, dist });
+  }
+  return results.sort((a, b) => b.count - a.count || a.dist - b.dist).slice(0, limit);
+}
+
+// Renders the danger-neighbors panel in the system card.
+function updateDangerNeighborsPanel(system) {
+  if (!els.dangerNeighborsPanel) return;
+  const neighbors = system ? getDangerNeighbors(system) : [];
+  if (!neighbors.length) {
+    els.dangerNeighborsPanel.style.display = "none";
+    return;
+  }
+  const w = state.overlayKillsTimeWindow;
+  const wLabel = w < 1 ? `${Math.round(w * 60)}m` : w >= 24 ? `${Math.round(w / 24)}d` : `${w}h`;
+  els.dangerNeighborsPanel.style.display = "";
+  els.dangerNeighborsPanel.innerHTML = `
+    <div class="danger-neighbors-header">Hot within jump range <span class="danger-window-label">/ ${escapeHtml(wLabel)}</span></div>
+    <ol class="danger-neighbors-list">
+      ${neighbors.map(({ system: s, count, dist }) => `
+        <li class="danger-neighbor-item" data-system-id="${s.id}">
+          <span class="danger-neighbor-name">${escapeHtml(s.name)}</span>
+          <span class="danger-neighbor-meta">
+            <span class="danger-neighbor-count">${count}⚠</span>
+            <span class="danger-neighbor-dist">${dist.toFixed(0)} LY</span>
+          </span>
+        </li>`).join("")}
+    </ol>`;
+  els.dangerNeighborsPanel.querySelectorAll(".danger-neighbor-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const s = state.systemsById.get(Number(li.dataset.systemId));
+      if (s) { selectSystem(s); centerOnSystem(s); }
+    });
+  });
+}
+
 function getKillTrend(systemId) {
   if (!state.overlayKillsLoaded) return null;
   const windowMs = state.overlayKillsTimeWindow * 3_600_000;
@@ -2431,6 +2571,7 @@ async function ensureKillFeed() {
       state.overlayKillsLoaded = true;
       state.overlayKillsLoading = null;
       updateDangerPanel();
+      updateDangerNeighborsPanel(state.selected);
       draw();
     }
   })();
@@ -3246,7 +3387,10 @@ async function toggleOverlay(name, enabled) {
     state.showKills = enabled;
     els.killTimePanel.style.display = enabled ? "" : "none";
     if (enabled) await ensureKillFeed();
-    else updateDangerPanel();
+    else {
+      updateDangerPanel();
+      updateDangerNeighborsPanel(state.selected);
+    }
     setupKillAutoRefresh();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
