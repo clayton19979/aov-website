@@ -66,6 +66,11 @@ const state = {
   showKillLabels: false,
   showKillShipsOnly: false,
   showSystemLabels: false,
+  // New features
+  showHotPanel: false,
+  showContested: false,
+  showOfflinePanel: false,
+  killTimeOffset: 0,       // hours to shift the kill window back from "now"
 };
 
 const els = {
@@ -115,6 +120,21 @@ const els = {
   showSystemLabelsToggle: document.getElementById("showSystemLabels"),
   asmTypePanel: document.getElementById("asmTypePanel"),
   asmTypeChecks: document.querySelectorAll(".asm-type-check"),
+  // New feature elements
+  showHotPanelToggle: document.getElementById("showHotPanel"),
+  showContestedToggle: document.getElementById("showContested"),
+  showOfflinePanelToggle: document.getElementById("showOfflinePanelToggle"),
+  timeOffsetRow: document.getElementById("timeOffsetRow"),
+  killTimeOffsetSlider: document.getElementById("killTimeOffset"),
+  killOffsetLabel: document.getElementById("killOffsetLabel"),
+  hotPanel: document.getElementById("hotPanel"),
+  hotList: document.getElementById("hotList"),
+  hotPanelWindowLabel: document.getElementById("hotPanelWindowLabel"),
+  contestedPanel: document.getElementById("contestedPanel"),
+  contestedList: document.getElementById("contestedList"),
+  offlinePanel: document.getElementById("offlinePanel"),
+  offlineList: document.getElementById("offlineList"),
+  offlinePanelClose: document.getElementById("offlinePanelClose"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -524,6 +544,7 @@ function draw() {
   drawGateLinks();
   if (state.showJumpRange) drawJumpRangeCircle();
   if (state.showKills) drawKillOverlay();
+  if (state.showKills && state.showContested && state.overlayKillsLoaded) drawContestedOverlay();
   if (state.showKills && state.showKillLabels) drawKillLabels();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
@@ -844,7 +865,7 @@ function renderRoute(result) {
   let gateCount = 0;
   let jumpCount = 0;
   let hotSystems = 0;
-  const killCutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+  const { start: killStart, end: killEnd } = killWindowBounds();
 
   result.path.forEach((system, index) => {
     const edge = result.edges[index - 1];
@@ -858,7 +879,7 @@ function renderRoute(result) {
     const isWaypoint = Boolean(via) && index > 0 && index < routeLength - 1 && system.id === via.id;
 
     const killCount = state.overlayKillsLoaded
-      ? state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= killCutoff).length
+      ? state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= killStart && k.timestamp <= killEnd).length
       : 0;
     if (killCount > 0) hotSystems++;
 
@@ -925,9 +946,17 @@ function selectSystem(system) {
 
   const stats = [];
   if (state.overlayKillsLoaded) {
-    const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
-    const n = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff).length;
-    if (n > 0) stats.push(`<span class="sys-stat sys-stat--danger">${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h</span>`);
+    const { start: ks, end: ke } = killWindowBounds();
+    const kills = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= ks && k.timestamp <= ke);
+    const n = kills.length;
+    if (n > 0) {
+      const windowLabel = state.killTimeOffset > 0
+        ? `${state.killTimeOffset}h–${state.killTimeOffset + state.overlayKillsTimeWindow}h ago`
+        : `/ ${state.overlayKillsTimeWindow}h`;
+      stats.push(`<span class="sys-stat sys-stat--danger">${n} kill${n > 1 ? "s" : ""} ${windowLabel}</span>`);
+    }
+    const score = computeDangerScore(system.id);
+    if (score >= 10) stats.push(`<span class="sys-stat sys-stat--danger" title="Danger score: recency-weighted kill density">Danger ${score}/100</span>`);
   }
   if (state.overlayAssembliesLoaded) {
     const asms = state.overlayAssemblies.filter((a) => a.systemId === system.id);
@@ -1517,10 +1546,10 @@ function hydrateWorkerRouteResult(result) {
 
 function getAvoidSystemIds() {
   if (!state.avoidKills || !state.overlayKillsLoaded) return new Set();
-  const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+  const { start: ks, end: ke } = killWindowBounds();
   const ids = new Set();
   for (const kill of state.overlayKills) {
-    if (kill.timestamp >= cutoff) ids.add(kill.systemId);
+    if (kill.timestamp >= ks && kill.timestamp <= ke) ids.add(kill.systemId);
   }
   return ids;
 }
@@ -1824,11 +1853,19 @@ async function fetchKillFeed() {
   return { kills, source: "sui-events" };
 }
 
+function killWindowBounds() {
+  const now = Date.now();
+  const offsetMs = state.killTimeOffset * 3_600_000;
+  const end = now - offsetMs;
+  const start = end - state.overlayKillsTimeWindow * 3_600_000;
+  return { start, end };
+}
+
 function buildKillSystemMap() {
-  const cutoff = Date.now() - state.overlayKillsTimeWindow * 60 * 60 * 1000;
+  const { start, end } = killWindowBounds();
   const map = new Map();
   for (const kill of state.overlayKills) {
-    if (kill.timestamp < cutoff) continue;
+    if (kill.timestamp < start || kill.timestamp > end) continue;
     if (!map.has(kill.systemId)) map.set(kill.systemId, []);
     map.get(kill.systemId).push(kill);
   }
@@ -1936,6 +1973,8 @@ async function ensureKillFeed() {
     } finally {
       state.overlayKillsLoaded = true;
       state.overlayKillsLoading = null;
+      updateHotPanel();
+      updateContestedPanel();
       draw();
     }
   })();
@@ -2086,6 +2125,7 @@ async function ensureAssemblyOverlay() {
     } finally {
       state.overlayAssembliesLoaded = true;
       state.overlayAssembliesLoading = null;
+      updateOfflinePanel();
       draw();
     }
   })();
@@ -2206,16 +2246,30 @@ function drawHoverTooltip() {
   lines.push({ text: `Region ${system.regionId}`, color: "rgba(255,255,255,0.42)", bold: false });
 
   if (state.overlayKillsLoaded && state.showKills) {
-    const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
-    const inWindow = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff);
+    const { start: ks, end: ke } = killWindowBounds();
+    const inWindow = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= ks && k.timestamp <= ke);
     const n = inWindow.length;
     if (n > 0) {
       const shipN = inWindow.filter(isShipKill).length;
       const structN = n - shipN;
+      const winLabel = state.killTimeOffset > 0
+        ? `${state.killTimeOffset}h–${state.killTimeOffset + state.overlayKillsTimeWindow}h ago`
+        : `/${state.overlayKillsTimeWindow}h`;
       const label = structN > 0 && !state.showKillShipsOnly
-        ? `${n} kill${n > 1 ? "s" : ""} (${shipN} ship, ${structN} struct)`
-        : `${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h`;
+        ? `${n} kill${n > 1 ? "s" : ""} (${shipN}⚔ ${structN}🏗) ${winLabel}`
+        : `${n} kill${n > 1 ? "s" : ""} ${winLabel}`;
       lines.push({ text: label, color: "rgba(255,100,100,0.95)", bold: true });
+      // Danger score
+      const score = computeDangerScore(system.id);
+      if (score >= 10) {
+        const scoreColor = score >= 70 ? "rgba(255,60,60,0.95)" : score >= 40 ? "rgba(255,140,40,0.95)" : "rgba(255,200,60,0.85)";
+        lines.push({ text: `Danger ${score}/100`, color: scoreColor, bold: false });
+      }
+      // Contested indicator
+      if (state.showContested) {
+        const hours = countContestHours(system.id);
+        if (hours >= 3) lines.push({ text: `Contested · ${hours}h active`, color: "rgba(0,220,255,0.90)", bold: false });
+      }
     }
   }
 
@@ -2319,6 +2373,215 @@ function drawKillLabels() {
   ctx.restore();
 }
 
+// ── New feature: Danger score ──────────────────────────────────────────────
+
+function computeDangerScore(systemId) {
+  if (!state.overlayKillsLoaded) return 0;
+  const now = Date.now();
+  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
+  const { start: ks, end: ke } = killWindowBounds();
+  const kills = state.overlayKills.filter((k) => k.systemId === systemId && k.timestamp >= ks && k.timestamp <= ke);
+  if (!kills.length) return 0;
+  // Recency-weighted: kills closer to the end of the window score higher
+  let weightedSum = 0;
+  for (const k of kills) {
+    const age = (ke - k.timestamp) / windowMs; // 0 = newest, 1 = oldest in window
+    weightedSum += 1 - age * 0.7; // older kills count less
+  }
+  // Base score: up to 60 from kills
+  const killScore = Math.min(60, weightedSum * 12);
+  // Player base bonus: if there's a base here, raises stakes (+20)
+  const baseBonus = state.overlayPlayerBases.some((b) => b.systemId === systemId) ? 20 : 0;
+  // Volume bonus: extra points for high kill count (+20 max)
+  const volumeBonus = Math.min(20, kills.length * 2);
+  return Math.round(Math.min(100, killScore + baseBonus + volumeBonus));
+}
+
+// ── New feature: Contested systems ────────────────────────────────────────
+
+function countContestHours(systemId) {
+  const { start: ks, end: ke } = killWindowBounds();
+  const hourBuckets = new Set();
+  for (const k of state.overlayKills) {
+    if (k.systemId !== systemId || k.timestamp < ks || k.timestamp > ke) continue;
+    hourBuckets.add(Math.floor(k.timestamp / 3_600_000));
+  }
+  return hourBuckets.size;
+}
+
+function buildContestedMap(minHours = 3) {
+  if (!state.overlayKillsLoaded) return new Map();
+  const { start: ks, end: ke } = killWindowBounds();
+  const systemHours = new Map(); // systemId → Set<hourBucket>
+  for (const k of state.overlayKills) {
+    if (k.timestamp < ks || k.timestamp > ke) continue;
+    const hour = Math.floor(k.timestamp / 3_600_000);
+    if (!systemHours.has(k.systemId)) systemHours.set(k.systemId, new Set());
+    systemHours.get(k.systemId).add(hour);
+  }
+  const result = new Map();
+  for (const [id, hours] of systemHours) {
+    if (hours.size >= minHours) result.set(id, hours.size);
+  }
+  return result;
+}
+
+function drawContestedOverlay() {
+  if (!state.showContested || !state.overlayKillsLoaded) return;
+  const contested = buildContestedMap(3);
+  if (!contested.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  const t = (Date.now() / 1800) % (Math.PI * 2); // slow pulse
+  for (const [systemId, hourCount] of contested) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = 9 + Math.min(5, hourCount - 3);
+    const pulse = 0.55 + Math.sin(t + systemId * 0.001) * 0.25;
+    ctx.strokeStyle = `rgba(0, 225, 255, ${pulse})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (state.camera.zoom > 1.0 && hourCount >= 5) {
+      ctx.fillStyle = `rgba(0, 220, 255, ${pulse * 0.8})`;
+      ctx.font = "bold 8px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(`${hourCount}h`, p.x, p.y + r + 2);
+    }
+  }
+  ctx.restore();
+}
+
+function updateContestedPanel() {
+  if (!els.contestedPanel || !els.contestedList) return;
+  if (!state.showContested || !state.overlayKillsLoaded) {
+    els.contestedPanel.style.display = "none";
+    return;
+  }
+  const contested = buildContestedMap(3);
+  if (!contested.size) {
+    els.contestedPanel.style.display = "none";
+    return;
+  }
+  els.contestedPanel.style.display = "";
+  const sorted = [...contested.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const killMap = buildKillSystemMap();
+  els.contestedList.innerHTML = sorted.map(([systemId, hours]) => {
+    const sys = state.systemsById.get(systemId);
+    const name = sys?.name ?? `#${systemId}`;
+    const kills = killMap.get(systemId)?.length ?? 0;
+    return `<li class="danger-item" data-system-id="${systemId}" style="cursor:pointer">
+      <span class="danger-rank" style="color:rgba(0,220,255,0.9)">${hours}h</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count" style="color:rgba(255,120,120,0.85)">${kills}⚠</span>
+    </li>`;
+  }).join("");
+  els.contestedList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
+// ── New feature: Hot systems panel ────────────────────────────────────────
+
+function updateHotPanel() {
+  if (!els.hotPanel || !els.hotList) return;
+  if (!state.showHotPanel || !state.overlayKillsLoaded) {
+    els.hotPanel.style.display = "none";
+    return;
+  }
+  const killMap = buildKillSystemMap();
+  if (!killMap.size) {
+    els.hotPanel.style.display = "none";
+    return;
+  }
+  els.hotPanel.style.display = "";
+  if (els.hotPanelWindowLabel) {
+    const wLabel = state.killTimeOffset > 0
+      ? `(${state.killTimeOffset}h–${state.killTimeOffset + state.overlayKillsTimeWindow}h ago)`
+      : `(last ${state.overlayKillsTimeWindow}h)`;
+    els.hotPanelWindowLabel.textContent = wLabel;
+  }
+  const sorted = [...killMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 15);
+  els.hotList.innerHTML = sorted.map(([systemId, kills], idx) => {
+    const sys = state.systemsById.get(systemId);
+    const name = sys?.name ?? `#${systemId}`;
+    const score = computeDangerScore(systemId);
+    const scoreColor = score >= 70 ? "#ff4444" : score >= 40 ? "#ff9040" : "#ffcc44";
+    const shipN = kills.filter(isShipKill).length;
+    const structN = kills.length - shipN;
+    const detail = structN > 0 ? `${shipN}⚔ ${structN}🏗` : `${kills.length}⚠`;
+    return `<li class="danger-item" data-system-id="${systemId}" style="cursor:pointer">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count">${detail}</span>
+      <span style="color:${scoreColor};font-size:9px;margin-left:2px">${score}</span>
+    </li>`;
+  }).join("");
+  els.hotList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
+// ── New feature: Offline assemblies panel ─────────────────────────────────
+
+function buildOfflineAssemblyMap() {
+  const map = new Map(); // systemId → offline assembly list
+  for (const asm of state.overlayAssemblies) {
+    if (asm.online) continue;
+    if (!map.has(asm.systemId)) map.set(asm.systemId, []);
+    map.get(asm.systemId).push(asm);
+  }
+  return map;
+}
+
+function updateOfflinePanel() {
+  if (!els.offlinePanel || !els.offlineList) return;
+  if (!state.showOfflinePanel || !state.overlayAssembliesLoaded) {
+    els.offlinePanel.style.display = "none";
+    return;
+  }
+  const offlineMap = buildOfflineAssemblyMap();
+  if (!offlineMap.size) {
+    els.offlinePanel.style.display = "none";
+    setOverlayStatus("No offline assemblies found");
+    return;
+  }
+  els.offlinePanel.style.display = "";
+  const sorted = [...offlineMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 20);
+  els.offlineList.innerHTML = sorted.map(([systemId, asms]) => {
+    const sys = state.systemsById.get(systemId);
+    const name = sys?.name ?? `#${systemId}`;
+    const typeLabel = [...new Set(asms.map((a) => a.label))].join(", ");
+    return `<li class="danger-item offline-item" data-system-id="${systemId}" style="cursor:pointer">
+      <span class="danger-rank" style="color:rgba(150,160,180,0.8)">${asms.length}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count" style="color:rgba(140,150,180,0.75);font-size:9px">${typeLabel}</span>
+    </li>`;
+  }).join("");
+  els.offlineList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
 // ── Overlay UI helpers ─────────────────────────────────────────────────────
 
 function setOverlayStatus(text) {
@@ -2337,14 +2600,28 @@ function updateTimePresets() {
   });
 }
 
+function updateKillOffsetLabel() {
+  if (!els.killOffsetLabel) return;
+  const off = state.killTimeOffset;
+  if (off === 0) {
+    els.killOffsetLabel.textContent = "now (live)";
+  } else {
+    els.killOffsetLabel.textContent = `${off}h–${off + state.overlayKillsTimeWindow}h ago`;
+  }
+}
+
 async function toggleOverlay(name, enabled) {
   if (name === "kills") {
     state.showKills = enabled;
     els.killTimePanel.style.display = enabled ? "" : "none";
+    if (els.timeOffsetRow) els.timeOffsetRow.style.display = enabled ? "" : "none";
     if (enabled) await ensureKillFeed();
+    updateHotPanel();
+    updateContestedPanel();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
     if (enabled) await ensureAssemblyOverlay();
+    updateOfflinePanel();
   } else if (name === "playerBases") {
     state.showPlayerBases = enabled;
     if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
@@ -2373,6 +2650,9 @@ function bindOverlayEvents() {
     btn.addEventListener("click", () => {
       state.overlayKillsTimeWindow = Number(btn.dataset.hours);
       updateTimePresets();
+      updateKillOffsetLabel();
+      updateHotPanel();
+      updateContestedPanel();
       draw();
     });
   });
@@ -2389,6 +2669,41 @@ function bindOverlayEvents() {
     if (state.showAssemblies || state.showPlayerBases) reloadTasks.push(ensureAssemblyOverlay());
     if (!reloadTasks.length) setOverlayStatus("Enable an overlay to load data");
     Promise.all(reloadTasks);
+  });
+
+  // New feature bindings
+  els.showHotPanelToggle?.addEventListener("change", () => {
+    state.showHotPanel = els.showHotPanelToggle.checked;
+    updateHotPanel();
+  });
+
+  els.showContestedToggle?.addEventListener("change", () => {
+    state.showContested = els.showContestedToggle.checked;
+    updateContestedPanel();
+    scheduleDraw();
+  });
+
+  els.showOfflinePanelToggle?.addEventListener("change", () => {
+    state.showOfflinePanel = els.showOfflinePanelToggle.checked;
+    if (state.showOfflinePanel && !state.overlayAssembliesLoaded) {
+      ensureAssemblyOverlay().then(() => updateOfflinePanel()).catch(() => {});
+    } else {
+      updateOfflinePanel();
+    }
+  });
+
+  els.offlinePanelClose?.addEventListener("click", () => {
+    state.showOfflinePanel = false;
+    if (els.showOfflinePanelToggle) els.showOfflinePanelToggle.checked = false;
+    updateOfflinePanel();
+  });
+
+  els.killTimeOffsetSlider?.addEventListener("input", () => {
+    state.killTimeOffset = Number(els.killTimeOffsetSlider.value);
+    updateKillOffsetLabel();
+    updateHotPanel();
+    updateContestedPanel();
+    scheduleDraw();
   });
 }
 

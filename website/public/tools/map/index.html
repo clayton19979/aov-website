@@ -102,6 +102,11 @@
               <span class="overlay-dot bases-dot"></span>
               Player Bases
             </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="showOfflinePanelToggleLabel">
+              <input type="checkbox" id="showOfflinePanelToggle" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(120,130,160,0.8);border-radius:2px;"></span>
+              Offline assemblies panel
+            </label>
           </div>
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>
@@ -122,9 +127,44 @@
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;"></span>
               Ships only (hide structure kills)
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showHotPanelLabel">
+              <input type="checkbox" id="showHotPanel" />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff4444;"></span>
+              Hot systems panel
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showContestedLabel">
+              <input type="checkbox" id="showContested" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#00e5ff;border-radius:50%;"></span>
+              Contested (kills 3h+)
+            </label>
+            <div class="time-offset-row" style="display:none" id="timeOffsetRow">
+              <span class="overlay-sublabel">View window offset: <span id="killOffsetLabel">now (live)</span></span>
+              <input type="range" id="killTimeOffset" min="0" max="162" step="1" value="0" class="time-offset-slider" title="Shift the view window backward in time" />
+            </div>
+          </div>
+          <div id="hotPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Hot Systems <span id="hotPanelWindowLabel" class="danger-window-label"></span></h3>
+            </div>
+            <ol id="hotList" class="danger-list"></ol>
+          </div>
+          <div id="contestedPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Contested <span class="danger-window-label">(kills across 3+ hours)</span></h3>
+            </div>
+            <ol id="contestedList" class="danger-list"></ol>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
+
+        <div id="offlinePanel" class="offline-panel" style="display:none">
+          <div class="section-title">
+            <h3>Offline Assemblies</h3>
+            <button id="offlinePanelClose" title="Close" class="panel-close-btn">×</button>
+          </div>
+          <p class="offline-hint">Systems where assemblies went offline — fuel may be depleted.</p>
+          <ol id="offlineList" class="danger-list"></ol>
+        </div>
 
         <form id="routeForm" class="route-form">
           <label>
