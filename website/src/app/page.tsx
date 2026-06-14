@@ -1,133 +1,73 @@
-'use client'
-
 import Link from 'next/link'
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { StarField } from '@/components/landing/StarField'
-import { VoidEclipse } from '@/components/landing/VoidEclipse'
-import { DiscordCTA } from '@/components/landing/DiscordCTA'
-import { PhraseCycler } from '@/components/landing/PhraseCycler'
-import { useGlitchText } from '@/hooks/useGlitchText'
-
-function fadeUp(delay: number) {
-  return {
-    initial: { opacity: 0, y: 16 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number], delay },
-  }
-}
-
-// HUD targeting frame — L-shaped brackets anchored at the four hero corners.
-// Each draws from two borders; the top pair sits below the gutter, the bottom
-// pair rides above the footer strip so the whole hero reads as a cockpit display.
-const FRAME_CORNERS = [
-  { key: 'tl', pos: 'top-4 left-4 md:top-6 md:left-6', borders: 'border-t border-l' },
-  { key: 'tr', pos: 'top-4 right-4 md:top-6 md:right-6', borders: 'border-t border-r' },
-  { key: 'bl', pos: 'bottom-16 left-4 md:bottom-16 md:left-6', borders: 'border-b border-l' },
-  { key: 'br', pos: 'bottom-16 right-4 md:bottom-16 md:right-6', borders: 'border-b border-r' },
-] as const
+import { LandingHero } from '@/components/landing/LandingHero'
+import { recognitionBrief } from '@/data/recognition'
 
 export default function LandingPage() {
-  const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
-  const [memberHovered, setMemberHovered] = useState(false)
-
   return (
-    <main
-      className={`relative flex flex-col items-center justify-center min-h-screen bg-void-black overflow-hidden ${isGlitching ? 'noise-flash' : ''}`}
+    <main className="bg-void-black">
+      <LandingHero />
+      <RecognitionBrief />
+    </main>
+  )
+}
+
+function RecognitionBrief() {
+  return (
+    <section
+      aria-labelledby="recognition-brief-title"
+      className="relative border-t border-void-teal/10 px-6 py-14 sm:py-16"
     >
-      {/* Background star field */}
-      <StarField />
-
-      {/* Background radial glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 4%, transparent) 0%, transparent 60%)',
-        }}
-        aria-hidden="true"
-      />
-
-      {/* HUD targeting frame — corner brackets locking onto the hero */}
-      <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
-        {FRAME_CORNERS.map((c, i) => (
-          <motion.span
-            key={c.key}
-            className={`absolute h-6 w-6 md:h-8 md:w-8 ${c.pos} ${c.borders}`}
-            style={{
-              borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
-              filter: 'drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 18%, transparent))',
-            }}
-            initial={{ opacity: 0, scale: 0.7 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.6 + i * 0.1 }}
-          />
-        ))}
-      </div>
-
-      {/* Center content */}
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
-        {/* Eclipse */}
-        <motion.div {...fadeUp(0)}>
-          <VoidEclipse />
-        </motion.div>
-
-        {/* Title */}
-        <motion.div {...fadeUp(0.12)} className="flex flex-col items-center gap-3">
-          <h1
-            aria-label="ARCHITECTS OF THE VOID"
-            className={`glitch-title font-mono text-4xl md:text-6xl lg:text-7xl tracking-widest uppercase text-white/90 ${isGlitching ? 'is-glitching' : ''}`}
-          >
-            <span aria-hidden="true">{displayed}</span>
-          </h1>
-          <p className="font-mono text-sm tracking-widest text-void-teal/60 italic">
-            &ldquo;We were not chosen. We survived.&rdquo;
+      <div className="mx-auto grid w-full max-w-5xl gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14">
+        <div className="flex flex-col items-start">
+          <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-void-teal/45">
+            {recognitionBrief.eyebrow}
           </p>
-        </motion.div>
-
-        {/* Description */}
-        <motion.p {...fadeUp(0.24)} className="max-w-sm font-mono text-xs tracking-wide text-white/20 leading-relaxed uppercase">
-          A militant techno-religious order operating at the edge of civilization.
-          We do not recruit. We recognize.
-        </motion.p>
-
-        {/* Discord CTA */}
-        <motion.div {...fadeUp(0.36)}>
-          <DiscordCTA />
-        </motion.div>
-
-        {/* Member access */}
-        <motion.div {...fadeUp(0.48)}>
+          <h2
+            id="recognition-brief-title"
+            className="max-w-xl font-mono text-2xl uppercase tracking-widest text-white/85 sm:text-3xl"
+          >
+            {recognitionBrief.title}
+          </h2>
+          <p className="mt-5 max-w-xl font-mono text-sm leading-loose tracking-wide text-white/40">
+            {recognitionBrief.intro}
+          </p>
+          <blockquote className="mt-8 border-l border-void-teal/40 pl-5">
+            <p className="font-mono text-xs uppercase leading-loose tracking-widest text-void-teal/70">
+              &ldquo;{recognitionBrief.publicSignal}&rdquo;
+            </p>
+          </blockquote>
           <Link
             href="/login"
-            onMouseEnter={() => setMemberHovered(true)}
-            onMouseLeave={() => setMemberHovered(false)}
-            className="inline-flex items-center gap-2 border px-6 py-2 font-mono text-xs tracking-widest uppercase transition-all duration-300"
-            style={{
-              borderColor: memberHovered
-                ? 'color-mix(in srgb, var(--accent) 50%, transparent)'
-                : 'color-mix(in srgb, var(--accent) 20%, transparent)',
-              color: memberHovered
-                ? 'var(--accent)'
-                : 'color-mix(in srgb, var(--accent) 50%, transparent)',
-              boxShadow: memberHovered
-                ? '0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent), 0 0 18px 4px color-mix(in srgb, var(--accent) 10%, transparent)'
-                : '0 0 10px 1px color-mix(in srgb, var(--accent) 5%, transparent)',
-              transition: 'border-color 300ms ease, color 300ms ease, box-shadow 350ms ease',
-            }}
+            className="mt-9 inline-flex border border-void-teal/25 px-5 py-2.5 font-mono text-xs uppercase tracking-widest text-void-teal/70 transition-colors duration-300 hover:border-void-teal/60 hover:text-void-teal"
           >
-            ◈ Member Access
+            Member threshold
           </Link>
-        </motion.div>
-      </div>
+        </div>
 
-      {/* Bottom bar */}
-      <footer className="absolute bottom-0 inset-x-0 flex items-center justify-between px-6 py-3 border-t border-void-teal/10">
-        <span className="font-mono text-xs tracking-widest text-white/10 uppercase">
-          ◈ AoV
-        </span>
-        <PhraseCycler />
-        <span className="font-mono text-xs text-white/10">◈</span>
-      </footer>
-    </main>
+        <div className="border-y border-void-teal/10">
+          {recognitionBrief.signals.map(signal => (
+            <article
+              key={signal.step}
+              className="group grid gap-4 border-b border-void-teal/10 py-6 last:border-b-0 sm:grid-cols-[4rem_1fr]"
+            >
+              <span className="font-mono text-xs tracking-widest text-void-teal/35 transition-colors duration-300 group-hover:text-void-teal/75">
+                {signal.step}
+              </span>
+              <div>
+                <h3 className="font-mono text-sm uppercase tracking-widest text-white/75">
+                  {signal.title}
+                </h3>
+                <p className="mt-3 font-mono text-xs leading-loose tracking-wide text-white/40">
+                  {signal.body}
+                </p>
+                <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-white/20">
+                  {signal.measure}
+                </p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
   )
 }
