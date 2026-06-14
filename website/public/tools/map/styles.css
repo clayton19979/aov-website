@@ -1743,6 +1743,45 @@ button.active-bookmark {
   background: radial-gradient(circle, rgba(255,112,32,0.9) 0%, rgba(255,60,10,0.4) 70%, transparent 100%);
 }
 
+/* ── v5: Wallet filter widget ───────────────────── */
+
+.wallet-filter-row {
+  margin-left: 20px;
+  display: grid;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.15);
+}
+
+.wallet-filter-input-row {
+  display: flex;
+  gap: 4px;
+}
+
+.wallet-filter-input-row input {
+  flex: 1;
+  height: 28px;
+  font-size: 0.68rem;
+  padding: 0 8px;
+}
+
+.wallet-filter-input-row button {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.3);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.wallet-filter-input-row button:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
 /* ── v4: Kill activity timeline bar ────────────── */
 
 .kill-timeline {

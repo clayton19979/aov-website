@@ -83,6 +83,10 @@ const state = {
   reachabilityMaxHops: 1,
   showTerritory: false,
   showHubPanel: false,
+  // v5 features
+  showBattles: false,
+  showRegionShading: false,
+  walletFilterAddress: "",
 };
 
 const els = {
@@ -178,6 +182,14 @@ const els = {
   hubPanelToggle: document.getElementById("showHubPanel"),
   hubPanel: document.getElementById("hubPanel"),
   hubList: document.getElementById("hubList"),
+  // v5 elements
+  battlesToggle: document.getElementById("battlesToggle"),
+  battlesPanel: document.getElementById("battlesPanel"),
+  battlesList: document.getElementById("battlesList"),
+  regionShadingToggle: document.getElementById("regionShadingToggle"),
+  walletFilterRow: document.getElementById("walletFilterRow"),
+  walletFilterInput: document.getElementById("walletFilterInput"),
+  walletFilterClear: document.getElementById("walletFilterClear"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -642,9 +654,8 @@ function draw() {
     }
   }
 
-  // ── Region / constellation color dots ───────────────
-  if (state.showRegionColors) drawRegionColors();
-  if (state.showConstellationColors) drawConstellationColors();
+  // ── Region shading (drawn before stars for best layering) ────────────────
+  if (state.showRegionShading) drawRegionShading();
 
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
@@ -655,13 +666,11 @@ function draw() {
   if (state.showKills) drawKillOverlay();
   if (state.showKills && state.showContested && state.overlayKillsLoaded) drawContestedOverlay();
   if (state.showKills && state.showKillLabels) drawKillLabels();
+  if (state.showBattles && state.overlayKillsLoaded) drawBattleOverlay();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showAssemblies && state.showAssemblyLabels) drawAssemblyLabels();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
-  if (state.showCoverageRadius && state.showPlayerBases) drawCoverageRadiusOverlay();
-  if (state.showTerritoryOwnership && state.overlayAssembliesLoaded) drawTerritoryOverlay();
-  if (state.showSmartGateHubs) drawSmartGateHubOverlay();
-  if (state.showKills && state.showKillFlash && state.overlayKillsLoaded) drawKillFlashOverlay();
+  if (state.walletFilterAddress && state.overlayAssembliesLoaded) drawWalletHighlight();
   if (state.showSystemLabels) drawSystemLabels();
   if (state.showBookmarks && state.bookmarks.length) drawBookmarks();
   drawSystemNoteMarkers();
@@ -2598,6 +2607,7 @@ async function ensureKillFeed() {
       state.overlayKillsLoading = null;
       updateHotPanel();
       updateContestedPanel();
+      updateBattlesPanel();
       draw();
     }
   })();
@@ -3933,6 +3943,248 @@ function updateHubPanel() {
   });
 }
 
+// ── v5: Region color shading ──────────────────────────────────────────────
+
+function drawRegionShading() {
+  if (!state.systems.length) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const z = state.camera.zoom;
+
+  // Collect visible positions per region
+  const regionData = new Map();
+  for (const system of state.systems) {
+    const p = project(system);
+    if (p.x < -300 || p.y < -300 || p.x > rect.width + 300 || p.y > rect.height + 300) continue;
+    if (!regionData.has(system.regionId)) {
+      regionData.set(system.regionId, { sumX: 0, sumY: 0, count: 0, minX: p.x, maxX: p.x, minY: p.y, maxY: p.y });
+    }
+    const d = regionData.get(system.regionId);
+    d.sumX += p.x; d.sumY += p.y; d.count++;
+    if (p.x < d.minX) d.minX = p.x; if (p.x > d.maxX) d.maxX = p.x;
+    if (p.y < d.minY) d.minY = p.y; if (p.y > d.maxY) d.maxY = p.y;
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+
+  for (const [regionId, d] of regionData) {
+    if (d.count < 2) continue;
+    const cx = d.sumX / d.count;
+    const cy = d.sumY / d.count;
+    const spread = Math.max(d.maxX - d.minX, d.maxY - d.minY);
+    const r = Math.max(60, spread * 0.55);
+    const hue = ((regionId * 2654435761) >>> 0) % 360;
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grd.addColorStop(0,   `hsla(${hue}, 55%, 30%, 0.09)`);
+    grd.addColorStop(0.6, `hsla(${hue}, 45%, 25%, 0.04)`);
+    grd.addColorStop(1,   `hsla(${hue}, 40%, 20%, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.globalCompositeOperation = "source-over";
+
+  // Region ID labels at medium zoom
+  if (z > 0.35) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const fontSize = Math.max(8, Math.min(13, z * 5));
+    ctx.font = `bold ${fontSize}px ui-monospace, monospace`;
+    for (const [regionId, d] of regionData) {
+      if (d.count < 2) continue;
+      const cx = d.sumX / d.count;
+      const cy = d.sumY / d.count;
+      if (cx < 0 || cy < 0 || cx > rect.width || cy > rect.height) continue;
+      const hue = ((regionId * 2654435761) >>> 0) % 360;
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillText(`R${regionId}`, cx + 0.5, cy + 0.5);
+      ctx.fillStyle = `hsla(${hue}, 60%, 70%, 0.42)`;
+      ctx.fillText(`R${regionId}`, cx, cy);
+    }
+  }
+
+  ctx.restore();
+}
+
+// ── v5: Battle detection ───────────────────────────────────────────────────
+
+function detectBattles() {
+  if (!state.overlayKillsLoaded) return [];
+  const { start: ks, end: ke } = killWindowBounds();
+  const BATTLE_WINDOW_MS = 3_600_000; // 1 hour
+  const MIN_KILLS = 3;
+
+  const bySystem = new Map();
+  for (const k of state.overlayKills) {
+    if (k.timestamp < ks || k.timestamp > ke) continue;
+    if (!bySystem.has(k.systemId)) bySystem.set(k.systemId, []);
+    bySystem.get(k.systemId).push(k);
+  }
+
+  const battles = [];
+  for (const [systemId, kills] of bySystem) {
+    if (kills.length < MIN_KILLS) continue;
+    const times = kills.map((k) => k.timestamp).sort((a, b) => a - b);
+    let bestCount = 0, bestStart = 0;
+    for (let i = 0; i < times.length; i++) {
+      let count = 0;
+      for (let j = i; j < times.length && times[j] <= times[i] + BATTLE_WINDOW_MS; j++) count++;
+      if (count > bestCount) { bestCount = count; bestStart = times[i]; }
+    }
+    if (bestCount >= MIN_KILLS) {
+      const shipKills = kills.filter(isShipKill).length;
+      battles.push({ systemId, kills: bestCount, shipKills, start: bestStart, end: bestStart + BATTLE_WINDOW_MS });
+    }
+  }
+  return battles.sort((a, b) => b.kills - a.kills);
+}
+
+function drawBattleOverlay() {
+  const battles = detectBattles();
+  if (!battles.length) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const z = state.camera.zoom;
+  const t = Date.now() / 700;
+
+  ctx.save();
+  for (const battle of battles) {
+    const system = state.systemsById.get(battle.systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+
+    const r = 12 + Math.min(8, battle.kills - 3);
+    const pulse = 0.65 + Math.sin(t + battle.systemId * 0.001) * 0.28;
+
+    // Gold glow
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.8);
+    grd.addColorStop(0, `rgba(255, 200, 50, ${pulse * 0.28})`);
+    grd.addColorStop(1, `rgba(255, 200, 50, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 2.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 8-spike starburst
+    ctx.strokeStyle = `rgba(255, 200, 50, ${pulse * 0.9})`;
+    ctx.lineWidth = z > 1.0 ? 1.8 : 1.2;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const len = i % 2 === 0 ? r : r * 0.6;
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + Math.cos(angle) * len, p.y + Math.sin(angle) * len);
+    }
+    ctx.stroke();
+
+    // Kill count badge
+    if (z > 0.45) {
+      const label = `⚔${battle.kills}`;
+      const fontSize = Math.max(8, Math.min(11, r * 0.75));
+      ctx.fillStyle = `rgba(255, 215, 70, ${pulse})`;
+      ctx.font = `bold ${fontSize}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, p.x, p.y);
+    }
+  }
+  ctx.restore();
+}
+
+function updateBattlesPanel() {
+  if (!els.battlesPanel || !els.battlesList) return;
+  if (!state.showBattles || !state.overlayKillsLoaded) {
+    els.battlesPanel.style.display = "none";
+    return;
+  }
+  const battles = detectBattles();
+  if (!battles.length) {
+    els.battlesPanel.style.display = "none";
+    return;
+  }
+  els.battlesPanel.style.display = "";
+  els.battlesList.innerHTML = battles.slice(0, 12).map((b, idx) => {
+    const sys = state.systemsById.get(b.systemId);
+    const name = sys?.name ?? `#${b.systemId}`;
+    const ago = Math.round((Date.now() - b.start) / 60_000);
+    const detail = b.shipKills < b.kills
+      ? `${b.shipKills}⚔ ${b.kills - b.shipKills}🏗`
+      : `${b.kills}⚔`;
+    const agoLabel = ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+    return `<li class="danger-item" data-system-id="${b.systemId}" style="cursor:pointer">
+      <span class="danger-rank" style="color:rgba(255,200,50,0.9)">${idx + 1}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count" style="color:rgba(255,180,50,0.85)">${detail}</span>
+      <span style="color:rgba(180,160,100,0.65);font-size:9px;flex-shrink:0">${agoLabel}</span>
+    </li>`;
+  }).join("");
+  els.battlesList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
+// ── v5: Wallet / owner highlight ───────────────────────────────────────────
+
+function drawWalletHighlight() {
+  const addr = state.walletFilterAddress.trim().toLowerCase();
+  if (!addr || !state.overlayAssemblies.length) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const t = Date.now() / 900;
+
+  const bySystem = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (!asm.ownerId || asm.ownerId.toLowerCase() !== addr) continue;
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
+    bySystem.get(asm.systemId).push(asm);
+  }
+  if (!bySystem.size) return;
+
+  ctx.save();
+  for (const [systemId, asms] of bySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+
+    const r = 13 + Math.min(7, asms.length);
+    const pulse = 0.62 + Math.sin(t + systemId * 0.001) * 0.28;
+
+    // Outer glow
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.2);
+    grd.addColorStop(0, `rgba(100, 220, 255, ${pulse * 0.22})`);
+    grd.addColorStop(1, `rgba(100, 220, 255, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dashed ring
+    ctx.strokeStyle = `rgba(100, 220, 255, ${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Count badge
+    if (state.camera.zoom > 0.8) {
+      const onlineN = asms.filter((a) => a.online).length;
+      ctx.fillStyle = `rgba(130, 230, 255, ${pulse})`;
+      ctx.font = "bold 8px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(`${onlineN}/${asms.length}`, p.x, p.y + r + 3);
+    }
+  }
+  ctx.restore();
+}
+
 // ── v4: Kill activity timeline bar (used in system card) ──────────────────
 
 function buildKillTimeline(systemId, buckets = 24) {
@@ -4023,6 +4275,7 @@ async function toggleOverlay(name, enabled) {
     updateRegionStatsPanel();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
+    if (els.walletFilterRow) els.walletFilterRow.style.display = enabled ? "" : "none";
     if (enabled) await ensureAssemblyOverlay();
     updateOfflinePanel();
   } else if (name === "playerBases") {
@@ -4067,6 +4320,7 @@ function bindOverlayEvents() {
       updateHotPanel();
       updateContestedPanel();
       updateRegionStatsPanel();
+      updateBattlesPanel();
       draw();
     });
   });
@@ -4194,6 +4448,7 @@ function bindOverlayEvents() {
     updateHotPanel();
     updateContestedPanel();
     updateRegionStatsPanel();
+    updateBattlesPanel();
     scheduleDraw();
   });
 
@@ -4255,6 +4510,33 @@ function bindOverlayEvents() {
       await ensureAssemblyOverlay();
     }
     updateHubPanel();
+  });
+
+  // v5 bindings
+  els.regionShadingToggle?.addEventListener("change", () => {
+    state.showRegionShading = els.regionShadingToggle.checked;
+    scheduleDraw();
+  });
+
+  els.battlesToggle?.addEventListener("change", () => {
+    state.showBattles = els.battlesToggle.checked;
+    if (state.showBattles && !state.overlayKillsLoaded) {
+      ensureKillFeed().then(() => updateBattlesPanel()).catch(() => {});
+    } else {
+      updateBattlesPanel();
+    }
+    scheduleDraw();
+  });
+
+  els.walletFilterInput?.addEventListener("input", () => {
+    state.walletFilterAddress = els.walletFilterInput.value.trim();
+    scheduleDraw();
+  });
+
+  els.walletFilterClear?.addEventListener("click", () => {
+    state.walletFilterAddress = "";
+    if (els.walletFilterInput) els.walletFilterInput.value = "";
+    scheduleDraw();
   });
 }
 
