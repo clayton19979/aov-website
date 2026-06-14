@@ -1,10 +1,8 @@
-import { Metadata } from 'next'
 import { StarField } from '@/components/landing/StarField'
 import { LoginContent } from '@/components/auth/LoginContent'
+import { routeMetadata } from '@/lib/site'
 
-export const metadata: Metadata = {
-  title: 'Access — Architects of the Void',
-}
+export const metadata = routeMetadata('/login')
 
 export default function LoginPage() {
   return (
