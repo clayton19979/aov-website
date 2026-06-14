@@ -5,10 +5,9 @@ import { ScrollProgress } from '@/components/shared/ScrollProgress'
 import { DesignationNodeCard } from '@/components/designations/DesignationNodeCard'
 import { getSession } from '@/lib/session'
 import { tiers, removalDesignations } from '@/data/designations'
+import { routeMetadata } from '@/lib/site'
 
-export const metadata = {
-  title: 'Designations — AoV',
-}
+export const metadata = routeMetadata('/designations')
 
 export default async function DesignationsPage() {
   const session = await getSession()

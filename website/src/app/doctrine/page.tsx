@@ -4,10 +4,9 @@ import { BackLink } from '@/components/shared/BackLink'
 import { ScrollProgress } from '@/components/shared/ScrollProgress'
 import { getSession } from '@/lib/session'
 import { doctrine } from '@/data/doctrine'
+import { routeMetadata } from '@/lib/site'
 
-export const metadata = {
-  title: 'Doctrine — AoV',
-}
+export const metadata = routeMetadata('/doctrine')
 
 export default async function DoctrinePage() {
   const session = await getSession()

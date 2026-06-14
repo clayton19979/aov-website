@@ -10,37 +10,58 @@
   <body>
     <main class="app-shell">
       <section class="map-stage" aria-label="EVE Frontier map">
-        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin."></canvas>
+        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin. Press / or F to find a system."></canvas>
         <div class="topbar">
           <div class="status-pill" id="dataStatus">Initializing</div>
+        </div>
+        <!-- Find system floating panel -->
+        <div id="findPanel" class="find-panel" style="display:none" aria-label="Find system">
+          <input id="findInput" autocomplete="off" placeholder="Jump to system..." aria-label="Jump to system" aria-controls="findSuggestions" aria-autocomplete="list" />
+          <div id="findSuggestions" class="suggestions" role="listbox"></div>
         </div>
         <div class="map-tools" aria-label="Map controls">
           <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
           <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
           <button id="fitRoute" title="Fit route" aria-label="Fit route">FIT</button>
           <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
+          <button id="findSystem" title="Find and jump to a system (/ or F)" aria-label="Find system">FIND</button>
           <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
+          <button id="toggleMinimap" title="Toggle minimap overview" aria-label="Toggle minimap">MAP</button>
         </div>
         <div class="map-legend" aria-label="Route legend">
           <span><i class="legend-jump"></i>Jump</span>
           <span><i class="legend-smart-gate"></i>Smart Gate</span>
           <span><i class="legend-game-gate"></i>Game Gate</span>
           <span class="legend-overlay-items">
+            <span id="legendRegion" style="display:none"><i class="legend-region"></i>Regions</span>
+            <span id="legendConstellation" style="display:none"><i class="legend-constellation"></i>Constells</span>
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
             <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
+            <span id="legendReach" style="display:none"><i class="legend-reach"></i>Reach</span>
+            <span id="legendTerritory" style="display:none"><i class="legend-territory"></i>Territory</span>
           </span>
         </div>
+        <canvas id="minimap" width="160" height="110" aria-label="Map overview minimap" title="Minimap — click to navigate"></canvas>
         <aside class="system-card" id="systemCard" aria-live="polite">
           <div>
             <span>Select a system</span>
             <strong>Click a star or search by name.</strong>
+          </div>
+          <div id="assemblyDetailList" class="asm-detail-list" style="display:none"></div>
+          <div id="dangerNeighborsPanel" class="danger-neighbors-panel" style="display:none"></div>
+          <div id="nearbyBasesPanel" class="nearby-bases-panel" style="display:none"></div>
+          <div id="systemNoteWrap" class="system-note-wrap" style="display:none">
+            <textarea id="systemNote" class="system-note-input" rows="2" placeholder="Add a note for this system…" maxlength="280"></textarea>
+            <button id="saveSystemNote" type="button" class="time-preset system-note-save">Save note</button>
           </div>
           <div class="system-actions">
             <button id="setOrigin" type="button" disabled>Set Origin</button>
             <button id="setDestination" type="button" disabled>Set Destination</button>
             <button id="setVia" type="button" disabled>Set Via</button>
             <button id="centerSystem" type="button" disabled>Center</button>
+            <button id="bookmarkSystem" type="button" disabled>Bookmark</button>
+            <button id="copySystemId" type="button" disabled>Copy ID</button>
           </div>
         </aside>
       </section>
@@ -57,6 +78,16 @@
             <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
           </div>
           <div class="overlay-toggles">
+            <label class="overlay-toggle" id="regionColorsToggleLabel">
+              <input type="checkbox" id="regionColorsToggle" />
+              <span class="overlay-dot region-colors-dot"></span>
+              Region Colors
+            </label>
+            <label class="overlay-toggle" id="constellationColorsToggleLabel">
+              <input type="checkbox" id="constellationColorsToggle" />
+              <span class="overlay-dot constellation-colors-dot"></span>
+              Constellation Colors
+            </label>
             <label class="overlay-toggle" id="killsToggleLabel">
               <input type="checkbox" id="killsToggle" />
               <span class="overlay-dot kills-dot"></span>
@@ -72,9 +103,26 @@
               <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
               Online only
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="assemblyLabelsToggleLabel">
+              <input type="checkbox" id="showAssemblyLabels" />
+              <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
+              Labels (zoom ≥ 1.8×)
+            </label>
+            <div id="walletFilterRow" class="wallet-filter-row" style="display:none">
+              <span class="overlay-sublabel">Highlight by owner wallet</span>
+              <div class="wallet-filter-input-row">
+                <input id="walletFilterInput" type="text" placeholder="0x… wallet address" autocomplete="off" spellcheck="false" />
+                <button type="button" id="walletFilterClear" title="Clear filter">×</button>
+              </div>
+            </div>
             <div id="asmTypePanel" class="asm-type-panel" style="display:none">
               <label class="overlay-sublabel" style="margin-left:20px">Types shown</label>
               <div class="asm-type-toggles">
+                <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
+                  <input type="checkbox" class="asm-type-check" data-type="Smart Gate" checked />
+                  <span class="overlay-dot" style="width:6px;height:6px;background:#00e5ff;"></span>
+                  Smart Gates
+                </label>
                 <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
                   <input type="checkbox" class="asm-type-check" data-type="Network Node" checked />
                   <span class="overlay-dot" style="width:6px;height:6px;background:#00b4d8;"></span>
@@ -102,6 +150,38 @@
               <span class="overlay-dot bases-dot"></span>
               Player Bases
             </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="showOfflinePanelToggleLabel">
+              <input type="checkbox" id="showOfflinePanelToggle" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(120,130,160,0.8);border-radius:2px;"></span>
+              Offline assemblies panel
+            </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="hubPanelToggleLabel">
+              <input type="checkbox" id="showHubPanel" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(0,200,180,0.8);border-radius:2px;"></span>
+              Assembly hubs panel
+            </label>
+            <label class="overlay-toggle" id="territoryToggleLabel">
+              <input type="checkbox" id="territoryToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:hsla(200,65%,58%,0.7);border-radius:2px;"></span>
+              Territory (assembly ownership)
+            </label>
+            <label class="overlay-toggle" id="regionShadingToggleLabel">
+              <input type="checkbox" id="regionShadingToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(80,120,200,0.55);border-radius:2px;"></span>
+              Region color tint
+            </label>
+            <label class="overlay-toggle" id="reachabilityToggleLabel">
+              <input type="checkbox" id="reachabilityToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(68,255,160,0.75);border-radius:50%;"></span>
+              Jump Reachability
+            </label>
+            <div id="reachabilityPanel" style="display:none">
+              <div class="time-presets" style="margin-top:4px">
+                <button type="button" class="time-preset reach-hop-btn active" data-hops="1">1 hop</button>
+                <button type="button" class="time-preset reach-hop-btn" data-hops="2">2 hops</button>
+                <button type="button" class="time-preset reach-hop-btn" data-hops="3">3 hops</button>
+              </div>
+            </div>
           </div>
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>
@@ -111,6 +191,10 @@
               <button type="button" class="time-preset" data-hours="6">6h</button>
               <button type="button" class="time-preset active" data-hours="24">24h</button>
               <button type="button" class="time-preset" data-hours="168">7d</button>
+            </div>
+            <div class="custom-hours-row">
+              <input type="number" id="customHours" min="1" max="720" placeholder="Custom h" class="custom-hours-input" />
+              <button type="button" id="applyCustomHours" class="time-preset">Set</button>
             </div>
             <label class="overlay-toggle overlay-toggle--subsub" id="killLabelsToggleLabel">
               <input type="checkbox" id="showKillLabels" />
@@ -122,9 +206,77 @@
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;"></span>
               Ships only (hide structure kills)
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showHotPanelLabel">
+              <input type="checkbox" id="showHotPanel" />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff4444;"></span>
+              Hot systems panel
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="battlesToggleLabel">
+              <input type="checkbox" id="battlesToggle" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,200,50,0.9);border-radius:50%;"></span>
+              Battles (3+ kills/hr)
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killHeatmapLabel">
+              <input type="checkbox" id="showKillHeatmap" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff7020;border-radius:50%;"></span>
+              Kill density heatmap
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="regionStatsLabel">
+              <input type="checkbox" id="showRegionStats" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(100,160,200,0.8);border-radius:2px;"></span>
+              Region kill stats
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showContestedLabel">
+              <input type="checkbox" id="showContested" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#00e5ff;border-radius:50%;"></span>
+              Contested (kills 3h+)
+            </label>
+            <div class="time-offset-row" style="display:none" id="timeOffsetRow">
+              <span class="overlay-sublabel">View window offset: <span id="killOffsetLabel">now (live)</span></span>
+              <input type="range" id="killTimeOffset" min="0" max="162" step="1" value="0" class="time-offset-slider" title="Shift the view window backward in time" />
+            </div>
+          </div>
+          <div id="hotPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Hot Systems <span id="hotPanelWindowLabel" class="danger-window-label"></span></h3>
+            </div>
+            <ol id="hotList" class="danger-list"></ol>
+          </div>
+          <div id="contestedPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Contested <span class="danger-window-label">(kills across 3+ hours)</span></h3>
+            </div>
+            <ol id="contestedList" class="danger-list"></ol>
+          </div>
+          <div id="regionStatsPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Kills by Region <span id="regionStatsPanelLabel" class="danger-window-label"></span></h3>
+            </div>
+            <ol id="regionStatsList" class="danger-list"></ol>
+          </div>
+          <div id="battlesPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Active Battles <span class="danger-window-label">(3+ kills/hr)</span></h3>
+            </div>
+            <ol id="battlesList" class="danger-list"></ol>
+          </div>
+          <div id="hubPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Assembly Hubs</h3>
+            </div>
+            <ol id="hubList" class="danger-list"></ol>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
+
+        <div id="offlinePanel" class="offline-panel" style="display:none">
+          <div class="section-title">
+            <h3>Offline Assemblies</h3>
+            <button id="offlinePanelClose" title="Close" class="panel-close-btn">×</button>
+          </div>
+          <p class="offline-hint">Systems where assemblies went offline — fuel may be depleted.</p>
+          <ol id="offlineList" class="danger-list"></ol>
+        </div>
 
         <form id="routeForm" class="route-form">
           <label>
@@ -165,8 +317,11 @@
             <label><input id="showGameGates" type="checkbox" checked /> Show game gate links</label>
             <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
+            <label><input id="avoidContested" type="checkbox" /> Avoid contested systems (3+ active hours)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
+            <label><input id="showReachableHighlight" type="checkbox" /> Highlight reachable stars (from selected)</label>
             <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>
+            <label><input id="showBookmarks" type="checkbox" checked /> Show bookmarks on map</label>
           </div>
 
           <button class="primary" type="submit">Calculate</button>
@@ -191,6 +346,14 @@
         </section>
 
         <p class="gate-note" id="gateStatus">Gate network loads automatically when available.</p>
+
+        <section class="bookmarks-panel" id="bookmarksPanel" style="display:none" aria-label="Bookmarked systems">
+          <div class="section-title">
+            <h3>Bookmarks</h3>
+            <button id="clearBookmarks" title="Clear all bookmarks" aria-label="Clear all bookmarks">×</button>
+          </div>
+          <ol id="bookmarksList" class="bookmarks-list"></ol>
+        </section>
       </aside>
     </main>
 

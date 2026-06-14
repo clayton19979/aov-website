@@ -186,7 +186,7 @@ button:disabled {
 
 .system-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
   gap: 6px;
 }
 
@@ -623,6 +623,7 @@ input:focus, textarea:focus {
 .kills-dot       { background: #ff6d7a; }
 .assemblies-dot  { background: #00b4d8; }
 .bases-dot       { background: #f1b84b; }
+.hubs-dot        { background: #64c8ff; }
 
 .kill-time-panel {
   display: grid;
@@ -779,6 +780,508 @@ input:focus, textarea:focus {
   gap: 2px;
 }
 
+/* ── Find system panel ──────────────────────────── */
+
+.find-panel {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(300px, calc(100vw - 80px));
+  z-index: 20;
+}
+
+.find-panel input {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-dim);
+  background: rgba(2, 8, 12, 0.94);
+  backdrop-filter: blur(12px);
+  color: var(--text);
+  font-size: 0.82rem;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.find-panel input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.find-panel .suggestions {
+  background: rgba(2, 8, 12, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Custom time window ─────────────────────────── */
+
+.custom-hours-row {
+  display: grid;
+  grid-template-columns: 1fr 52px;
+  gap: 4px;
+}
+
+.custom-hours-input {
+  height: 28px !important;
+  font-size: 0.68rem;
+}
+
+/* ── Danger panel ──────────────────────────────── */
+
+.danger-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.danger-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.danger-item {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 50, 50, 0.10);
+  background: rgba(255, 20, 20, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.danger-item:hover {
+  border-color: rgba(255, 80, 80, 0.35);
+  background: rgba(255, 30, 30, 0.10);
+}
+
+.danger-rank {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.danger-name {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.80);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.danger-count {
+  font-size: 0.70rem;
+  color: rgba(255, 100, 100, 0.90);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.danger-trend {
+  font-size: 0.65rem;
+  margin-left: 3px;
+}
+
+.danger-trend--up   { color: rgba(255, 140, 60, 0.95); }
+.danger-trend--down { color: rgba(100, 220, 100, 0.90); }
+
+.danger-empty {
+  padding: 8px;
+  color: var(--muted);
+  font-size: 0.70rem;
+  text-align: center;
+  list-style: none;
+}
+
+.danger-window-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+/* ── Assembly stats ─────────────────────────────── */
+
+.assembly-stats {
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 8px 10px;
+}
+
+.assembly-stats-content {
+  display: grid;
+  gap: 5px;
+}
+
+.asm-stat-header {
+  font-size: 0.66rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+}
+
+.asm-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.70rem;
+  color: var(--muted);
+}
+
+.asm-stat-row span:last-child {
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
+/* ── Region colors legend dot ────────────────────── */
+
+.legend-region {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: conic-gradient(#f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f87171);
+}
+
+.region-colors-dot {
+  background: conic-gradient(#f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f87171);
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+}
+
+/* ── Assembly detail list in system card ──────────── */
+
+.asm-detail-list {
+  display: grid;
+  gap: 3px;
+  max-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.18);
+  padding: 6px 8px;
+}
+
+.asm-detail-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.68rem;
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.asm-detail-item.asm-detail-online {
+  opacity: 1;
+  color: var(--text);
+}
+
+.asm-detail-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.asm-detail-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asm-detail-status {
+  font-size: 0.60rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.asm-detail-item.asm-detail-online .asm-detail-status {
+  color: rgba(97, 213, 199, 0.85);
+}
+
+.asm-detail-more {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-align: center;
+  padding-top: 2px;
+}
+
+/* ── Kill type split in danger panel ─────────────── */
+
+.danger-type-split {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 5px;
+  font-size: 0.60rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.danger-ship {
+  color: rgba(255, 100, 100, 0.75);
+}
+
+.danger-struct {
+  color: rgba(180, 120, 255, 0.75);
+}
+
+/* ── Constellation colors ──────────────────────── */
+
+.constellation-colors-dot {
+  background: conic-gradient(#60a5fa, #a78bfa, #34d399, #fbbf24, #f87171, #60a5fa);
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+}
+
+.legend-constellation {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: conic-gradient(#60a5fa, #a78bfa, #34d399, #fbbf24, #f87171, #60a5fa);
+}
+
+/* ── Hub legend ────────────────────────────────── */
+
+.legend-hub {
+  display: block;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  background: rgba(100, 200, 255, 0.85);
+}
+
+/* ── Min kills row ──────────────────────────────── */
+
+.min-kills-row {
+  display: grid;
+  grid-template-columns: 1fr 54px;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 10px;
+}
+
+/* ── Hub panel ──────────────────────────────────── */
+
+.hub-panel {
+  display: grid;
+  gap: 8px;
+}
+
+/* ── Bookmark legend + button ──────────────────── */
+
+.legend-bookmark {
+  display: block;
+  width: 10px;
+  height: 10px;
+  clip-path: polygon(50% 0%, 65% 35%, 100% 35%, 75% 57%, 85% 100%, 50% 75%, 15% 100%, 25% 57%, 0% 35%, 35% 35%);
+  background: rgba(255, 220, 80, 0.85);
+}
+
+button.active-bookmark {
+  border-color: rgba(255, 220, 80, 0.55) !important;
+  color: rgba(255, 220, 80, 0.90) !important;
+}
+
+/* ── Bookmarks panel ───────────────────────────── */
+
+.bookmarks-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.bookmarks-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bookmark-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 220, 80, 0.15);
+  background: rgba(255, 200, 50, 0.04);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.bookmark-item:hover {
+  border-color: rgba(255, 220, 80, 0.35);
+  background: rgba(255, 200, 50, 0.10);
+}
+
+.bookmark-name {
+  font-size: 0.75rem;
+  color: rgba(255, 220, 80, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-region {
+  font-size: 0.62rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.bookmark-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  min-width: 0;
+  border: 1px solid rgba(255, 220, 80, 0.20);
+  background: transparent;
+  color: rgba(255, 220, 80, 0.45);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.bookmark-remove:hover {
+  color: rgba(255, 100, 100, 0.85);
+  border-color: rgba(255, 100, 100, 0.35);
+}
+
+/* ── Player kill filter ─────────────────────────── */
+
+.player-filter-row {
+  padding: 4px 10px 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.player-filter-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+}
+
+.player-filter-input {
+  background: rgba(0, 0, 0, 0.30);
+  border: 1px solid rgba(255, 80, 80, 0.20);
+  color: var(--text);
+  padding: 3px 7px;
+  font-size: 0.7rem;
+  border-radius: 2px;
+  transition: border-color 0.15s;
+}
+
+.player-filter-input:focus {
+  outline: none;
+  border-color: rgba(255, 80, 80, 0.55);
+}
+
+.player-filter-input::placeholder {
+  color: rgba(255, 255, 255, 0.20);
+  font-size: 0.67rem;
+}
+
+/* ── Recent kills panel ─────────────────────────── */
+
+.recent-kills-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.recent-kills-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 80, 80, 0.25) transparent;
+}
+
+.recent-kill-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 80, 80, 0.10);
+  background: rgba(255, 60, 60, 0.04);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.recent-kill-item:hover {
+  border-color: rgba(255, 80, 80, 0.30);
+  background: rgba(255, 60, 60, 0.10);
+}
+
+.recent-kill-type {
+  font-size: 0.75rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.recent-kill-system {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.80);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-kill-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.recent-kill-killer {
+  font-size: 0.60rem;
+  color: rgba(255, 160, 80, 0.65);
+  font-family: var(--font);
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-kill-time {
+  font-size: 0.60rem;
+  color: var(--muted);
+}
+
+/* ── Region sys count ───────────────────────────── */
+
+.region-sys-count {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: normal;
+}
+
 /* ── Responsive ────────────────────────────────── */
 
 @media (max-width: 900px) {
@@ -799,6 +1302,295 @@ input:focus, textarea:focus {
   }
 }
 
+/* ── Kill sparkline in system card ──────────────── */
+
+.sys-sparkline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 80, 80, 0.15);
+  background: rgba(255, 40, 40, 0.05);
+}
+
+.sys-sparkline-label {
+  font-size: 0.60rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.sys-sparkline-bars {
+  font-size: 0.82rem;
+  color: rgba(255, 120, 100, 0.80);
+  letter-spacing: 0.04em;
+  font-family: var(--font);
+}
+
+/* ── Danger neighbors panel in system card ──────── */
+
+.danger-neighbors-panel {
+  border: 1px solid rgba(255, 80, 80, 0.18);
+  background: rgba(255, 20, 20, 0.04);
+}
+
+.danger-neighbors-header {
+  padding: 5px 8px 4px;
+  font-size: 0.63rem;
+  color: var(--muted);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 80, 80, 0.10);
+}
+
+.danger-neighbors-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.danger-neighbor-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-bottom: 1px solid rgba(255, 50, 50, 0.07);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.danger-neighbor-item:last-child {
+  border-bottom: 0;
+}
+
+.danger-neighbor-item:hover {
+  background: rgba(255, 50, 50, 0.10);
+}
+
+.danger-neighbor-name {
+  font-size: 0.72rem;
+  color: rgba(255, 200, 200, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.danger-neighbor-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.danger-neighbor-count {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: rgba(255, 100, 80, 0.90);
+}
+
+.danger-neighbor-dist {
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
+/* ── Assembly name filter row ──────────────────── */
+
+.asm-name-filter-row {
+  padding: 6px 0 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+/* ── System notes ──────────────────────────────── */
+
+.system-note-wrap {
+  padding: 6px 0 4px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.system-note-input {
+  width: 100%;
+  background: rgba(0, 180, 216, 0.04);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  resize: vertical;
+  min-height: 36px;
+}
+
+.system-note-input:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+.system-note-save {
+  align-self: flex-end;
+}
+
+.sys-stat--note {
+  background: rgba(255, 220, 80, 0.10);
+  border-color: rgba(255, 220, 80, 0.30);
+  color: rgba(255, 220, 80, 0.85);
+}
+
+/* ── Minimap canvas overlay ────────────────────── */
+
+#minimap {
+  position: absolute;
+  bottom: 48px;
+  right: 10px;
+  border: 1px solid rgba(0, 180, 216, 0.25);
+  border-radius: 4px;
+  background: rgba(2, 8, 15, 0.85);
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+/* ── Kill escalation panel ─────────────────────── */
+
+.escalating-old {
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin-left: 3px;
+}
+
+.escalating-rising {
+  color: rgba(255, 70, 140, 0.95) !important;
+  font-weight: 700;
+}
+
+.escalating-ratio {
+  font-size: 0.62rem;
+  color: rgba(255, 120, 180, 0.75);
+  margin-left: 2px;
+}
+
+/* ── Nearby player bases panel ─────────────────── */
+
+.nearby-bases-panel {
+  padding: 6px 0 2px 0;
+  border-top: 1px solid var(--line);
+}
+
+.nearby-base-item {
+  cursor: pointer;
+  padding: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.nearby-base-item:hover {
+  background: rgba(241, 184, 75, 0.06);
+}
+
+.nearby-base-item.nearby-base--active .danger-neighbor-name {
+  color: rgba(241, 184, 75, 0.90);
+}
+
+.nearby-base-count {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: rgba(241, 184, 75, 0.80);
+}
+
+/* ── Kill Hourly Distribution Chart ──────────────────── */
+
+.kill-hourly-chart {
+  padding: 4px 8px 8px;
+}
+
+.kill-hourly-bars {
+  display: flex;
+  align-items: flex-end;
+  height: 54px;
+  gap: 1px;
+}
+
+.kill-hourly-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  position: relative;
+  cursor: default;
+}
+
+.kill-hourly-bar {
+  width: 100%;
+  background: rgba(255, 80, 50, 0.45);
+  border-radius: 1px 1px 0 0;
+  transition: background 0.2s;
+}
+
+.kill-hourly-bar--peak {
+  background: rgba(255, 40, 40, 0.9);
+  box-shadow: 0 0 4px rgba(255, 40, 40, 0.5);
+}
+
+.kill-hourly-bar-wrap:hover .kill-hourly-bar {
+  background: rgba(255, 100, 60, 0.75);
+}
+
+.kill-hourly-label {
+  font-size: 8px;
+  color: rgba(150, 200, 255, 0.55);
+  position: absolute;
+  bottom: -14px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.kill-hourly-peak {
+  font-size: 10px;
+  color: rgba(255, 120, 80, 0.9);
+  margin-top: 18px;
+  text-align: center;
+  padding-bottom: 4px;
+}
+
+/* ── Territory Panel ──────────────────────────────────── */
+
+.territory-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.territory-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.territory-sys {
+  color: rgba(150, 220, 255, 0.7);
+  font-size: 9px;
+  margin-left: 2px;
+}
+
+.territory-item {
+  gap: 4px;
+}
+
 @media (max-width: 520px) {
   .topbar { left: 10px; right: 10px; top: 10px; }
   .control-panel { padding: 14px; }
@@ -811,4 +1603,221 @@ input:focus, textarea:focus {
   .section-title { align-items: flex-start; flex-direction: column; }
   .route-actions { width: 100%; }
   .route-actions button { flex: 1; }
+}
+
+/* ── New features: danger score, contested, hot systems, offline panel ─── */
+
+.danger-panel {
+  background: rgba(2, 8, 14, 0.80);
+  border: 1px solid rgba(0, 180, 216, 0.18);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.danger-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s;
+}
+.danger-item:hover {
+  background: rgba(0, 180, 216, 0.08);
+}
+
+.danger-rank {
+  min-width: 20px;
+  color: rgba(100, 140, 180, 0.7);
+  font-size: 9px;
+  text-align: right;
+}
+
+.danger-name {
+  flex: 1;
+  color: rgba(200, 220, 240, 0.88);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.danger-count {
+  color: rgba(255, 140, 120, 0.85);
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.danger-window-label {
+  font-size: 9px;
+  color: rgba(100, 140, 180, 0.65);
+  font-weight: 400;
+}
+
+/* Time offset scrubber */
+.time-offset-row {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.time-offset-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0, 180, 216, 0.25);
+  outline: none;
+  cursor: pointer;
+}
+.time-offset-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(0, 200, 240, 0.85);
+  border: 2px solid rgba(2, 8, 14, 0.9);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 200, 240, 0.5);
+}
+.time-offset-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(0, 200, 240, 0.85);
+  border: 2px solid rgba(2, 8, 14, 0.9);
+  cursor: pointer;
+}
+
+/* Offline panel */
+.offline-panel {
+  background: rgba(2, 8, 14, 0.80);
+  border: 1px solid rgba(120, 140, 180, 0.20);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.offline-hint {
+  font-size: 9px;
+  color: rgba(120, 140, 170, 0.65);
+  margin: 4px 0 6px;
+}
+
+.panel-close-btn {
+  background: none;
+  border: none;
+  color: rgba(150, 170, 190, 0.7);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+}
+.panel-close-btn:hover {
+  color: rgba(200, 220, 240, 0.9);
+}
+
+/* ── Region stats panel ─────────────────────────── */
+
+.region-stat-item {
+  align-items: center;
+}
+
+/* ── Legend overlay extras ──────────────────────── */
+
+.legend-smart-gate-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.85);
+}
+
+/* ── Kill heatmap toggle dot ────────────────────── */
+
+.heatmap-dot {
+  background: radial-gradient(circle, rgba(255,112,32,0.9) 0%, rgba(255,60,10,0.4) 70%, transparent 100%);
+}
+
+/* ── v5: Wallet filter widget ───────────────────── */
+
+.wallet-filter-row {
+  margin-left: 20px;
+  display: grid;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.15);
+}
+
+.wallet-filter-input-row {
+  display: flex;
+  gap: 4px;
+}
+
+.wallet-filter-input-row input {
+  flex: 1;
+  height: 28px;
+  font-size: 0.68rem;
+  padding: 0 8px;
+}
+
+.wallet-filter-input-row button {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.3);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.wallet-filter-input-row button:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── v4: Kill activity timeline bar ────────────── */
+
+.kill-timeline {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 14px;
+  margin-top: 6px;
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 80, 80, 0.15);
+  background: rgba(255, 50, 50, 0.04);
+  border-radius: 2px;
+}
+
+.ktl-bar {
+  flex: 1;
+  min-width: 1px;
+  border-radius: 1px 1px 0 0;
+  transition: height 0.1s;
+}
+
+/* ── v4: Legend extras ──────────────────────────── */
+
+.legend-reach {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(68, 255, 160, 0.70);
+  box-shadow: 0 0 4px rgba(68, 255, 160, 0.4);
+}
+
+.legend-territory {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: hsla(200, 65%, 58%, 0.65);
 }
