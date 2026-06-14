@@ -3,6 +3,7 @@ import { tools } from '@/data/tools'
 import { toolComponents } from '@/components/tools/toolComponents'
 import { ToolShell } from '@/components/tools/ToolShell'
 import { getSession } from '@/lib/session'
+import { toolMetadata } from '@/lib/site'
 
 type Props = {
   params: Promise<{ slug: string }>
@@ -16,8 +17,7 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params
-  const tool = tools.find(t => t.slug === slug)
-  return { title: tool ? `${tool.name} — AoV` : 'Tool — AoV' }
+  return toolMetadata(slug)
 }
 
 export default async function ToolPage({ params }: Props) {

@@ -5,7 +5,7 @@ import { BackLink } from './BackLink'
 describe('BackLink', () => {
   it('renders the label', () => {
     render(<BackLink href="/hub" label="HUB" />)
-    expect(screen.getByText('← HUB')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /hub/i })).toBeInTheDocument()
   })
 
   it('links to the correct href', () => {

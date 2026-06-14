@@ -5,10 +5,9 @@ import { ScrollProgress } from '@/components/shared/ScrollProgress'
 import { ToolGrid } from '@/components/tools/ToolGrid'
 import { tools } from '@/data/tools'
 import { getSession } from '@/lib/session'
+import { routeMetadata } from '@/lib/site'
 
-export const metadata = {
-  title: 'Tools — AoV',
-}
+export const metadata = routeMetadata('/tools')
 
 export default async function ToolsPage() {
   const session = await getSession()

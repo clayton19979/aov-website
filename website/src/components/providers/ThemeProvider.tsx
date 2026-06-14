@@ -86,11 +86,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const t = savedTheme && THEMES.find(x => x.id === savedTheme) ? savedTheme : 'void'
     const cs = savedCursor && CURSORS.find(x => x.id === savedCursor) ? savedCursor : 'orbit'
 
-    setThemeState(t)
-    setCursorState(cs)
-
     const accent = THEMES.find(x => x.id === t)!.accent
-    applyCursor(accent, cs)
+    const id = window.setTimeout(() => {
+      setThemeState(t)
+      setCursorState(cs)
+      document.documentElement.setAttribute('data-theme', t)
+      applyCursor(accent, cs)
+    }, 0)
+
+    return () => window.clearTimeout(id)
   }, [])
 
   function setTheme(t: Theme) {
