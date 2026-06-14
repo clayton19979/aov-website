@@ -10,22 +10,31 @@
   <body>
     <main class="app-shell">
       <section class="map-stage" aria-label="EVE Frontier map">
-        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin."></canvas>
+        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin. Press / or F to find a system."></canvas>
         <div class="topbar">
           <div class="status-pill" id="dataStatus">Initializing</div>
+        </div>
+        <!-- Find system floating panel -->
+        <div id="findPanel" class="find-panel" style="display:none" aria-label="Find system">
+          <input id="findInput" autocomplete="off" placeholder="Jump to system..." aria-label="Jump to system" aria-controls="findSuggestions" aria-autocomplete="list" />
+          <div id="findSuggestions" class="suggestions" role="listbox"></div>
         </div>
         <div class="map-tools" aria-label="Map controls">
           <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
           <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
           <button id="fitRoute" title="Fit route" aria-label="Fit route">FIT</button>
           <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
+          <button id="findSystem" title="Find and jump to a system (/ or F)" aria-label="Find system">FIND</button>
           <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
+          <button id="toggleMinimap" title="Toggle minimap overview" aria-label="Toggle minimap">MAP</button>
         </div>
         <div class="map-legend" aria-label="Route legend">
           <span><i class="legend-jump"></i>Jump</span>
           <span><i class="legend-smart-gate"></i>Smart Gate</span>
           <span><i class="legend-game-gate"></i>Game Gate</span>
           <span class="legend-overlay-items">
+            <span id="legendRegion" style="display:none"><i class="legend-region"></i>Regions</span>
+            <span id="legendConstellation" style="display:none"><i class="legend-constellation"></i>Constells</span>
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
             <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
@@ -33,16 +42,26 @@
             <span id="legendTerritory" style="display:none"><i class="legend-territory"></i>Territory</span>
           </span>
         </div>
+        <canvas id="minimap" width="160" height="110" aria-label="Map overview minimap" title="Minimap — click to navigate"></canvas>
         <aside class="system-card" id="systemCard" aria-live="polite">
           <div>
             <span>Select a system</span>
             <strong>Click a star or search by name.</strong>
+          </div>
+          <div id="assemblyDetailList" class="asm-detail-list" style="display:none"></div>
+          <div id="dangerNeighborsPanel" class="danger-neighbors-panel" style="display:none"></div>
+          <div id="nearbyBasesPanel" class="nearby-bases-panel" style="display:none"></div>
+          <div id="systemNoteWrap" class="system-note-wrap" style="display:none">
+            <textarea id="systemNote" class="system-note-input" rows="2" placeholder="Add a note for this system…" maxlength="280"></textarea>
+            <button id="saveSystemNote" type="button" class="time-preset system-note-save">Save note</button>
           </div>
           <div class="system-actions">
             <button id="setOrigin" type="button" disabled>Set Origin</button>
             <button id="setDestination" type="button" disabled>Set Destination</button>
             <button id="setVia" type="button" disabled>Set Via</button>
             <button id="centerSystem" type="button" disabled>Center</button>
+            <button id="bookmarkSystem" type="button" disabled>Bookmark</button>
+            <button id="copySystemId" type="button" disabled>Copy ID</button>
           </div>
         </aside>
       </section>
@@ -59,6 +78,16 @@
             <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
           </div>
           <div class="overlay-toggles">
+            <label class="overlay-toggle" id="regionColorsToggleLabel">
+              <input type="checkbox" id="regionColorsToggle" />
+              <span class="overlay-dot region-colors-dot"></span>
+              Region Colors
+            </label>
+            <label class="overlay-toggle" id="constellationColorsToggleLabel">
+              <input type="checkbox" id="constellationColorsToggle" />
+              <span class="overlay-dot constellation-colors-dot"></span>
+              Constellation Colors
+            </label>
             <label class="overlay-toggle" id="killsToggleLabel">
               <input type="checkbox" id="killsToggle" />
               <span class="overlay-dot kills-dot"></span>
@@ -162,6 +191,10 @@
               <button type="button" class="time-preset" data-hours="6">6h</button>
               <button type="button" class="time-preset active" data-hours="24">24h</button>
               <button type="button" class="time-preset" data-hours="168">7d</button>
+            </div>
+            <div class="custom-hours-row">
+              <input type="number" id="customHours" min="1" max="720" placeholder="Custom h" class="custom-hours-input" />
+              <button type="button" id="applyCustomHours" class="time-preset">Set</button>
             </div>
             <label class="overlay-toggle overlay-toggle--subsub" id="killLabelsToggleLabel">
               <input type="checkbox" id="showKillLabels" />
@@ -286,7 +319,9 @@
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
             <label><input id="avoidContested" type="checkbox" /> Avoid contested systems (3+ active hours)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
+            <label><input id="showReachableHighlight" type="checkbox" /> Highlight reachable stars (from selected)</label>
             <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>
+            <label><input id="showBookmarks" type="checkbox" checked /> Show bookmarks on map</label>
           </div>
 
           <button class="primary" type="submit">Calculate</button>
@@ -311,6 +346,14 @@
         </section>
 
         <p class="gate-note" id="gateStatus">Gate network loads automatically when available.</p>
+
+        <section class="bookmarks-panel" id="bookmarksPanel" style="display:none" aria-label="Bookmarked systems">
+          <div class="section-title">
+            <h3>Bookmarks</h3>
+            <button id="clearBookmarks" title="Clear all bookmarks" aria-label="Clear all bookmarks">×</button>
+          </div>
+          <ol id="bookmarksList" class="bookmarks-list"></ol>
+        </section>
       </aside>
     </main>
 
