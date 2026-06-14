@@ -10,15 +10,21 @@
   <body>
     <main class="app-shell">
       <section class="map-stage" aria-label="EVE Frontier map">
-        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin."></canvas>
+        <canvas id="stars" tabindex="0" role="img" aria-label="Star map. Drag to rotate in 3D. Right-drag or shift-drag to pan. Scroll to zoom. Q/E to spin. Press / or F to find a system."></canvas>
         <div class="topbar">
           <div class="status-pill" id="dataStatus">Initializing</div>
+        </div>
+        <!-- Find system floating panel -->
+        <div id="findPanel" class="find-panel" style="display:none" aria-label="Find system">
+          <input id="findInput" autocomplete="off" placeholder="Jump to system..." aria-label="Jump to system" aria-controls="findSuggestions" aria-autocomplete="list" />
+          <div id="findSuggestions" class="suggestions" role="listbox"></div>
         </div>
         <div class="map-tools" aria-label="Map controls">
           <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
           <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
           <button id="fitRoute" title="Fit route" aria-label="Fit route">FIT</button>
           <button id="resetView" title="Reset 3D rotation (top-down view)" aria-label="Reset 3D rotation">RESET</button>
+          <button id="findSystem" title="Find and jump to a system (/ or F)" aria-label="Find system">FIND</button>
           <button id="shareLink" title="Copy share link" aria-label="Copy share link">LINK</button>
         </div>
         <div class="map-legend" aria-label="Route legend">
@@ -112,6 +118,10 @@
               <button type="button" class="time-preset active" data-hours="24">24h</button>
               <button type="button" class="time-preset" data-hours="168">7d</button>
             </div>
+            <div class="custom-hours-row">
+              <input type="number" id="customHours" min="1" max="720" placeholder="Custom h" class="custom-hours-input" />
+              <button type="button" id="applyCustomHours" class="time-preset">Set</button>
+            </div>
             <label class="overlay-toggle overlay-toggle--subsub" id="killLabelsToggleLabel">
               <input type="checkbox" id="showKillLabels" />
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;"></span>
@@ -122,9 +132,29 @@
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;"></span>
               Ships only (hide structure kills)
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killTrendToggleLabel">
+              <input type="checkbox" id="showKillTrend" checked />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;opacity:0.7;"></span>
+              Show activity trend (↑↓)
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killHeatmapLabel">
+              <input type="checkbox" id="killHeatmap" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:linear-gradient(135deg,#ff3020,#ff9020);border-radius:2px;"></span>
+              Heatmap mode
+            </label>
+          </div>
+          <div id="assemblyStats" class="assembly-stats" style="display:none">
+            <div id="assemblyStatsContent" class="assembly-stats-content"></div>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
+
+        <div id="dangerPanel" class="danger-panel" style="display:none">
+          <div class="section-title">
+            <h3>Hot Systems <span id="dangerWindowLabel" class="danger-window-label"></span></h3>
+          </div>
+          <ol id="dangerList" class="danger-list"></ol>
+        </div>
 
         <form id="routeForm" class="route-form">
           <label>
