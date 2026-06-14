@@ -25,6 +25,8 @@ const FRAME_CORNERS = [
   { key: 'br', pos: 'bottom-16 right-4 md:bottom-16 md:right-6', borders: 'border-b border-r' },
 ] as const
 
+const DIAMOND = '\u25c8'
+
 export function LandingHero() {
   const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
   const [memberHovered, setMemberHovered] = useState(false)
@@ -60,7 +62,7 @@ export function LandingHero() {
         ))}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center sm:gap-8">
+      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
         <motion.div {...fadeUp(0)}>
           <VoidEclipse />
         </motion.div>
@@ -68,25 +70,25 @@ export function LandingHero() {
         <motion.div {...fadeUp(0.12)} className="flex flex-col items-center gap-3">
           <h1
             id="landing-title"
-            className={`glitch-title font-mono text-4xl tracking-widest uppercase text-white/90 md:text-6xl lg:text-7xl ${isGlitching ? 'is-glitching' : ''}`}
+            className={`glitch-title max-w-[18rem] font-mono text-2xl leading-tight tracking-[0.18em] uppercase text-white/90 sm:max-w-none sm:text-4xl sm:tracking-widest md:text-6xl lg:text-7xl ${isGlitching ? 'is-glitching' : ''}`}
           >
             {displayed}
           </h1>
-          <p className="font-mono text-sm tracking-widest text-void-teal/60 italic">
+          <p className="max-w-[18rem] font-mono text-xs leading-relaxed tracking-[0.16em] text-void-teal/60 italic sm:max-w-none sm:text-sm sm:tracking-widest">
             &ldquo;We were not chosen. We survived.&rdquo;
           </p>
         </motion.div>
 
-        <motion.p {...fadeUp(0.24)} className="max-w-sm font-mono text-xs tracking-wide text-white/20 leading-relaxed uppercase">
+        <motion.p {...fadeUp(0.24)} className="max-w-sm font-mono text-xs tracking-wide text-white/45 leading-relaxed uppercase">
           A militant techno-religious order operating at the edge of civilization.
           We do not recruit. We recognize.
         </motion.p>
 
-        <motion.div {...fadeUp(0.36)}>
+        <div>
           <DiscordCTA />
-        </motion.div>
+        </div>
 
-        <motion.div {...fadeUp(0.48)}>
+        <div>
           <Link
             href="/login"
             onMouseEnter={() => setMemberHovered(true)}
@@ -105,18 +107,17 @@ export function LandingHero() {
               transition: 'border-color 300ms ease, color 300ms ease, box-shadow 350ms ease',
             }}
           >
-            <span aria-hidden="true">&#9672;</span>
-            <span>Member Access</span>
+            {DIAMOND} Member Access
           </Link>
-        </motion.div>
+        </div>
       </div>
 
-      <footer className="absolute bottom-0 inset-x-0 flex items-center justify-between border-t border-void-teal/10 px-6 py-3">
+      <footer className="absolute bottom-0 inset-x-0 flex items-center justify-between px-6 py-3 border-t border-void-teal/10">
         <span className="font-mono text-xs tracking-widest text-white/10 uppercase">
-          &#9672; AoV
+          {DIAMOND} AoV
         </span>
         <PhraseCycler />
-        <span className="font-mono text-xs text-white/10" aria-hidden="true">&#9672;</span>
+        <span className="font-mono text-xs text-white/10">{DIAMOND}</span>
       </footer>
     </section>
   )
