@@ -31,7 +31,7 @@ export const siteConfig = {
   url: normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL),
   host: siteHost(normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL)),
   description:
-    'A militant techno-religious order in EVE Frontier. We do not recruit. We recognize.',
+    'A militant techno-religious EVE Frontier corporation shaped by AUREX, doctrine, and useful output.',
   lastContentUpdate: LAST_CONTENT_UPDATE,
 }
 

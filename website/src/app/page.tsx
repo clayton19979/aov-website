@@ -1,132 +1,128 @@
-'use client'
-
 import Link from 'next/link'
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { StarField } from '@/components/landing/StarField'
-import { VoidEclipse } from '@/components/landing/VoidEclipse'
-import { DiscordCTA } from '@/components/landing/DiscordCTA'
-import { PhraseCycler } from '@/components/landing/PhraseCycler'
-import { useGlitchText } from '@/hooks/useGlitchText'
+import { LandingHero } from '@/components/landing/LandingHero'
+import { routeMetadata } from '@/lib/site'
 
-function fadeUp(delay: number) {
-  return {
-    initial: { opacity: 0, y: 16 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number], delay },
-  }
-}
+const DISCORD_URL = 'https://discord.gg/uZtwGbngr7'
 
-// HUD targeting frame — L-shaped brackets anchored at the four hero corners.
-// Each draws from two borders; the top pair sits below the gutter, the bottom
-// pair rides above the footer strip so the whole hero reads as a cockpit display.
-const FRAME_CORNERS = [
-  { key: 'tl', pos: 'top-4 left-4 md:top-6 md:left-6', borders: 'border-t border-l' },
-  { key: 'tr', pos: 'top-4 right-4 md:top-6 md:right-6', borders: 'border-t border-r' },
-  { key: 'bl', pos: 'bottom-16 left-4 md:bottom-16 md:left-6', borders: 'border-b border-l' },
-  { key: 'br', pos: 'bottom-16 right-4 md:bottom-16 md:right-6', borders: 'border-b border-r' },
+const SELECTION_SIGNALS = [
+  {
+    label: 'Public Signal',
+    title: 'Selection, not volume',
+    body: 'AoV is built for players who find standards clarifying. The filter exists before first contact.',
+  },
+  {
+    label: 'Void Statement',
+    title: 'Purpose over history',
+    body: 'The first threshold asks what function you intend to serve, not how long you have been elsewhere.',
+  },
+  {
+    label: 'Trial Operation',
+    title: 'Function under stakes',
+    body: 'Candidates are observed in real operational context: preparation, accountability, correction, and output.',
+  },
 ] as const
 
+const DOCTRINE_MARKERS = [
+  'Weakness accelerates extinction.',
+  'Conflict creates evolution.',
+  'Usefulness defines value.',
+  'Order must be imposed upon chaos.',
+] as const
+
+export const metadata = routeMetadata('/')
+
 export default function LandingPage() {
-  const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
-  const [memberHovered, setMemberHovered] = useState(false)
-
   return (
-    <main
-      className={`relative flex flex-col items-center justify-center min-h-screen bg-void-black overflow-hidden ${isGlitching ? 'noise-flash' : ''}`}
-    >
-      {/* Background star field */}
-      <StarField />
+    <main className="bg-void-black text-white/90">
+      <LandingHero />
 
-      {/* Background radial glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 4%, transparent) 0%, transparent 60%)',
-        }}
-        aria-hidden="true"
-      />
+      <section className="relative border-t border-void-teal/10 px-6 py-14 md:py-18">
+        <div
+          className="absolute inset-x-0 top-0 h-px"
+          style={{
+            background: 'linear-gradient(to right, transparent, color-mix(in srgb, var(--accent) 45%, transparent), transparent)',
+          }}
+          aria-hidden="true"
+        />
 
-      {/* HUD targeting frame — corner brackets locking onto the hero */}
-      <div className="absolute inset-0 z-0 pointer-events-none" aria-hidden="true">
-        {FRAME_CORNERS.map((c, i) => (
-          <motion.span
-            key={c.key}
-            className={`absolute h-6 w-6 md:h-8 md:w-8 ${c.pos} ${c.borders}`}
-            style={{
-              borderColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
-              filter: 'drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 18%, transparent))',
-            }}
-            initial={{ opacity: 0, scale: 0.7 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.6 + i * 0.1 }}
-          />
-        ))}
-      </div>
+        <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div className="max-w-xl">
+            <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.32em] text-void-teal/50">
+              Selection Protocol
+            </p>
+            <h2 className="font-mono text-2xl uppercase tracking-widest text-white/85 md:text-3xl">
+              The order does not invite the uncertain.
+            </h2>
+            <p className="mt-5 font-mono text-sm leading-loose tracking-wide text-white/40">
+              Architects of the Void is an EVE Frontier corporation shaped around AUREX, doctrine, and useful output.
+              The public face should repel the casual and sharpen the attention of the aligned.
+            </p>
 
-      {/* Center content */}
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
-        {/* Eclipse */}
-        <motion.div {...fadeUp(0)}>
-          <VoidEclipse />
-        </motion.div>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                href={DISCORD_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center border border-void-teal/50 px-5 py-3 font-mono text-xs uppercase tracking-widest text-void-teal transition-colors duration-300 hover:border-void-teal hover:bg-void-teal hover:text-void-black"
+              >
+                Request Entry
+              </a>
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center border border-white/10 px-5 py-3 font-mono text-xs uppercase tracking-widest text-white/40 transition-colors duration-300 hover:border-void-teal/40 hover:text-void-teal"
+              >
+                Member Access
+              </Link>
+            </div>
+          </div>
 
-        {/* Title */}
-        <motion.div {...fadeUp(0.12)} className="flex flex-col items-center gap-3">
-          <h1
-            className={`glitch-title font-mono text-4xl md:text-6xl lg:text-7xl tracking-widest uppercase text-white/90 ${isGlitching ? 'is-glitching' : ''}`}
-          >
-            {displayed}
-          </h1>
-          <p className="font-mono text-sm tracking-widest text-void-teal/60 italic">
-            &ldquo;We were not chosen. We survived.&rdquo;
-          </p>
-        </motion.div>
+          <div className="grid gap-4">
+            {SELECTION_SIGNALS.map((signal, index) => (
+              <article
+                key={signal.label}
+                className="group relative min-h-36 border border-white/10 bg-white/[0.015] p-5 transition-colors duration-300 hover:border-void-teal/35"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 h-full w-px opacity-55 transition-opacity duration-300 group-hover:opacity-100"
+                  style={{
+                    background: 'linear-gradient(to bottom, var(--accent), transparent)',
+                  }}
+                />
+                <div className="flex items-start gap-4">
+                  <span className="font-mono text-[10px] tracking-widest text-void-teal/45">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-white/25">
+                      {signal.label}
+                    </p>
+                    <h3 className="mt-2 font-mono text-sm uppercase tracking-widest text-white/75">
+                      {signal.title}
+                    </h3>
+                    <p className="mt-3 font-mono text-xs leading-relaxed tracking-wide text-white/35">
+                      {signal.body}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
 
-        {/* Description */}
-        <motion.p {...fadeUp(0.24)} className="max-w-sm font-mono text-xs tracking-wide text-white/20 leading-relaxed uppercase">
-          A militant techno-religious order operating at the edge of civilization.
-          We do not recruit. We recognize.
-        </motion.p>
-
-        {/* Discord CTA */}
-        <motion.div {...fadeUp(0.36)}>
-          <DiscordCTA />
-        </motion.div>
-
-        {/* Member access */}
-        <motion.div {...fadeUp(0.48)}>
-          <Link
-            href="/login"
-            onMouseEnter={() => setMemberHovered(true)}
-            onMouseLeave={() => setMemberHovered(false)}
-            className="inline-flex items-center gap-2 border px-6 py-2 font-mono text-xs tracking-widest uppercase transition-all duration-300"
-            style={{
-              borderColor: memberHovered
-                ? 'color-mix(in srgb, var(--accent) 50%, transparent)'
-                : 'color-mix(in srgb, var(--accent) 20%, transparent)',
-              color: memberHovered
-                ? 'var(--accent)'
-                : 'color-mix(in srgb, var(--accent) 50%, transparent)',
-              boxShadow: memberHovered
-                ? '0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent), 0 0 18px 4px color-mix(in srgb, var(--accent) 10%, transparent)'
-                : '0 0 10px 1px color-mix(in srgb, var(--accent) 5%, transparent)',
-              transition: 'border-color 300ms ease, color 300ms ease, box-shadow 350ms ease',
-            }}
-          >
-            ◈ Member Access
-          </Link>
-        </motion.div>
-      </div>
-
-      {/* Bottom bar */}
-      <footer className="absolute bottom-0 inset-x-0 flex items-center justify-between px-6 py-3 border-t border-void-teal/10">
-        <span className="font-mono text-xs tracking-widest text-white/10 uppercase">
-          ◈ AoV
-        </span>
-        <PhraseCycler />
-        <span className="font-mono text-xs text-white/10">◈</span>
-      </footer>
+        <div className="mx-auto mt-12 w-full max-w-6xl border-t border-void-teal/10 pt-8">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {DOCTRINE_MARKERS.map(marker => (
+              <div
+                key={marker}
+                className="border-l border-void-teal/25 py-2 pl-4 font-mono text-xs uppercase leading-relaxed tracking-wide text-white/35"
+              >
+                {marker}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     </main>
   )
 }
