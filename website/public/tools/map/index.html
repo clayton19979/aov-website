@@ -103,9 +103,19 @@
               <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
               Online only
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="assemblyLabelsToggleLabel">
+              <input type="checkbox" id="showAssemblyLabels" />
+              <span class="overlay-dot assemblies-dot" style="width:6px;height:6px;"></span>
+              Labels (zoom ≥ 1.8×)
+            </label>
             <div id="asmTypePanel" class="asm-type-panel" style="display:none">
               <label class="overlay-sublabel" style="margin-left:20px">Types shown</label>
               <div class="asm-type-toggles">
+                <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
+                  <input type="checkbox" class="asm-type-check" data-type="Smart Gate" checked />
+                  <span class="overlay-dot" style="width:6px;height:6px;background:#00e5ff;"></span>
+                  Smart Gates
+                </label>
                 <label class="overlay-toggle overlay-toggle--subsub" style="margin-left:20px">
                   <input type="checkbox" class="asm-type-check" data-type="Network Node" checked />
                   <span class="overlay-dot" style="width:6px;height:6px;background:#00b4d8;"></span>
@@ -167,6 +177,16 @@
               <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff4444;"></span>
               Hot systems panel
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killHeatmapLabel">
+              <input type="checkbox" id="showKillHeatmap" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff7020;border-radius:50%;"></span>
+              Kill density heatmap
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="regionStatsLabel">
+              <input type="checkbox" id="showRegionStats" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(100,160,200,0.8);border-radius:2px;"></span>
+              Region kill stats
+            </label>
             <label class="overlay-toggle overlay-toggle--subsub" id="showContestedLabel">
               <input type="checkbox" id="showContested" />
               <span class="overlay-dot" style="width:6px;height:6px;background:#00e5ff;border-radius:50%;"></span>
@@ -188,6 +208,12 @@
               <h3>Contested <span class="danger-window-label">(kills across 3+ hours)</span></h3>
             </div>
             <ol id="contestedList" class="danger-list"></ol>
+          </div>
+          <div id="regionStatsPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Kills by Region <span id="regionStatsPanelLabel" class="danger-window-label"></span></h3>
+            </div>
+            <ol id="regionStatsList" class="danger-list"></ol>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
@@ -240,6 +266,7 @@
             <label><input id="showGameGates" type="checkbox" checked /> Show game gate links</label>
             <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
+            <label><input id="avoidContested" type="checkbox" /> Avoid contested systems (3+ active hours)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
             <label><input id="showReachableHighlight" type="checkbox" /> Highlight reachable stars (from selected)</label>
             <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>

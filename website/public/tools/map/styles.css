@@ -1720,3 +1720,25 @@ button.active-bookmark {
 .panel-close-btn:hover {
   color: rgba(200, 220, 240, 0.9);
 }
+
+/* ── Region stats panel ─────────────────────────── */
+
+.region-stat-item {
+  align-items: center;
+}
+
+/* ── Legend overlay extras ──────────────────────── */
+
+.legend-smart-gate-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.85);
+}
+
+/* ── Kill heatmap toggle dot ────────────────────── */
+
+.heatmap-dot {
+  background: radial-gradient(circle, rgba(255,112,32,0.9) 0%, rgba(255,60,10,0.4) 70%, transparent 100%);
+}

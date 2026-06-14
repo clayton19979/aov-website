@@ -62,7 +62,7 @@ const state = {
   showSmartGateLinks: true,
   avoidKills: false,
   overlayAssembliesOnlineOnly: false,
-  overlayAsmTypeFilter: new Set(["Network Node", "Storage Unit", "Assembly", "Turret"]),
+  overlayAsmTypeFilter: new Set(["Smart Gate", "Network Node", "Storage Unit", "Assembly", "Turret"]),
   showJumpRange: false,
   showKillLabels: false,
   showKillShipsOnly: false,
@@ -74,6 +74,10 @@ const state = {
   showContested: false,
   showOfflinePanel: false,
   killTimeOffset: 0,       // hours to shift the kill window back from "now"
+  showKillHeatmap: false,
+  showAssemblyLabels: false,
+  avoidContested: false,
+  showRegionStats: false,
 };
 
 const els = {
@@ -154,6 +158,13 @@ const els = {
   offlinePanel: document.getElementById("offlinePanel"),
   offlineList: document.getElementById("offlineList"),
   offlinePanelClose: document.getElementById("offlinePanelClose"),
+  showKillHeatmapToggle: document.getElementById("showKillHeatmap"),
+  showAssemblyLabelsToggle: document.getElementById("showAssemblyLabels"),
+  avoidContestedToggle: document.getElementById("avoidContested"),
+  showRegionStatsToggle: document.getElementById("showRegionStats"),
+  regionStatsPanel: document.getElementById("regionStatsPanel"),
+  regionStatsList: document.getElementById("regionStatsList"),
+  regionStatsPanelLabel: document.getElementById("regionStatsPanelLabel"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -625,10 +636,12 @@ function draw() {
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
   if (state.showJumpRange) drawJumpRangeCircle();
+  if (state.showKills && state.showKillHeatmap) drawKillHeatmap();
   if (state.showKills) drawKillOverlay();
   if (state.showKills && state.showContested && state.overlayKillsLoaded) drawContestedOverlay();
   if (state.showKills && state.showKillLabels) drawKillLabels();
   if (state.showAssemblies) drawAssemblyOverlay();
+  if (state.showAssemblies && state.showAssemblyLabels) drawAssemblyLabels();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   if (state.showCoverageRadius && state.showPlayerBases) drawCoverageRadiusOverlay();
   if (state.showTerritoryOwnership && state.overlayAssembliesLoaded) drawTerritoryOverlay();
@@ -1767,11 +1780,18 @@ function hydrateWorkerRouteResult(result) {
 }
 
 function getAvoidSystemIds() {
-  if (!state.avoidKills || !state.overlayKillsLoaded) return new Set();
-  const { start: ks, end: ke } = killWindowBounds();
   const ids = new Set();
-  for (const kill of state.overlayKills) {
-    if (kill.timestamp >= ks && kill.timestamp <= ke) ids.add(kill.systemId);
+  if (state.overlayKillsLoaded) {
+    const { start: ks, end: ke } = killWindowBounds();
+    if (state.avoidKills) {
+      for (const kill of state.overlayKills) {
+        if (kill.timestamp >= ks && kill.timestamp <= ke) ids.add(kill.systemId);
+      }
+    }
+    if (state.avoidContested) {
+      const contested = buildContestedMap(3);
+      for (const id of contested.keys()) ids.add(id);
+    }
   }
   return ids;
 }
@@ -2681,6 +2701,7 @@ function drawDangerRadius() {
 // Correct module paths from world-contracts source
 // (github.com/evefrontier/world-contracts/tree/main/contracts/world/sources)
 const ASSEMBLY_TYPE_DEFS = [
+  { fragment: "gate::Gate",                label: "Smart Gate",  color: "#00e5ff" },
   { fragment: "network_node::NetworkNode", label: "Network Node", color: "#00b4d8" },
   { fragment: "storage_unit::StorageUnit", label: "Storage Unit", color: "#61d5c7" },
   { fragment: "assembly::Assembly",         label: "Assembly",    color: "#9b8dff" },
@@ -3507,10 +3528,13 @@ function updateHotPanel() {
     const shipN = kills.filter(isShipKill).length;
     const structN = kills.length - shipN;
     const detail = structN > 0 ? `${shipN}⚔ ${structN}🏗` : `${kills.length}⚠`;
+    const trend = getKillTrend(systemId);
+    const trendColor = trend === "↑" ? "rgba(255,80,80,0.9)" : trend === "↓" ? "rgba(80,200,120,0.85)" : "rgba(180,180,180,0.6)";
     return `<li class="danger-item" data-system-id="${systemId}" style="cursor:pointer">
       <span class="danger-rank">${idx + 1}</span>
       <span class="danger-name">${name}</span>
       <span class="danger-count">${detail}</span>
+      <span style="color:${trendColor};font-size:10px;flex-shrink:0">${trend}</span>
       <span style="color:${scoreColor};font-size:9px;margin-left:2px">${score}</span>
     </li>`;
   }).join("");
@@ -3566,6 +3590,160 @@ function updateOfflinePanel() {
       if (sys) { selectSystem(sys); centerOnSystem(sys); }
     });
   });
+}
+
+// ── Kill density heatmap ───────────────────────────────────────────────────
+
+function drawKillHeatmap() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const z = state.camera.zoom;
+  const baseRadius = Math.max(25, 90 / z);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const [systemId, kills] of killsBySystem) {
+    const visible = state.showKillShipsOnly ? kills.filter(isShipKill) : kills;
+    if (!visible.length) continue;
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    const r = baseRadius * Math.min(2.2, 0.6 + Math.log2(visible.length + 1) * 0.45);
+    if (p.x < -r || p.y < -r || p.x > rect.width + r || p.y > rect.height + r) continue;
+    const intensity = Math.min(0.75, 0.12 + visible.length * 0.055);
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+    grd.addColorStop(0,   `rgba(255, 90, 20, ${intensity})`);
+    grd.addColorStop(0.45, `rgba(220, 60, 10, ${intensity * 0.55})`);
+    grd.addColorStop(1,   `rgba(180, 30,  0, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// ── Assembly name labels ───────────────────────────────────────────────────
+
+function drawAssemblyLabels() {
+  if (!state.overlayAssemblies.length) return;
+  const z = state.camera.zoom;
+  if (z < 1.8) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+
+  const bySystem = new Map();
+  for (const asm of state.overlayAssemblies) {
+    if (state.overlayAssembliesOnlineOnly && !asm.online) continue;
+    if (!state.overlayAsmTypeFilter.has(asm.label)) continue;
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, []);
+    bySystem.get(asm.systemId).push(asm);
+  }
+
+  ctx.save();
+  const fontSize = Math.max(7, Math.min(9, z * 2.8));
+  ctx.font = `${fontSize}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+
+  for (const [systemId, assemblies] of bySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -80 || p.y < -80 || p.x > rect.width + 80 || p.y > rect.height + 80) continue;
+    const radius = 5 + Math.min(4, Math.log2(assemblies.length + 1));
+    const topY = p.y + radius + 4;
+    const lineH = fontSize + 2;
+    const toShow = assemblies.slice(0, 3);
+    toShow.forEach((asm, i) => {
+      const label = asm.name !== asm.label ? asm.name : asm.label;
+      const hexColor = asm.online ? asm.color : "rgba(120,140,160,0.55)";
+      ctx.fillStyle = "rgba(2,8,12,0.72)";
+      ctx.fillText(label, p.x + 0.5, topY + i * lineH + 0.5);
+      ctx.fillStyle = hexColor;
+      ctx.fillText(label, p.x, topY + i * lineH);
+    });
+    if (assemblies.length > 3) {
+      ctx.fillStyle = "rgba(140,160,180,0.55)";
+      ctx.fillText(`+${assemblies.length - 3}`, p.x, topY + 3 * lineH);
+    }
+  }
+  ctx.restore();
+}
+
+// ── Region kill stats ──────────────────────────────────────────────────────
+
+function buildRegionKillStats() {
+  const { start: ks, end: ke } = killWindowBounds();
+  const stats = new Map(); // regionId → { kills, systems: Set }
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < ks || kill.timestamp > ke) continue;
+    const system = state.systemsById.get(kill.systemId);
+    if (!system) continue;
+    if (!stats.has(system.regionId)) stats.set(system.regionId, { kills: 0, systems: new Set() });
+    const entry = stats.get(system.regionId);
+    entry.kills++;
+    entry.systems.add(kill.systemId);
+  }
+  return stats;
+}
+
+function updateRegionStatsPanel() {
+  if (!els.regionStatsPanel || !els.regionStatsList) return;
+  if (!state.showRegionStats || !state.overlayKillsLoaded) {
+    els.regionStatsPanel.style.display = "none";
+    return;
+  }
+  const stats = buildRegionKillStats();
+  if (!stats.size) {
+    els.regionStatsPanel.style.display = "none";
+    return;
+  }
+  els.regionStatsPanel.style.display = "";
+  if (els.regionStatsPanelLabel) {
+    const wLabel = state.killTimeOffset > 0
+      ? `(${state.killTimeOffset}h–${state.killTimeOffset + state.overlayKillsTimeWindow}h ago)`
+      : `(last ${state.overlayKillsTimeWindow}h)`;
+    els.regionStatsPanelLabel.textContent = wLabel;
+  }
+  const sorted = [...stats.entries()].sort((a, b) => b[1].kills - a[1].kills).slice(0, 12);
+  const maxKills = sorted[0]?.[1].kills || 1;
+  els.regionStatsList.innerHTML = sorted.map(([regionId, data]) => {
+    const barWidth = Math.round((data.kills / maxKills) * 50);
+    return `<li class="danger-item region-stat-item" data-region-id="${regionId}" style="cursor:pointer">
+      <span class="danger-rank" style="color:rgba(100,160,200,0.7);min-width:24px">R${regionId}</span>
+      <span class="danger-name" style="display:flex;align-items:center;gap:4px">
+        <span style="display:inline-block;height:4px;width:${barWidth}px;background:rgba(255,100,80,0.55);border-radius:2px;flex-shrink:0"></span>
+      </span>
+      <span class="danger-count" style="color:rgba(255,130,110,0.85)">${data.kills}⚠</span>
+      <span style="color:rgba(100,140,170,0.65);font-size:9px;flex-shrink:0">${data.systems.size}sys</span>
+    </li>`;
+  }).join("");
+  // Click to highlight systems in region
+  els.regionStatsList.querySelectorAll("li[data-region-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const regionId = Number(li.dataset.regionId);
+      const regionSystems = state.systems.filter((s) => s.regionId === regionId);
+      if (regionSystems.length) fitSystems(regionSystems);
+    });
+  });
+}
+
+// ── Kill trend helper ──────────────────────────────────────────────────────
+
+function getKillTrend(systemId) {
+  const { start: ks, end: ke } = killWindowBounds();
+  const midpoint = (ks + ke) / 2;
+  let older = 0, newer = 0;
+  for (const k of state.overlayKills) {
+    if (k.systemId !== systemId || k.timestamp < ks || k.timestamp > ke) continue;
+    if (k.timestamp < midpoint) older++;
+    else newer++;
+  }
+  if (newer > older * 1.5) return "↑";
+  if (older > newer * 1.5) return "↓";
+  return "→";
 }
 
 // ── Overlay UI helpers ─────────────────────────────────────────────────────
@@ -3629,6 +3807,7 @@ async function toggleOverlay(name, enabled) {
     if (enabled) await ensureKillFeed();
     updateHotPanel();
     updateContestedPanel();
+    updateRegionStatsPanel();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
     if (enabled) await ensureAssemblyOverlay();
@@ -3674,6 +3853,7 @@ function bindOverlayEvents() {
       updateKillOffsetLabel();
       updateHotPanel();
       updateContestedPanel();
+      updateRegionStatsPanel();
       draw();
     });
   });
@@ -3763,7 +3943,9 @@ function bindOverlayEvents() {
     if (state.showKills) reloadTasks.push(ensureKillFeed());
     if (state.showAssemblies || state.showPlayerBases) reloadTasks.push(ensureAssemblyOverlay());
     if (!reloadTasks.length) setOverlayStatus("Enable an overlay to load data");
-    Promise.all(reloadTasks);
+    Promise.all(reloadTasks).then(() => {
+      updateRegionStatsPanel();
+    });
   });
 
   // New feature bindings
@@ -3798,7 +3980,35 @@ function bindOverlayEvents() {
     updateKillOffsetLabel();
     updateHotPanel();
     updateContestedPanel();
+    updateRegionStatsPanel();
     scheduleDraw();
+  });
+
+  els.showKillHeatmapToggle?.addEventListener("change", () => {
+    state.showKillHeatmap = els.showKillHeatmapToggle.checked;
+    scheduleDraw();
+  });
+
+  els.showAssemblyLabelsToggle?.addEventListener("change", () => {
+    state.showAssemblyLabels = els.showAssemblyLabelsToggle.checked;
+    scheduleDraw();
+  });
+
+  els.avoidContestedToggle?.addEventListener("change", async () => {
+    state.avoidContested = els.avoidContestedToggle.checked;
+    if (state.avoidContested && !state.overlayKillsLoaded) {
+      await ensureKillFeed();
+    }
+    if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
+  });
+
+  els.showRegionStatsToggle?.addEventListener("change", () => {
+    state.showRegionStats = els.showRegionStatsToggle.checked;
+    if (state.showRegionStats && !state.overlayKillsLoaded) {
+      ensureKillFeed().then(() => updateRegionStatsPanel()).catch(() => {});
+    } else {
+      updateRegionStatsPanel();
+    }
   });
 }
 
