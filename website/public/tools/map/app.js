@@ -69,6 +69,10 @@ const state = {
   showKillTrend: true,
   killHeatmap: false,
   showSystemLabels: false,
+  showConstellationColors: false,
+  showDangerRadius: false,
+  showBookmarks: true,
+  bookmarks: [],
 };
 
 const els = {
@@ -134,6 +138,15 @@ const els = {
   showSystemLabelsToggle: document.getElementById("showSystemLabels"),
   asmTypePanel: document.getElementById("asmTypePanel"),
   asmTypeChecks: document.querySelectorAll(".asm-type-check"),
+  constellationColorsToggle: document.getElementById("constellationColorsToggle"),
+  legendConstellation: document.getElementById("legendConstellation"),
+  showDangerRadiusToggle: document.getElementById("showDangerRadius"),
+  legendBookmark: document.getElementById("legendBookmark"),
+  bookmarkSystemBtn: document.getElementById("bookmarkSystem"),
+  showBookmarksToggle: document.getElementById("showBookmarks"),
+  bookmarksPanel: document.getElementById("bookmarksPanel"),
+  bookmarksList: document.getElementById("bookmarksList"),
+  clearBookmarks: document.getElementById("clearBookmarks"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -189,6 +202,7 @@ function updateSystemActions() {
   els.setDestination.disabled = !hasSelection;
   els.setVia.disabled = !hasSelection;
   els.centerSystem.disabled = !hasSelection;
+  if (els.bookmarkSystemBtn) els.bookmarkSystemBtn.disabled = !hasSelection;
 }
 
 function workerMessage(message) {
@@ -405,6 +419,34 @@ function drawRegionColors() {
   ctx.restore();
 }
 
+function constellationHue(constellationId) {
+  return (constellationId * 83.7) % 360;
+}
+
+function drawConstellationColors() {
+  if (!state.systems.length || !state.bounds) return;
+  const z = state.camera.zoom;
+  if (z < 0.25) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const n = state.systems.length;
+  const visibleStep = n > 10000 ? (z < 0.4 ? 5 : z < 0.7 ? 3 : z < 1.1 ? 2 : 1) : 1;
+  const dotR = z > 1.5 ? 3.2 : z > 0.8 ? 2.0 : 1.2;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < n; i += visibleStep) {
+    const system = state.systems[i];
+    const p = project(system);
+    if (p.x < -6 || p.y < -6 || p.x > rect.width + 6 || p.y > rect.height + 6) continue;
+    const h = constellationHue(system.constellationId);
+    ctx.fillStyle = `hsla(${h},85%,65%,0.30)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
 function resizeCanvas() {
   cachedRect = els.canvas.getBoundingClientRect();
   const rect = cachedRect;
@@ -569,8 +611,9 @@ function draw() {
     }
   }
 
-  // ── Region color dots ────────────────────────────────
+  // ── Region / constellation color dots ───────────────
   if (state.showRegionColors) drawRegionColors();
+  if (state.showConstellationColors) drawConstellationColors();
 
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
@@ -578,11 +621,13 @@ function draw() {
   if (state.showKills) {
     if (state.killHeatmap) drawKillHeatmap();
     else drawKillOverlay();
+    if (state.showDangerRadius) drawDangerRadius();
     if (state.showKillLabels) drawKillLabels();
   }
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   if (state.showSystemLabels) drawSystemLabels();
+  if (state.showBookmarks && state.bookmarks.length) drawBookmarks();
   drawRoute();
 
   if (state.selected) drawSystemMarker(state.selected, "#61d5c7", 7);
@@ -1018,6 +1063,7 @@ function selectSystem(system) {
   }
 
   updateSystemActions();
+  updateBookmarkButton(system);
   updateSelectedRouteStep();
   draw();
 }
@@ -1450,6 +1496,8 @@ function routeShareUrl() {
   if (state.showPlayerBases) params.set("ov_b", "1");
   if (state.killHeatmap) params.set("ov_km", "1");
   if (state.showRegionColors) params.set("ov_rc", "1");
+  if (state.showConstellationColors) params.set("ov_cc", "1");
+  if (state.showDangerRadius) params.set("ov_dr", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1540,6 +1588,14 @@ function loadUrlParams() {
   if (params.get("ov_rc") === "1") {
     state.showRegionColors = true;
     els.regionColorsToggle && (els.regionColorsToggle.checked = true);
+  }
+  if (params.get("ov_cc") === "1") {
+    state.showConstellationColors = true;
+    els.constellationColorsToggle && (els.constellationColorsToggle.checked = true);
+  }
+  if (params.get("ov_dr") === "1") {
+    state.showDangerRadius = true;
+    els.showDangerRadiusToggle && (els.showDangerRadiusToggle.checked = true);
   }
   updateOverlayLegend();
 }
@@ -1838,6 +1894,20 @@ function bindEvents() {
   els.setDestination.addEventListener("click", () => setSelectedRouteField(els.destination));
   els.setVia.addEventListener("click", () => setSelectedRouteField(els.via));
   els.centerSystem.addEventListener("click", () => centerOnSystem(state.selected));
+  els.bookmarkSystemBtn?.addEventListener("click", () => toggleBookmark(state.selected));
+  els.showBookmarksToggle?.addEventListener("change", () => {
+    state.showBookmarks = els.showBookmarksToggle.checked;
+    updateOverlayLegend();
+    scheduleDraw();
+  });
+  els.clearBookmarks?.addEventListener("click", () => {
+    state.bookmarks = [];
+    saveBookmarks();
+    renderBookmarksPanel();
+    updateOverlayLegend();
+    if (state.selected) updateBookmarkButton(state.selected);
+    scheduleDraw();
+  });
 
   els.canvas.addEventListener("pointerdown", (event) => {
     state.dragging = true;
@@ -2245,6 +2315,45 @@ function drawKillHeatmap() {
   ctx.restore();
 }
 
+// ── Danger radius circles ─────────────────────────────────────────────────
+
+function drawDangerRadius() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  const range = Number(els.jumpRange.value || 120);
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const SEGS = 48;
+  const THRESHOLD = 2;
+  ctx.save();
+  ctx.setLineDash([3, 7]);
+  for (const [systemId, kills] of killsBySystem) {
+    const visible = state.showKillShipsOnly ? kills.filter(isShipKill) : kills;
+    if (visible.length < THRESHOLD) continue;
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const intensity = Math.min(1, visible.length / 8);
+    const alpha = 0.10 + intensity * 0.18;
+    ctx.strokeStyle = `rgba(255, 60, 60, ${alpha})`;
+    ctx.lineWidth = 0.8 + intensity * 0.5;
+    ctx.beginPath();
+    let first = true;
+    for (let i = 0; i <= SEGS; i++) {
+      const a = (i / SEGS) * Math.PI * 2;
+      const pt = { x: system.x + Math.cos(a) * range, y: system.y, z: system.z + Math.sin(a) * range };
+      const pp = project(pt);
+      if (pp.x < -rect.width || pp.y < -rect.height || pp.x > rect.width * 2 || pp.y > rect.height * 2) {
+        first = true;
+        continue;
+      }
+      if (first) { ctx.moveTo(pp.x, pp.y); first = false; }
+      else ctx.lineTo(pp.x, pp.y);
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
 // ── Overlay: Smart Assemblies ──────────────────────────────────────────────
 
 // Correct module paths from world-contracts source
@@ -2468,6 +2577,116 @@ function drawPlayerBaseOverlay() {
   ctx.restore();
 }
 
+// ── Bookmarks ──────────────────────────────────────────────────────────────
+
+const BOOKMARKS_KEY = "frontier-gps.bookmarks.v1";
+
+function loadBookmarks() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BOOKMARKS_KEY) || "[]");
+    state.bookmarks = Array.isArray(saved) ? saved.filter((id) => typeof id === "number") : [];
+  } catch {
+    state.bookmarks = [];
+  }
+}
+
+function saveBookmarks() {
+  try {
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(state.bookmarks));
+  } catch {}
+}
+
+function toggleBookmark(system) {
+  if (!system) return;
+  const idx = state.bookmarks.indexOf(system.id);
+  if (idx >= 0) state.bookmarks.splice(idx, 1);
+  else state.bookmarks.push(system.id);
+  saveBookmarks();
+  renderBookmarksPanel();
+  updateBookmarkButton(system);
+  updateOverlayLegend();
+  if (state.showBookmarks) scheduleDraw();
+}
+
+function updateBookmarkButton(system) {
+  if (!els.bookmarkSystemBtn || !system) return;
+  const isBookmarked = state.bookmarks.includes(system.id);
+  els.bookmarkSystemBtn.textContent = isBookmarked ? "Unbookmark" : "Bookmark";
+  els.bookmarkSystemBtn.classList.toggle("active-bookmark", isBookmarked);
+}
+
+function renderBookmarksPanel() {
+  if (!els.bookmarksPanel || !els.bookmarksList) return;
+  const systems = state.bookmarks.map((id) => state.systemsById.get(id)).filter(Boolean);
+  if (!systems.length) {
+    els.bookmarksPanel.style.display = "none";
+    return;
+  }
+  els.bookmarksPanel.style.display = "";
+  els.bookmarksList.innerHTML = systems.map((system) =>
+    `<li class="bookmark-item" data-system-id="${system.id}">
+      <span class="bookmark-name">${escapeHtml(system.name)}</span>
+      <span class="bookmark-region">R${system.regionId}</span>
+      <button class="bookmark-remove" data-system-id="${system.id}" title="Remove bookmark" aria-label="Remove bookmark">×</button>
+    </li>`
+  ).join("");
+  els.bookmarksList.querySelectorAll(".bookmark-item").forEach((li) => {
+    li.addEventListener("click", (e) => {
+      if (e.target.classList.contains("bookmark-remove")) return;
+      const system = state.systemsById.get(Number(li.dataset.systemId));
+      if (system) { selectSystem(system); centerOnSystem(system); }
+    });
+  });
+  els.bookmarksList.querySelectorAll(".bookmark-remove").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const system = state.systemsById.get(Number(btn.dataset.systemId));
+      if (system) toggleBookmark(system);
+    });
+  });
+}
+
+function drawBookmarks() {
+  if (!state.bookmarks.length) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const z = state.camera.zoom;
+  ctx.save();
+  for (const id of state.bookmarks) {
+    const system = state.systemsById.get(id);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = 7;
+    // 4-pointed star shape
+    ctx.strokeStyle = "rgba(255, 220, 80, 0.88)";
+    ctx.fillStyle = "rgba(255, 220, 80, 0.14)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
+      const radius = i % 2 === 0 ? r : r * 0.42;
+      const px = p.x + Math.cos(angle) * radius;
+      const py = p.y + Math.sin(angle) * radius;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    if (z > 1.0) {
+      ctx.fillStyle = "rgba(255, 220, 80, 0.82)";
+      ctx.font = `bold 8px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      // Shadow
+      ctx.fillStyle = "rgba(2,8,12,0.70)";
+      ctx.fillText(system.name, p.x + 0.5, p.y - r - 1.5);
+      ctx.fillStyle = "rgba(255, 220, 80, 0.82)";
+      ctx.fillText(system.name, p.x, p.y - r - 2);
+    }
+  }
+  ctx.restore();
+}
+
 // ── System name labels ─────────────────────────────────────────────────────
 
 function drawSystemLabels() {
@@ -2666,9 +2885,11 @@ function closeFindPanel() {
 
 function updateOverlayLegend() {
   if (els.legendRegion) els.legendRegion.style.display = state.showRegionColors ? "" : "none";
+  if (els.legendConstellation) els.legendConstellation.style.display = state.showConstellationColors ? "" : "none";
   els.legendKill.style.display = state.showKills ? "" : "none";
   els.legendAssembly.style.display = state.showAssemblies ? "" : "none";
   els.legendBase.style.display = state.showPlayerBases ? "" : "none";
+  if (els.legendBookmark) els.legendBookmark.style.display = (state.showBookmarks && state.bookmarks.length) ? "" : "none";
 }
 
 function updateTimePresets() {
@@ -2698,6 +2919,11 @@ async function toggleOverlay(name, enabled) {
 function bindOverlayEvents() {
   els.regionColorsToggle?.addEventListener("change", () => {
     state.showRegionColors = els.regionColorsToggle.checked;
+    updateOverlayLegend();
+    draw();
+  });
+  els.constellationColorsToggle?.addEventListener("change", () => {
+    state.showConstellationColors = els.constellationColorsToggle.checked;
     updateOverlayLegend();
     draw();
   });
@@ -2745,6 +2971,10 @@ function bindOverlayEvents() {
     state.killHeatmap = Boolean(els.killHeatmapToggle?.checked);
     draw();
   });
+  els.showDangerRadiusToggle?.addEventListener("change", () => {
+    state.showDangerRadius = Boolean(els.showDangerRadiusToggle?.checked);
+    draw();
+  });
   els.findSystemBtn?.addEventListener("click", () => {
     if (state.findPanelOpen) closeFindPanel();
     else openFindPanel();
@@ -2766,6 +2996,7 @@ function bindOverlayEvents() {
 }
 
 async function init() {
+  loadBookmarks();
   bindEvents();
   bindOverlayEvents();
   updateTimePresets();
@@ -2785,6 +3016,9 @@ async function init() {
     updateRouteActions();
     setStatus("World API unavailable: using demo sector");
   }
+  // Bookmarks panel rendered after systems load so names resolve
+  renderBookmarksPanel();
+  updateOverlayLegend();
   resolveRouteFieldsToNames();
   fitSystems(state.systems);
   // Load gate network eagerly so links appear on the map immediately

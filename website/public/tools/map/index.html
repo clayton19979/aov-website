@@ -33,9 +33,11 @@
           <span><i class="legend-game-gate"></i>Game Gate</span>
           <span class="legend-overlay-items">
             <span id="legendRegion" style="display:none"><i class="legend-region"></i>Regions</span>
+            <span id="legendConstellation" style="display:none"><i class="legend-constellation"></i>Constells</span>
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
             <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
+            <span id="legendBookmark" style="display:none"><i class="legend-bookmark"></i>Bookmarks</span>
           </span>
         </div>
         <aside class="system-card" id="systemCard" aria-live="polite">
@@ -49,6 +51,7 @@
             <button id="setDestination" type="button" disabled>Set Destination</button>
             <button id="setVia" type="button" disabled>Set Via</button>
             <button id="centerSystem" type="button" disabled>Center</button>
+            <button id="bookmarkSystem" type="button" disabled>Bookmark</button>
           </div>
         </aside>
       </section>
@@ -69,6 +72,11 @@
               <input type="checkbox" id="regionColorsToggle" />
               <span class="overlay-dot region-colors-dot"></span>
               Region Colors
+            </label>
+            <label class="overlay-toggle" id="constellationColorsToggleLabel">
+              <input type="checkbox" id="constellationColorsToggle" />
+              <span class="overlay-dot constellation-colors-dot"></span>
+              Constellation Colors
             </label>
             <label class="overlay-toggle" id="killsToggleLabel">
               <input type="checkbox" id="killsToggle" />
@@ -149,6 +157,11 @@
               <span class="overlay-dot" style="width:6px;height:6px;background:linear-gradient(135deg,#ff3020,#ff9020);border-radius:2px;"></span>
               Heatmap mode
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showDangerRadiusLabel">
+              <input type="checkbox" id="showDangerRadius" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,60,60,0.65);border-radius:50%;"></span>
+              Danger reach radius (jump range)
+            </label>
           </div>
           <div id="assemblyStats" class="assembly-stats" style="display:none">
             <div id="assemblyStatsContent" class="assembly-stats-content"></div>
@@ -204,6 +217,7 @@
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
             <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>
+            <label><input id="showBookmarks" type="checkbox" checked /> Show bookmarks on map</label>
           </div>
 
           <button class="primary" type="submit">Calculate</button>
@@ -228,6 +242,14 @@
         </section>
 
         <p class="gate-note" id="gateStatus">Gate network loads automatically when available.</p>
+
+        <section class="bookmarks-panel" id="bookmarksPanel" style="display:none" aria-label="Bookmarked systems">
+          <div class="section-title">
+            <h3>Bookmarks</h3>
+            <button id="clearBookmarks" title="Clear all bookmarks" aria-label="Clear all bookmarks">×</button>
+          </div>
+          <ol id="bookmarksList" class="bookmarks-list"></ol>
+        </section>
       </aside>
     </main>
 
