@@ -9,7 +9,21 @@ describe('useGlitchText', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
+
+  function mockReducedMotion(matches: boolean) {
+    vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })))
+  }
 
   it('returns the original text initially', () => {
     const { result } = renderHook(() => useGlitchText('ARCHITECTS OF THE VOID'))
@@ -45,5 +59,18 @@ describe('useGlitchText', () => {
     const chars = result.current.displayed.split('')
     expect(chars[1]).toBe(' ')
     expect(chars[3]).toBe(' ')
+  })
+
+  it('does not schedule visual glitches when reduced motion is enabled', () => {
+    mockReducedMotion(true)
+
+    const { result } = renderHook(() => useGlitchText('ARCHITECTS OF THE VOID'))
+
+    act(() => {
+      vi.advanceTimersByTime(9000)
+    })
+
+    expect(result.current.displayed).toBe('ARCHITECTS OF THE VOID')
+    expect(result.current.isGlitching).toBe(false)
   })
 })
