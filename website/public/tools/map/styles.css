@@ -1302,6 +1302,103 @@ button.active-bookmark {
   }
 }
 
+/* ── Kill sparkline in system card ──────────────── */
+
+.sys-sparkline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 80, 80, 0.15);
+  background: rgba(255, 40, 40, 0.05);
+}
+
+.sys-sparkline-label {
+  font-size: 0.60rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.sys-sparkline-bars {
+  font-size: 0.82rem;
+  color: rgba(255, 120, 100, 0.80);
+  letter-spacing: 0.04em;
+  font-family: var(--font);
+}
+
+/* ── Danger neighbors panel in system card ──────── */
+
+.danger-neighbors-panel {
+  border: 1px solid rgba(255, 80, 80, 0.18);
+  background: rgba(255, 20, 20, 0.04);
+}
+
+.danger-neighbors-header {
+  padding: 5px 8px 4px;
+  font-size: 0.63rem;
+  color: var(--muted);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 80, 80, 0.10);
+}
+
+.danger-neighbors-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.danger-neighbor-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-bottom: 1px solid rgba(255, 50, 50, 0.07);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.danger-neighbor-item:last-child {
+  border-bottom: 0;
+}
+
+.danger-neighbor-item:hover {
+  background: rgba(255, 50, 50, 0.10);
+}
+
+.danger-neighbor-name {
+  font-size: 0.72rem;
+  color: rgba(255, 200, 200, 0.85);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.danger-neighbor-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.danger-neighbor-count {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: rgba(255, 100, 80, 0.90);
+}
+
+.danger-neighbor-dist {
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
 @media (max-width: 520px) {
   .topbar { left: 10px; right: 10px; top: 10px; }
   .control-panel { padding: 14px; }
