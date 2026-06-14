@@ -32,6 +32,7 @@
           <span><i class="legend-smart-gate"></i>Smart Gate</span>
           <span><i class="legend-game-gate"></i>Game Gate</span>
           <span class="legend-overlay-items">
+            <span id="legendRegion" style="display:none"><i class="legend-region"></i>Regions</span>
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
             <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
@@ -42,6 +43,7 @@
             <span>Select a system</span>
             <strong>Click a star or search by name.</strong>
           </div>
+          <div id="assemblyDetailList" class="asm-detail-list" style="display:none"></div>
           <div class="system-actions">
             <button id="setOrigin" type="button" disabled>Set Origin</button>
             <button id="setDestination" type="button" disabled>Set Destination</button>
@@ -63,6 +65,11 @@
             <button id="refreshOverlays" title="Refresh overlay data" aria-label="Refresh overlay data">↻</button>
           </div>
           <div class="overlay-toggles">
+            <label class="overlay-toggle" id="regionColorsToggleLabel">
+              <input type="checkbox" id="regionColorsToggle" />
+              <span class="overlay-dot region-colors-dot"></span>
+              Region Colors
+            </label>
             <label class="overlay-toggle" id="killsToggleLabel">
               <input type="checkbox" id="killsToggle" />
               <span class="overlay-dot kills-dot"></span>

@@ -942,6 +942,102 @@ input:focus, textarea:focus {
   font-size: 0.72rem;
 }
 
+/* ── Region colors legend dot ────────────────────── */
+
+.legend-region {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: conic-gradient(#f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f87171);
+}
+
+.region-colors-dot {
+  background: conic-gradient(#f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f87171);
+  border-radius: 50%;
+  width: 8px;
+  height: 8px;
+}
+
+/* ── Assembly detail list in system card ──────────── */
+
+.asm-detail-list {
+  display: grid;
+  gap: 3px;
+  max-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: rgba(0,0,0,0.18);
+  padding: 6px 8px;
+}
+
+.asm-detail-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.68rem;
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.asm-detail-item.asm-detail-online {
+  opacity: 1;
+  color: var(--text);
+}
+
+.asm-detail-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.asm-detail-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asm-detail-status {
+  font-size: 0.60rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.asm-detail-item.asm-detail-online .asm-detail-status {
+  color: rgba(97, 213, 199, 0.85);
+}
+
+.asm-detail-more {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-align: center;
+  padding-top: 2px;
+}
+
+/* ── Kill type split in danger panel ─────────────── */
+
+.danger-type-split {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 5px;
+  font-size: 0.60rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+.danger-ship {
+  color: rgba(255, 100, 100, 0.75);
+}
+
+.danger-struct {
+  color: rgba(180, 120, 255, 0.75);
+}
+
 /* ── Responsive ────────────────────────────────── */
 
 @media (max-width: 900px) {

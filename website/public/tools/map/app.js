@@ -57,6 +57,7 @@ const state = {
   showKills: false,
   showAssemblies: false,
   showPlayerBases: false,
+  showRegionColors: false,
   showGameGates: true,
   showSmartGateLinks: true,
   avoidKills: false,
@@ -116,6 +117,9 @@ const els = {
   killShipsOnlyToggle: document.getElementById("killShipsOnly"),
   showKillTrendToggle: document.getElementById("showKillTrend"),
   killHeatmapToggle: document.getElementById("killHeatmap"),
+  regionColorsToggle: document.getElementById("regionColorsToggle"),
+  legendRegion: document.getElementById("legendRegion"),
+  assemblyDetailList: document.getElementById("assemblyDetailList"),
   findSystemBtn: document.getElementById("findSystem"),
   findPanel: document.getElementById("findPanel"),
   findInput: document.getElementById("findInput"),
@@ -371,6 +375,36 @@ function drawBgStars(rect) {
   ctx.restore();
 }
 
+// ── Region color palette ─────────────────────────────────────────────────
+// Deterministic hue from regionId using golden-angle distribution.
+function regionHue(regionId) {
+  return (regionId * 137.508) % 360;
+}
+
+function drawRegionColors() {
+  if (!state.systems.length || !state.bounds) return;
+  const z = state.camera.zoom;
+  if (z < 0.25) return; // too zoomed out — too noisy
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const n = state.systems.length;
+  const visibleStep = n > 10000 ? (z < 0.4 ? 5 : z < 0.7 ? 3 : z < 1.1 ? 2 : 1) : 1;
+  const dotR = z > 1.5 ? 3.2 : z > 0.8 ? 2.0 : 1.2;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let i = 0; i < n; i += visibleStep) {
+    const system = state.systems[i];
+    const p = project(system);
+    if (p.x < -6 || p.y < -6 || p.x > rect.width + 6 || p.y > rect.height + 6) continue;
+    const h = regionHue(system.regionId);
+    ctx.fillStyle = `hsla(${h},80%,60%,0.28)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
 function resizeCanvas() {
   cachedRect = els.canvas.getBoundingClientRect();
   const rect = cachedRect;
@@ -534,6 +568,9 @@ function draw() {
       }
     }
   }
+
+  // ── Region color dots ────────────────────────────────
+  if (state.showRegionColors) drawRegionColors();
 
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
@@ -947,18 +984,39 @@ function selectSystem(system) {
     const n = state.overlayKills.filter((k) => k.systemId === system.id && k.timestamp >= cutoff).length;
     if (n > 0) stats.push(`<span class="sys-stat sys-stat--danger">${n} kill${n > 1 ? "s" : ""} / ${state.overlayKillsTimeWindow}h</span>`);
   }
+
+  let assemblyDetailHtml = "";
   if (state.overlayAssembliesLoaded) {
     const asms = state.overlayAssemblies.filter((a) => a.systemId === system.id);
     if (asms.length) {
       const online = asms.filter((a) => a.online).length;
       stats.push(`<span class="sys-stat sys-stat--assembly">${online}/${asms.length} assembl${asms.length > 1 ? "ies" : "y"}</span>`);
+      const shown = asms.slice(0, 6);
+      assemblyDetailHtml = shown.map((a) =>
+        `<div class="asm-detail-item${a.online ? " asm-detail-online" : ""}">
+          <span class="asm-detail-dot" style="background:${escapeHtml(a.color)}"></span>
+          <span class="asm-detail-name">${escapeHtml(a.name)}</span>
+          <span class="asm-detail-status">${a.online ? "ONLINE" : "OFFLINE"}</span>
+        </div>`
+      ).join("") + (asms.length > 6 ? `<div class="asm-detail-more">+${asms.length - 6} more</div>` : "");
     }
   }
+
   const base = state.overlayPlayerBases.find((b) => b.systemId === system.id);
   if (base) stats.push(`<span class="sys-stat sys-stat--base">Player Base · ${base.assemblyCount} asm</span>`);
 
   const statsHtml = stats.length ? `<div class="sys-stats">${stats.join("")}</div>` : "";
   els.card.querySelector("div:first-child").innerHTML = `<span>Region ${system.regionId} - Constellation ${system.constellationId}</span><strong>${safeName}</strong><span>${system.x.toFixed(1)}, ${system.y.toFixed(1)}, ${system.z.toFixed(1)} LY</span>${statsHtml}`;
+
+  if (els.assemblyDetailList) {
+    if (assemblyDetailHtml) {
+      els.assemblyDetailList.innerHTML = assemblyDetailHtml;
+      els.assemblyDetailList.style.display = "";
+    } else {
+      els.assemblyDetailList.style.display = "none";
+    }
+  }
+
   updateSystemActions();
   updateSelectedRouteStep();
   draw();
@@ -1391,6 +1449,7 @@ function routeShareUrl() {
   if (state.overlayAssembliesOnlineOnly) params.set("ov_ao", "1");
   if (state.showPlayerBases) params.set("ov_b", "1");
   if (state.killHeatmap) params.set("ov_km", "1");
+  if (state.showRegionColors) params.set("ov_rc", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1477,6 +1536,10 @@ function loadUrlParams() {
   if (params.get("ov_km") === "1") {
     state.killHeatmap = true;
     els.killHeatmapToggle && (els.killHeatmapToggle.checked = true);
+  }
+  if (params.get("ov_rc") === "1") {
+    state.showRegionColors = true;
+    els.regionColorsToggle && (els.regionColorsToggle.checked = true);
   }
   updateOverlayLegend();
 }
@@ -1919,15 +1982,20 @@ function updateDangerPanel() {
     const system = state.systemsById.get(systemId);
     const name = escapeHtml(system.name);
     const count = kills.length;
+    const shipN = kills.filter(isShipKill).length;
+    const structN = count - shipN;
     const trend = trendMap.get(systemId);
     let trendHtml = "";
     if (trend) {
       if (trend.recent > trend.older + 1) trendHtml = `<span class="danger-trend danger-trend--up">↑</span>`;
       else if (trend.older > trend.recent + 1) trendHtml = `<span class="danger-trend danger-trend--down">↓</span>`;
     }
+    const typeHtml = structN > 0
+      ? `<span class="danger-type-split"><span class="danger-ship">${shipN}⚔</span><span class="danger-struct">${structN}▪</span></span>`
+      : "";
     return `<li class="danger-item" data-system-id="${systemId}">
       <span class="danger-rank">${idx + 1}</span>
-      <span class="danger-name">${name}</span>
+      <span class="danger-name">${name}${typeHtml}</span>
       <span class="danger-count">${count}${trendHtml}</span>
     </li>`;
   }).join("");
@@ -2466,6 +2534,19 @@ function drawHoverTooltip() {
         ? `${online} online assembl${online !== 1 ? "ies" : "y"}`
         : `${online}/${visible.length} assembl${visible.length !== 1 ? "ies" : "y"}`;
       lines.push({ text: label, color: "rgba(0,180,216,0.90)", bold: false });
+      // Type breakdown when multiple types present
+      const byType = new Map();
+      for (const a of visible) {
+        if (!byType.has(a.label)) byType.set(a.label, { total: 0, online: 0 });
+        const t = byType.get(a.label);
+        t.total++;
+        if (a.online) t.online++;
+      }
+      if (byType.size > 1) {
+        for (const [label, counts] of byType) {
+          lines.push({ text: `  ${label}: ${counts.online}/${counts.total}`, color: "rgba(0,180,216,0.55)", bold: false });
+        }
+      }
     }
   }
 
@@ -2584,6 +2665,7 @@ function closeFindPanel() {
 
 
 function updateOverlayLegend() {
+  if (els.legendRegion) els.legendRegion.style.display = state.showRegionColors ? "" : "none";
   els.legendKill.style.display = state.showKills ? "" : "none";
   els.legendAssembly.style.display = state.showAssemblies ? "" : "none";
   els.legendBase.style.display = state.showPlayerBases ? "" : "none";
@@ -2614,6 +2696,11 @@ async function toggleOverlay(name, enabled) {
 }
 
 function bindOverlayEvents() {
+  els.regionColorsToggle?.addEventListener("change", () => {
+    state.showRegionColors = els.regionColorsToggle.checked;
+    updateOverlayLegend();
+    draw();
+  });
   els.killsToggle.addEventListener("change", () => toggleOverlay("kills", els.killsToggle.checked));
   els.assembliesToggle.addEventListener("change", () => {
     const on = els.assembliesToggle.checked;
