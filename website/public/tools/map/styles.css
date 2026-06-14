@@ -1456,6 +1456,56 @@ button.active-bookmark {
   image-rendering: pixelated;
 }
 
+/* ── Kill escalation panel ─────────────────────── */
+
+.escalating-old {
+  font-size: 0.62rem;
+  color: var(--muted);
+  margin-left: 3px;
+}
+
+.escalating-rising {
+  color: rgba(255, 70, 140, 0.95) !important;
+  font-weight: 700;
+}
+
+.escalating-ratio {
+  font-size: 0.62rem;
+  color: rgba(255, 120, 180, 0.75);
+  margin-left: 2px;
+}
+
+/* ── Nearby player bases panel ─────────────────── */
+
+.nearby-bases-panel {
+  padding: 6px 0 2px 0;
+  border-top: 1px solid var(--line);
+}
+
+.nearby-base-item {
+  cursor: pointer;
+  padding: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.nearby-base-item:hover {
+  background: rgba(241, 184, 75, 0.06);
+}
+
+.nearby-base-item.nearby-base--active .danger-neighbor-name {
+  color: rgba(241, 184, 75, 0.90);
+}
+
+.nearby-base-count {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: rgba(241, 184, 75, 0.80);
+}
+
 @media (max-width: 520px) {
   .topbar { left: 10px; right: 10px; top: 10px; }
   .control-panel { padding: 14px; }

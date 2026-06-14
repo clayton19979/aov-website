@@ -50,6 +50,7 @@
           </div>
           <div id="assemblyDetailList" class="asm-detail-list" style="display:none"></div>
           <div id="dangerNeighborsPanel" class="danger-neighbors-panel" style="display:none"></div>
+          <div id="nearbyBasesPanel" class="nearby-bases-panel" style="display:none"></div>
           <div id="systemNoteWrap" class="system-note-wrap" style="display:none">
             <textarea id="systemNote" class="system-note-input" rows="2" placeholder="Add a note for this system…" maxlength="280"></textarea>
             <button id="saveSystemNote" type="button" class="time-preset system-note-save">Save note</button>
@@ -142,6 +143,11 @@
               <span class="overlay-dot" style="width:8px;height:8px;background:transparent;border:1.5px solid rgba(130,200,255,0.7);border-radius:2px;"></span>
               Constellation Bounds
             </label>
+            <label class="overlay-toggle" id="showGateReachToggleLabel">
+              <input type="checkbox" id="showGateReach" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(0,220,255,0.5);border-radius:50%;"></span>
+              Smart Gate Reach (from selected)
+            </label>
           </div>
           <div id="asmNameFilterRow" class="asm-name-filter-row" style="display:none">
             <span class="overlay-sublabel">Filter assemblies by name</span>
@@ -219,6 +225,17 @@
               <span class="overlay-dot" style="width:6px;height:6px;background:#ffaa40;border-radius:2px;"></span>
               Region kill ranking
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showKillEscalatingLabel">
+              <input type="checkbox" id="showKillEscalating" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff4488;border-radius:50%;"></span>
+              Escalating systems
+            </label>
+          </div>
+          <div id="escalatingPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Escalating <span class="danger-window-label">(rising fast)</span></h3>
+            </div>
+            <ol id="escalatingList" class="danger-list"></ol>
           </div>
           <div id="recentKillsPanel" class="recent-kills-panel" style="display:none">
             <div class="section-title">
@@ -293,6 +310,7 @@
             <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
+            <label><input id="showReachableHighlight" type="checkbox" /> Highlight reachable stars (from selected)</label>
             <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>
             <label><input id="showBookmarks" type="checkbox" checked /> Show bookmarks on map</label>
           </div>
