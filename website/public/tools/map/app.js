@@ -71,6 +71,10 @@ const state = {
   showSystemLabels: false,
   showConstellationColors: false,
   showDangerRadius: false,
+  showConstellationKills: false,
+  showSmartGateHubs: false,
+  autoRefreshKills: false,
+  killMinCount: 1,
   showBookmarks: true,
   bookmarks: [],
 };
@@ -147,6 +151,14 @@ const els = {
   bookmarksPanel: document.getElementById("bookmarksPanel"),
   bookmarksList: document.getElementById("bookmarksList"),
   clearBookmarks: document.getElementById("clearBookmarks"),
+  smartGateHubsToggle: document.getElementById("smartGateHubsToggle"),
+  hubPanel: document.getElementById("hubPanel"),
+  hubList: document.getElementById("hubList"),
+  legendHub: document.getElementById("legendHub"),
+  constellationKillsToggle: document.getElementById("constellationKillsToggle"),
+  constellationKillsLabel: document.getElementById("constellationKillsLabel"),
+  killMinCountInput: document.getElementById("killMinCount"),
+  killAutoRefreshToggle: document.getElementById("killAutoRefresh"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -619,6 +631,7 @@ function draw() {
   drawGateLinks();
   if (state.showJumpRange) drawJumpRangeCircle();
   if (state.showKills) {
+    if (state.showConstellationKills) drawConstellationKillZones();
     if (state.killHeatmap) drawKillHeatmap();
     else drawKillOverlay();
     if (state.showDangerRadius) drawDangerRadius();
@@ -626,6 +639,7 @@ function draw() {
   }
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
+  if (state.showSmartGateHubs) drawSmartGateHubOverlay();
   if (state.showSystemLabels) drawSystemLabels();
   if (state.showBookmarks && state.bookmarks.length) drawBookmarks();
   drawRoute();
@@ -1498,6 +1512,9 @@ function routeShareUrl() {
   if (state.showRegionColors) params.set("ov_rc", "1");
   if (state.showConstellationColors) params.set("ov_cc", "1");
   if (state.showDangerRadius) params.set("ov_dr", "1");
+  if (state.showConstellationKills) params.set("ov_ck", "1");
+  if (state.showSmartGateHubs) params.set("ov_sh", "1");
+  if (state.killMinCount > 1) params.set("ov_kmin", String(state.killMinCount));
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1596,6 +1613,22 @@ function loadUrlParams() {
   if (params.get("ov_dr") === "1") {
     state.showDangerRadius = true;
     els.showDangerRadiusToggle && (els.showDangerRadiusToggle.checked = true);
+  }
+  if (params.get("ov_ck") === "1") {
+    state.showConstellationKills = true;
+    els.constellationKillsToggle && (els.constellationKillsToggle.checked = true);
+  }
+  if (params.get("ov_sh") === "1") {
+    state.showSmartGateHubs = true;
+    els.smartGateHubsToggle && (els.smartGateHubsToggle.checked = true);
+    updateHubPanel();
+  }
+  if (params.has("ov_kmin")) {
+    const min = Number(params.get("ov_kmin"));
+    if (min >= 1 && min <= 999) {
+      state.killMinCount = min;
+      els.killMinCountInput && (els.killMinCountInput.value = String(min));
+    }
   }
   updateOverlayLegend();
 }
@@ -2008,6 +2041,13 @@ function buildKillSystemMap() {
     if (kill.timestamp < cutoff) continue;
     if (!map.has(kill.systemId)) map.set(kill.systemId, []);
     map.get(kill.systemId).push(kill);
+  }
+  // Apply minimum kills filter
+  const minKills = state.killMinCount || 1;
+  if (minKills > 1) {
+    for (const [id, kills] of map) {
+      if (kills.length < minKills) map.delete(id);
+    }
   }
   return map;
 }
@@ -2577,6 +2617,169 @@ function drawPlayerBaseOverlay() {
   ctx.restore();
 }
 
+// ── Overlay: Smart Gate Hubs ───────────────────────────────────────────────
+
+function computeGateHubs(minConnections = 3) {
+  const connectionCount = new Map();
+  for (const gate of state.gates) {
+    if (gate.kind !== "smart") continue;
+    connectionCount.set(gate.from, (connectionCount.get(gate.from) || 0) + 1);
+    connectionCount.set(gate.to, (connectionCount.get(gate.to) || 0) + 1);
+  }
+  return [...connectionCount.entries()]
+    .filter(([, count]) => count >= minConnections)
+    .sort((a, b) => b[1] - a[1]);
+}
+
+function drawSmartGateHubOverlay() {
+  if (!state.gates.length) return;
+  const hubs = computeGateHubs();
+  if (!hubs.length) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const z = state.camera.zoom;
+  ctx.save();
+  for (const [systemId, count] of hubs) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = 6 + Math.min(7, count * 0.8);
+    const intensity = Math.min(1, count / 8);
+    const alpha = 0.55 + intensity * 0.35;
+    // 5-pointed star shape
+    const points = 5;
+    ctx.strokeStyle = `rgba(100, 200, 255, ${alpha})`;
+    ctx.fillStyle = `rgba(100, 200, 255, ${0.07 + intensity * 0.13})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+      const radius = i % 2 === 0 ? r : r * 0.42;
+      const px = p.x + Math.cos(angle) * radius;
+      const py = p.y + Math.sin(angle) * radius;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    if (z > 0.6) {
+      ctx.fillStyle = `rgba(100,200,255,${alpha})`;
+      ctx.font = `bold ${Math.max(7, Math.min(10, r - 1))}px ui-monospace, monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(count), p.x, p.y);
+    }
+  }
+  ctx.restore();
+}
+
+function updateHubPanel() {
+  if (!els.hubPanel || !els.hubList) return;
+  if (!state.showSmartGateHubs) {
+    els.hubPanel.style.display = "none";
+    return;
+  }
+  els.hubPanel.style.display = "";
+  if (!state.gatesLoaded) {
+    els.hubList.innerHTML = '<li class="danger-empty">Loading gate network…</li>';
+    return;
+  }
+  const hubs = computeGateHubs();
+  if (!hubs.length) {
+    els.hubList.innerHTML = '<li class="danger-empty">No hubs found (need smart gate data)</li>';
+    return;
+  }
+  els.hubList.innerHTML = hubs.slice(0, 12).map(([systemId, count], idx) => {
+    const system = state.systemsById.get(systemId);
+    if (!system) return "";
+    return `<li class="danger-item" data-system-id="${systemId}">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="danger-name">${escapeHtml(system.name)}</span>
+      <span class="danger-count">${count} conn</span>
+    </li>`;
+  }).filter(Boolean).join("");
+  els.hubList.querySelectorAll(".danger-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const system = state.systemsById.get(Number(li.dataset.systemId));
+      if (system) { selectSystem(system); centerOnSystem(system); }
+    });
+  });
+}
+
+// ── Overlay: Constellation Kill Zones ─────────────────────────────────────
+
+function buildConstellationKillMap() {
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 60 * 60 * 1000;
+  const map = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    const system = state.systemsById.get(kill.systemId);
+    if (!system) continue;
+    const cid = system.constellationId;
+    map.set(cid, (map.get(cid) || 0) + 1);
+  }
+  return map;
+}
+
+function drawConstellationKillZones() {
+  if (!state.overlayKillsLoaded || !state.overlayKills.length) return;
+  const constellKillMap = buildConstellationKillMap();
+  if (!constellKillMap.size) return;
+  const maxKills = Math.max(...constellKillMap.values());
+  const minKills = state.killMinCount || 1;
+
+  // Group systems by constellation
+  const constellSystems = new Map();
+  for (const system of state.systems) {
+    const cid = system.constellationId;
+    if (!constellSystems.has(cid)) constellSystems.set(cid, []);
+    constellSystems.get(cid).push(system);
+  }
+
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const [cid, killCount] of constellKillMap) {
+    if (killCount < minKills) continue;
+    const systems = constellSystems.get(cid);
+    if (!systems || systems.length < 2) continue;
+    const pts = systems.map((s) => project(s)).filter(
+      (p) => p.x > -rect.width && p.y > -rect.height && p.x < rect.width * 2 && p.y < rect.height * 2
+    );
+    if (!pts.length) continue;
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    const maxDist = Math.max(30, ...pts.map((p) => Math.hypot(p.x - cx, p.y - cy)));
+    const intensity = Math.min(1, killCount / Math.max(1, maxKills));
+    const alpha = 0.04 + intensity * 0.14;
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxDist * 1.4);
+    grd.addColorStop(0,   `rgba(255, 80, 30, ${alpha})`);
+    grd.addColorStop(0.6, `rgba(255, 120, 30, ${alpha * 0.45})`);
+    grd.addColorStop(1,   `rgba(255, 60, 20, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(cx, cy, maxDist * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// ── Kill auto-refresh ──────────────────────────────────────────────────────
+
+let _killRefreshTimer = null;
+
+function setupKillAutoRefresh() {
+  clearInterval(_killRefreshTimer);
+  if (!state.autoRefreshKills || !state.showKills) return;
+  _killRefreshTimer = setInterval(async () => {
+    state.overlayKillsLoaded = false;
+    state.overlayKillsLoading = null;
+    state.overlayKills = [];
+    await ensureKillFeed();
+  }, 5 * 60 * 1000);
+}
+
 // ── Bookmarks ──────────────────────────────────────────────────────────────
 
 const BOOKMARKS_KEY = "frontier-gps.bookmarks.v1";
@@ -2889,6 +3092,7 @@ function updateOverlayLegend() {
   els.legendKill.style.display = state.showKills ? "" : "none";
   els.legendAssembly.style.display = state.showAssemblies ? "" : "none";
   els.legendBase.style.display = state.showPlayerBases ? "" : "none";
+  if (els.legendHub) els.legendHub.style.display = state.showSmartGateHubs ? "" : "none";
   if (els.legendBookmark) els.legendBookmark.style.display = (state.showBookmarks && state.bookmarks.length) ? "" : "none";
 }
 
@@ -2904,6 +3108,7 @@ async function toggleOverlay(name, enabled) {
     els.killTimePanel.style.display = enabled ? "" : "none";
     if (enabled) await ensureKillFeed();
     else updateDangerPanel();
+    setupKillAutoRefresh();
   } else if (name === "assemblies") {
     state.showAssemblies = enabled;
     if (enabled) await ensureAssemblyOverlay();
@@ -2975,6 +3180,32 @@ function bindOverlayEvents() {
     state.showDangerRadius = Boolean(els.showDangerRadiusToggle?.checked);
     draw();
   });
+  els.constellationKillsToggle?.addEventListener("change", () => {
+    state.showConstellationKills = Boolean(els.constellationKillsToggle?.checked);
+    draw();
+  });
+  els.smartGateHubsToggle?.addEventListener("change", () => {
+    state.showSmartGateHubs = Boolean(els.smartGateHubsToggle?.checked);
+    updateOverlayLegend();
+    updateHubPanel();
+    draw();
+  });
+  els.killMinCountInput?.addEventListener("change", () => {
+    const v = Number(els.killMinCountInput.value || 1);
+    state.killMinCount = Math.max(1, Math.min(999, v));
+    updateDangerPanel();
+    draw();
+  });
+  els.killMinCountInput?.addEventListener("input", () => {
+    const v = Number(els.killMinCountInput.value || 1);
+    state.killMinCount = Math.max(1, Math.min(999, v));
+    updateDangerPanel();
+    scheduleDraw();
+  });
+  els.killAutoRefreshToggle?.addEventListener("change", () => {
+    state.autoRefreshKills = Boolean(els.killAutoRefreshToggle?.checked);
+    setupKillAutoRefresh();
+  });
   els.findSystemBtn?.addEventListener("click", () => {
     if (state.findPanelOpen) closeFindPanel();
     else openFindPanel();
@@ -3022,9 +3253,9 @@ async function init() {
   resolveRouteFieldsToNames();
   fitSystems(state.systems);
   // Load gate network eagerly so links appear on the map immediately
-  ensureGateNetwork().catch(() => {});
+  ensureGateNetwork().then(() => { if (state.showSmartGateHubs) updateHubPanel(); }).catch(() => {});
   // Restore overlay data for any overlays enabled via URL params
-  if (state.showKills) ensureKillFeed().catch(() => {});
+  if (state.showKills) { ensureKillFeed().catch(() => {}); setupKillAutoRefresh(); }
   if (state.showAssemblies || state.showPlayerBases) ensureAssemblyOverlay().catch(() => {});
   if (els.origin.value && els.destination.value) calculate();
 }
