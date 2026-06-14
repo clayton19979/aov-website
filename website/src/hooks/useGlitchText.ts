@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react'
 
 const GLITCH_CHARS = '!<>-_\\/[]{}—=+*^?#░▒▓|@#$%'
 
@@ -9,21 +9,62 @@ export type GlitchTextResult = {
   isGlitching: boolean
 }
 
+function subscribeToReducedMotion(onStoreChange: () => void) {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return () => {}
+  }
+
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+  mq.addEventListener('change', onStoreChange)
+  return () => mq.removeEventListener('change', onStoreChange)
+}
+
+function getReducedMotionSnapshot() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false
+  }
+
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 export function useGlitchText(text: string): GlitchTextResult {
   const [displayed, setDisplayed] = useState(text)
   const [isGlitching, setIsGlitching] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
+  const reducedMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    getReducedMotionSnapshot,
+    () => false
+  )
 
   useEffect(() => {
     mountedRef.current = true
 
+    if (reducedMotion) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+
+      return () => {
+        mountedRef.current = false
+        if (timerRef.current) clearTimeout(timerRef.current)
+      }
+    }
+
     function corrupt(original: string): string {
       return original
         .split('')
-        .map(char => {
+        .map((char, index, chars) => {
           if (char === ' ') return ' '
-          return Math.random() > 0.55
+          const previous = chars[index - 1]
+          const next = chars[index + 1]
+          const isWordEdge = index === 0 || index === chars.length - 1 || previous === ' ' || next === ' '
+
+          if (isWordEdge) return char
+
+          return Math.random() > 0.78
             ? GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)]
             : char
         })
@@ -53,7 +94,9 @@ export function useGlitchText(text: string): GlitchTextResult {
       mountedRef.current = false
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [text])
+  }, [text, reducedMotion])
 
-  return { displayed, isGlitching }
+  return reducedMotion
+    ? { displayed: text, isGlitching: false }
+    : { displayed, isGlitching }
 }

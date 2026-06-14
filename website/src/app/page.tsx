@@ -74,9 +74,10 @@ export default function LandingPage() {
         {/* Title */}
         <motion.div {...fadeUp(0.12)} className="flex flex-col items-center gap-3">
           <h1
+            aria-label="ARCHITECTS OF THE VOID"
             className={`glitch-title font-mono text-4xl md:text-6xl lg:text-7xl tracking-widest uppercase text-white/90 ${isGlitching ? 'is-glitching' : ''}`}
           >
-            {displayed}
+            <span aria-hidden="true">{displayed}</span>
           </h1>
           <p className="font-mono text-sm tracking-widest text-void-teal/60 italic">
             &ldquo;We were not chosen. We survived.&rdquo;
