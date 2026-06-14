@@ -77,6 +77,9 @@ const state = {
   killMinCount: 1,
   showBookmarks: true,
   bookmarks: [],
+  killPlayerFilter: "",
+  showRecentKills: false,
+  showRegionKills: false,
 };
 
 const els = {
@@ -159,6 +162,16 @@ const els = {
   constellationKillsLabel: document.getElementById("constellationKillsLabel"),
   killMinCountInput: document.getElementById("killMinCount"),
   killAutoRefreshToggle: document.getElementById("killAutoRefresh"),
+  killPlayerFilterInput: document.getElementById("killPlayerFilter"),
+  clearPlayerFilterBtn: document.getElementById("clearPlayerFilter"),
+  showRecentKillsToggle: document.getElementById("showRecentKills"),
+  showRegionKillsToggle: document.getElementById("showRegionKills"),
+  recentKillsPanel: document.getElementById("recentKillsPanel"),
+  recentKillsList: document.getElementById("recentKillsList"),
+  recentKillsCount: document.getElementById("recentKillsCount"),
+  regionKillPanel: document.getElementById("regionKillPanel"),
+  regionKillList: document.getElementById("regionKillList"),
+  regionKillWindowLabel: document.getElementById("regionKillWindowLabel"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -1515,6 +1528,9 @@ function routeShareUrl() {
   if (state.showConstellationKills) params.set("ov_ck", "1");
   if (state.showSmartGateHubs) params.set("ov_sh", "1");
   if (state.killMinCount > 1) params.set("ov_kmin", String(state.killMinCount));
+  if (state.killPlayerFilter) params.set("ov_kpf", state.killPlayerFilter);
+  if (state.showRecentKills) params.set("ov_rk", "1");
+  if (state.showRegionKills) params.set("ov_rgk", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1629,6 +1645,18 @@ function loadUrlParams() {
       state.killMinCount = min;
       els.killMinCountInput && (els.killMinCountInput.value = String(min));
     }
+  }
+  if (params.has("ov_kpf")) {
+    state.killPlayerFilter = params.get("ov_kpf");
+    els.killPlayerFilterInput && (els.killPlayerFilterInput.value = state.killPlayerFilter);
+  }
+  if (params.get("ov_rk") === "1") {
+    state.showRecentKills = true;
+    els.showRecentKillsToggle && (els.showRecentKillsToggle.checked = true);
+  }
+  if (params.get("ov_rgk") === "1") {
+    state.showRegionKills = true;
+    els.showRegionKillsToggle && (els.showRegionKillsToggle.checked = true);
   }
   updateOverlayLegend();
 }
@@ -2034,11 +2062,19 @@ async function fetchKillFeed() {
   return { kills, source: "sui-events" };
 }
 
+function killPassesPlayerFilter(kill) {
+  const f = state.killPlayerFilter.trim().toLowerCase();
+  if (!f) return true;
+  return String(kill.killerId ?? "").toLowerCase().includes(f) ||
+         String(kill.victimId ?? "").toLowerCase().includes(f);
+}
+
 function buildKillSystemMap() {
   const cutoff = Date.now() - state.overlayKillsTimeWindow * 60 * 60 * 1000;
   const map = new Map();
   for (const kill of state.overlayKills) {
     if (kill.timestamp < cutoff) continue;
+    if (!killPassesPlayerFilter(kill)) continue;
     if (!map.has(kill.systemId)) map.set(kill.systemId, []);
     map.get(kill.systemId).push(kill);
   }
@@ -2114,6 +2150,109 @@ function updateDangerPanel() {
     li.addEventListener("click", () => {
       const system = state.systemsById.get(Number(li.dataset.systemId));
       if (system) { selectSystem(system); centerOnSystem(system); }
+    });
+  });
+  updateRecentKillsPanel();
+  updateRegionKillPanel();
+}
+
+function updateRecentKillsPanel() {
+  if (!els.recentKillsPanel || !els.recentKillsList) return;
+  if (!state.showKills || !state.overlayKillsLoaded || !state.showRecentKills) {
+    els.recentKillsPanel.style.display = "none";
+    return;
+  }
+  els.recentKillsPanel.style.display = "";
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+  const filtered = state.overlayKills
+    .filter((k) => k.timestamp >= cutoff && killPassesPlayerFilter(k))
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 20);
+
+  if (els.recentKillsCount) {
+    els.recentKillsCount.textContent = `(${filtered.length} shown)`;
+  }
+  if (!filtered.length) {
+    els.recentKillsList.innerHTML = '<li class="danger-empty">No kills in this time window</li>';
+    return;
+  }
+  const now = Date.now();
+  els.recentKillsList.innerHTML = filtered.map((kill) => {
+    const system = state.systemsById.get(kill.systemId);
+    const systemName = system ? escapeHtml(system.name) : `#${kill.systemId}`;
+    const minsAgo = Math.round((now - kill.timestamp) / 60000);
+    const timeStr = minsAgo < 60
+      ? `${minsAgo}m ago`
+      : `${Math.round(minsAgo / 60)}h ago`;
+    const isShip = isShipKill(kill);
+    const typeIcon = isShip ? "⚔" : "▪";
+    const typeColor = isShip ? "rgba(255,100,100,0.9)" : "rgba(160,100,255,0.9)";
+    const kidShort = kill.killerId ? kill.killerId.slice(0, 8) + "…" : "?";
+    return `<li class="recent-kill-item" data-system-id="${kill.systemId}">
+      <span class="recent-kill-type" style="color:${typeColor}">${typeIcon}</span>
+      <span class="recent-kill-system">${systemName}</span>
+      <span class="recent-kill-meta">
+        <span class="recent-kill-killer" title="${escapeHtml(kill.killerId ?? "")}">${escapeHtml(kidShort)}</span>
+        <span class="recent-kill-time">${timeStr}</span>
+      </span>
+    </li>`;
+  }).join("");
+
+  els.recentKillsList.querySelectorAll(".recent-kill-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const system = state.systemsById.get(Number(li.dataset.systemId));
+      if (system) { selectSystem(system); centerOnSystem(system); }
+    });
+  });
+}
+
+function updateRegionKillPanel() {
+  if (!els.regionKillPanel || !els.regionKillList) return;
+  if (!state.showKills || !state.overlayKillsLoaded || !state.showRegionKills) {
+    els.regionKillPanel.style.display = "none";
+    return;
+  }
+  els.regionKillPanel.style.display = "";
+  const w = state.overlayKillsTimeWindow;
+  if (els.regionKillWindowLabel) {
+    els.regionKillWindowLabel.textContent = w < 1 ? `/ ${Math.round(w * 60)}m` : w >= 24 ? `/ ${Math.round(w / 24)}d` : `/ ${w}h`;
+  }
+  const cutoff = Date.now() - w * 3_600_000;
+  const byRegion = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    if (!killPassesPlayerFilter(kill)) continue;
+    const system = state.systemsById.get(kill.systemId);
+    if (!system) continue;
+    const rid = system.regionId;
+    if (!byRegion.has(rid)) byRegion.set(rid, { ships: 0, structs: 0, systems: new Set() });
+    const r = byRegion.get(rid);
+    if (isShipKill(kill)) r.ships++; else r.structs++;
+    r.systems.add(kill.systemId);
+  }
+  const sorted = [...byRegion.entries()].sort((a, b) => (b[1].ships + b[1].structs) - (a[1].ships + a[1].structs)).slice(0, 10);
+  if (!sorted.length) {
+    els.regionKillList.innerHTML = '<li class="danger-empty">No kills in this time window</li>';
+    return;
+  }
+  els.regionKillList.innerHTML = sorted.map(([rid, stats], idx) => {
+    const total = stats.ships + stats.structs;
+    const sysCount = stats.systems.size;
+    const typeHtml = stats.structs > 0
+      ? `<span class="danger-type-split"><span class="danger-ship">${stats.ships}⚔</span><span class="danger-struct">${stats.structs}▪</span></span>`
+      : "";
+    return `<li class="danger-item" data-region-id="${rid}">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="danger-name">R${rid}${typeHtml}<span class="region-sys-count"> · ${sysCount} sys</span></span>
+      <span class="danger-count">${total}</span>
+    </li>`;
+  }).join("");
+
+  els.regionKillList.querySelectorAll(".danger-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const rid = Number(li.dataset.regionId);
+      const regionSystems = state.systems.filter((s) => s.regionId === rid);
+      if (regionSystems.length) fitSystems(regionSystems);
     });
   });
 }
@@ -3205,6 +3344,25 @@ function bindOverlayEvents() {
   els.killAutoRefreshToggle?.addEventListener("change", () => {
     state.autoRefreshKills = Boolean(els.killAutoRefreshToggle?.checked);
     setupKillAutoRefresh();
+  });
+  els.killPlayerFilterInput?.addEventListener("input", () => {
+    state.killPlayerFilter = els.killPlayerFilterInput.value;
+    updateDangerPanel();
+    scheduleDraw();
+  });
+  els.clearPlayerFilterBtn?.addEventListener("click", () => {
+    state.killPlayerFilter = "";
+    if (els.killPlayerFilterInput) els.killPlayerFilterInput.value = "";
+    updateDangerPanel();
+    scheduleDraw();
+  });
+  els.showRecentKillsToggle?.addEventListener("change", () => {
+    state.showRecentKills = Boolean(els.showRecentKillsToggle?.checked);
+    updateRecentKillsPanel();
+  });
+  els.showRegionKillsToggle?.addEventListener("change", () => {
+    state.showRegionKills = Boolean(els.showRegionKillsToggle?.checked);
+    updateRegionKillPanel();
   });
   els.findSystemBtn?.addEventListener("click", () => {
     if (state.findPanelOpen) closeFindPanel();
