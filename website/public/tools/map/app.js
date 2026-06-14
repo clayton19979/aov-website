@@ -87,6 +87,10 @@ const state = {
   showReachableHighlight: false,
   showKillEscalating: false,
   showGateReach: false,
+  showTerritoryOwnership: false,
+  showKillFlash: false,
+  showKillHourly: false,
+  showCoverageRadius: false,
 };
 
 const els = {
@@ -196,6 +200,14 @@ const els = {
   escalatingList: document.getElementById("escalatingList"),
   nearbyBasesPanel: document.getElementById("nearbyBasesPanel"),
   showGateReachToggle: document.getElementById("showGateReach"),
+  showTerritoryOwnershipToggle: document.getElementById("showTerritoryOwnership"),
+  showCoverageRadiusToggle: document.getElementById("showCoverageRadius"),
+  showKillFlashToggle: document.getElementById("showKillFlash"),
+  showKillHourlyToggle: document.getElementById("showKillHourly"),
+  territoryPanel: document.getElementById("territoryPanel"),
+  territoryList: document.getElementById("territoryList"),
+  killHourlyPanel: document.getElementById("killHourlyPanel"),
+  killHourlyChart: document.getElementById("killHourlyChart"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -679,7 +691,10 @@ function draw() {
   if (state.showGateReach && state.selected) drawGateReachOverlay();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
+  if (state.showCoverageRadius && state.showPlayerBases) drawCoverageRadiusOverlay();
+  if (state.showTerritoryOwnership && state.overlayAssembliesLoaded) drawTerritoryOverlay();
   if (state.showSmartGateHubs) drawSmartGateHubOverlay();
+  if (state.showKills && state.showKillFlash && state.overlayKillsLoaded) drawKillFlashOverlay();
   if (state.showSystemLabels) drawSystemLabels();
   if (state.showBookmarks && state.bookmarks.length) drawBookmarks();
   drawSystemNoteMarkers();
@@ -2257,6 +2272,7 @@ function updateDangerPanel() {
   updateRecentKillsPanel();
   updateRegionKillPanel();
   updateEscalatingPanel();
+  updateKillHourlyPanel();
 }
 
 function updateRecentKillsPanel() {
@@ -2781,6 +2797,7 @@ async function fetchAssemblyOverlay() {
         online,
         name: a.metadata?.name || a._typeLabel,
         connectedCount,
+        ownerId: a.owner_id || a.character_id || a.owner?.item_id || a.character?.item_id || "",
       };
     })
     .filter((a) => a.systemId);
@@ -2860,6 +2877,7 @@ async function ensureAssemblyOverlay() {
       state.overlayAssembliesLoaded = true;
       state.overlayAssembliesLoading = null;
       updateAssemblyStats();
+      updateTerritoryPanel();
       if (state.selected) updateNearbyBasesPanel(state.selected);
       draw();
     }
@@ -4094,12 +4112,266 @@ function bindNewOverlayEvents() {
   });
 }
 
+// ── Territory Ownership Overlay ────────────────────────────────────────────
+
+const OWNER_HUES = [200, 30, 150, 60, 270, 10, 330, 180, 240, 100, 300, 45];
+const ownerColorMap = new Map();
+let ownerColorIndex = 0;
+
+function getOwnerColor(ownerId, alpha = 0.7) {
+  if (!ownerColorMap.has(ownerId)) {
+    const hue = OWNER_HUES[ownerColorIndex % OWNER_HUES.length];
+    ownerColorMap.set(ownerId, hue);
+    ownerColorIndex++;
+  }
+  const hue = ownerColorMap.get(ownerId);
+  return `hsla(${hue}, 75%, 58%, ${alpha})`;
+}
+
+function buildTerritoryMap() {
+  const bySystem = new Map();
+  for (const asm of state.overlayAssemblies) {
+    const oid = asm.ownerId || "unknown";
+    if (!bySystem.has(asm.systemId)) bySystem.set(asm.systemId, new Map());
+    const owners = bySystem.get(asm.systemId);
+    owners.set(oid, (owners.get(oid) || 0) + 1);
+  }
+  const result = new Map();
+  for (const [systemId, owners] of bySystem) {
+    let topOwner = "unknown", topCount = 0;
+    for (const [oid, count] of owners) {
+      if (count > topCount) { topOwner = oid; topCount = count; }
+    }
+    result.set(systemId, { ownerId: topOwner, count: topCount });
+  }
+  return result;
+}
+
+function drawTerritoryOverlay() {
+  if (!state.overlayAssemblies.length) return;
+  const territoryMap = buildTerritoryMap();
+  if (!territoryMap.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const [systemId, { ownerId }] of territoryMap) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -20 || p.y < -20 || p.x > rect.width + 20 || p.y > rect.height + 20) continue;
+    const r = 14;
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+    grd.addColorStop(0, getOwnerColor(ownerId, 0.25));
+    grd.addColorStop(1, getOwnerColor(ownerId, 0));
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+function updateTerritoryPanel() {
+  if (!els.territoryPanel || !els.territoryList) return;
+  if (!state.showTerritoryOwnership || !state.overlayAssembliesLoaded) {
+    els.territoryPanel.style.display = "none";
+    return;
+  }
+  els.territoryPanel.style.display = "";
+  const ownerAsms = new Map();
+  const ownerSystems = new Map();
+  for (const asm of state.overlayAssemblies) {
+    const oid = asm.ownerId || "unknown";
+    ownerAsms.set(oid, (ownerAsms.get(oid) || 0) + 1);
+    if (!ownerSystems.has(oid)) ownerSystems.set(oid, new Set());
+    ownerSystems.get(oid).add(asm.systemId);
+  }
+  const owners = [...ownerAsms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  if (!owners.length) {
+    els.territoryList.innerHTML = '<li class="danger-empty">No assembly ownership data found</li>';
+    return;
+  }
+  els.territoryList.innerHTML = owners.map(([oid, asmCount], idx) => {
+    const sysCount = ownerSystems.get(oid)?.size || 0;
+    const shortId = oid === "unknown" ? "Unknown" : `${oid.slice(0, 6)}…${oid.slice(-4)}`;
+    const colorDot = getOwnerColor(oid, 1);
+    return `<li class="danger-item territory-item" data-owner-id="${escapeHtml(oid)}">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="territory-dot" style="background:${colorDot}"></span>
+      <span class="danger-name territory-name" title="${escapeHtml(oid)}">${escapeHtml(shortId)}</span>
+      <span class="danger-count">${asmCount}⬡ <span class="territory-sys">${sysCount}✦</span></span>
+    </li>`;
+  }).join("");
+}
+
+// ── Kill Flash Overlay ─────────────────────────────────────────────────────
+
+let killFlashAnimFrame = null;
+
+function drawKillFlashOverlay() {
+  const realNow = Date.now();
+  const FLASH_WINDOW_MS = 15 * 60 * 1000;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const recent = state.overlayKills.filter((k) => realNow - k.timestamp < FLASH_WINDOW_MS);
+  if (!recent.length) return;
+  ctx.save();
+  for (const kill of recent) {
+    const system = state.systemsById.get(kill.systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const ageFrac = (realNow - kill.timestamp) / FLASH_WINDOW_MS;
+    const baseR = 3 + ageFrac * 18;
+    const alpha = Math.max(0, 0.7 - ageFrac * 0.7);
+    ctx.strokeStyle = `rgba(255, 50, 50, ${alpha})`;
+    ctx.lineWidth = 1.5 - ageFrac;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, baseR, 0, Math.PI * 2);
+    ctx.stroke();
+    if (ageFrac < 0.15) {
+      const innerAlpha = Math.max(0, 0.85 - ageFrac * 5);
+      ctx.fillStyle = `rgba(255, 80, 40, ${innerAlpha})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function startKillFlashAnimation() {
+  if (killFlashAnimFrame) return;
+  const step = () => {
+    if (!state.showKillFlash || !state.showKills) { killFlashAnimFrame = null; return; }
+    const now = Date.now();
+    const hasRecent = state.overlayKills.some((k) => now - k.timestamp < 15 * 60 * 1000);
+    if (hasRecent) scheduleDraw();
+    killFlashAnimFrame = requestAnimationFrame(step);
+  };
+  killFlashAnimFrame = requestAnimationFrame(step);
+}
+
+// ── Kill Hourly Distribution Panel ────────────────────────────────────────
+
+function buildKillHourlyDistribution() {
+  const hours = new Array(24).fill(0);
+  const cutoff = Date.now() - 7 * 24 * 3_600_000;
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    const h = new Date(kill.timestamp).getUTCHours();
+    hours[h]++;
+  }
+  return hours;
+}
+
+function updateKillHourlyPanel() {
+  if (!els.killHourlyPanel || !els.killHourlyChart) return;
+  if (!state.showKills || !state.overlayKillsLoaded || !state.showKillHourly) {
+    els.killHourlyPanel.style.display = "none";
+    return;
+  }
+  els.killHourlyPanel.style.display = "";
+  const dist = buildKillHourlyDistribution();
+  const max = Math.max(...dist, 1);
+  const peakHour = dist.indexOf(Math.max(...dist));
+  const total = dist.reduce((s, n) => s + n, 0);
+  els.killHourlyChart.innerHTML = `
+    <div class="kill-hourly-bars">
+      ${dist.map((count, h) => {
+        const pct = Math.round((count / max) * 100);
+        const isPeak = h === peakHour && count > 0;
+        return `<div class="kill-hourly-bar-wrap" title="${h}:00 UTC — ${count} kill${count !== 1 ? "s" : ""}">
+          <div class="kill-hourly-bar${isPeak ? " kill-hourly-bar--peak" : ""}" style="height:${Math.max(2, pct)}%"></div>
+          ${h % 6 === 0 ? `<span class="kill-hourly-label">${h}h</span>` : ""}
+        </div>`;
+      }).join("")}
+    </div>
+    ${total > 0
+      ? `<div class="kill-hourly-peak">Peak: ${peakHour}:00–${(peakHour + 1) % 24}:00 UTC · ${dist[peakHour]} kill${dist[peakHour] !== 1 ? "s" : ""}</div>`
+      : `<div class="kill-hourly-peak">No kill data in last 7 days</div>`
+    }`;
+}
+
+// ── Coverage Radius Overlay ────────────────────────────────────────────────
+
+function drawCoverageRadiusOverlay() {
+  if (!state.overlayPlayerBases.length || !state.bounds) return;
+  const range = Number(els.jumpRange?.value || 120);
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  const width = Math.max(1, state.bounds.maxX - state.bounds.minX);
+  const heightZ = Math.max(1, state.bounds.maxZ - state.bounds.minZ);
+  const baseScale = Math.min(rect.width / width, rect.height / heightZ) * 0.84;
+  const radiusPx = range * baseScale * state.camera.zoom;
+  if (radiusPx < 2) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const base of state.overlayPlayerBases) {
+    const system = state.systemsById.get(base.systemId);
+    if (!system) continue;
+    const p = project(system);
+    const d = radiusPx + 20;
+    if (p.x < -d || p.y < -d || p.x > rect.width + d || p.y > rect.height + d) continue;
+    const active = base.onlineCount > 0;
+    const fillAlpha = active ? 0.07 : 0.03;
+    const strokeAlpha = active ? 0.20 : 0.08;
+    const grd = ctx.createRadialGradient(p.x, p.y, radiusPx * 0.5, p.x, p.y, radiusPx);
+    grd.addColorStop(0, `rgba(241, 184, 75, 0)`);
+    grd.addColorStop(0.8, `rgba(241, 184, 75, ${fillAlpha})`);
+    grd.addColorStop(1, `rgba(241, 184, 75, 0)`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(241, 184, 75, ${strokeAlpha})`;
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 7]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.restore();
+}
+
+// ── New feature event bindings ─────────────────────────────────────────────
+
+function bindFeatureOverlayEvents() {
+  els.showTerritoryOwnershipToggle?.addEventListener("change", () => {
+    state.showTerritoryOwnership = els.showTerritoryOwnershipToggle.checked;
+    if (state.showTerritoryOwnership && !state.overlayAssembliesLoaded) {
+      ensureAssemblyOverlay().catch(() => {});
+    }
+    updateTerritoryPanel();
+    scheduleDraw();
+  });
+
+  els.showCoverageRadiusToggle?.addEventListener("change", () => {
+    state.showCoverageRadius = els.showCoverageRadiusToggle.checked;
+    scheduleDraw();
+  });
+
+  els.showKillFlashToggle?.addEventListener("change", () => {
+    state.showKillFlash = els.showKillFlashToggle.checked;
+    if (state.showKillFlash) startKillFlashAnimation();
+    else if (killFlashAnimFrame) { cancelAnimationFrame(killFlashAnimFrame); killFlashAnimFrame = null; }
+    scheduleDraw();
+  });
+
+  els.showKillHourlyToggle?.addEventListener("change", () => {
+    state.showKillHourly = els.showKillHourlyToggle.checked;
+    updateKillHourlyPanel();
+  });
+}
+
 async function init() {
   loadBookmarks();
   loadSystemNotes();
   bindEvents();
   bindOverlayEvents();
   bindNewOverlayEvents();
+  bindFeatureOverlayEvents();
   updateTimePresets();
   loadUrlParams();
   updateRangePresets();
