@@ -110,7 +110,7 @@ export function routeMetadata(path: RoutePath): Metadata {
       type: 'website',
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
     },
@@ -140,7 +140,7 @@ export function toolMetadata(slug: string): Metadata {
       type: 'website',
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title: `${tool.name} - AoV`,
       description: tool.description,
     },

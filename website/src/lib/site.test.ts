@@ -30,6 +30,7 @@ describe('site metadata', () => {
   it('marks protected routes as noindex', () => {
     expect(routeMetadata('/doctrine')).toMatchObject({
       robots: { index: false, follow: false },
+      twitter: { card: 'summary_large_image' },
       description: 'Canonical AoV beliefs, sacred fragments, and compressed operational phrases.',
     })
   })
