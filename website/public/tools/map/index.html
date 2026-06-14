@@ -38,8 +38,8 @@
             <span id="legendKill" style="display:none"><i class="legend-kill"></i>Kills</span>
             <span id="legendAssembly" style="display:none"><i class="legend-assembly"></i>Assembly</span>
             <span id="legendBase" style="display:none"><i class="legend-base"></i>Base</span>
-            <span id="legendHub" style="display:none"><i class="legend-hub"></i>Hubs</span>
-            <span id="legendBookmark" style="display:none"><i class="legend-bookmark"></i>Bookmarks</span>
+            <span id="legendReach" style="display:none"><i class="legend-reach"></i>Reach</span>
+            <span id="legendTerritory" style="display:none"><i class="legend-territory"></i>Territory</span>
           </span>
         </div>
         <canvas id="minimap" width="160" height="110" aria-label="Map overview minimap" title="Minimap — click to navigate"></canvas>
@@ -148,6 +148,28 @@
               <span class="overlay-dot" style="width:6px;height:6px;background:rgba(120,130,160,0.8);border-radius:2px;"></span>
               Offline assemblies panel
             </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="hubPanelToggleLabel">
+              <input type="checkbox" id="showHubPanel" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(0,200,180,0.8);border-radius:2px;"></span>
+              Assembly hubs panel
+            </label>
+            <label class="overlay-toggle" id="territoryToggleLabel">
+              <input type="checkbox" id="territoryToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:hsla(200,65%,58%,0.7);border-radius:2px;"></span>
+              Territory (assembly ownership)
+            </label>
+            <label class="overlay-toggle" id="reachabilityToggleLabel">
+              <input type="checkbox" id="reachabilityToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(68,255,160,0.75);border-radius:50%;"></span>
+              Jump Reachability
+            </label>
+            <div id="reachabilityPanel" style="display:none">
+              <div class="time-presets" style="margin-top:4px">
+                <button type="button" class="time-preset reach-hop-btn active" data-hops="1">1 hop</button>
+                <button type="button" class="time-preset reach-hop-btn" data-hops="2">2 hops</button>
+                <button type="button" class="time-preset reach-hop-btn" data-hops="3">3 hops</button>
+              </div>
+            </div>
           </div>
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>
@@ -214,6 +236,12 @@
               <h3>Kills by Region <span id="regionStatsPanelLabel" class="danger-window-label"></span></h3>
             </div>
             <ol id="regionStatsList" class="danger-list"></ol>
+          </div>
+          <div id="hubPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Assembly Hubs</h3>
+            </div>
+            <ol id="hubList" class="danger-list"></ol>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>

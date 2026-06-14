@@ -1742,3 +1742,43 @@ button.active-bookmark {
 .heatmap-dot {
   background: radial-gradient(circle, rgba(255,112,32,0.9) 0%, rgba(255,60,10,0.4) 70%, transparent 100%);
 }
+
+/* ── v4: Kill activity timeline bar ────────────── */
+
+.kill-timeline {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 14px;
+  margin-top: 6px;
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 80, 80, 0.15);
+  background: rgba(255, 50, 50, 0.04);
+  border-radius: 2px;
+}
+
+.ktl-bar {
+  flex: 1;
+  min-width: 1px;
+  border-radius: 1px 1px 0 0;
+  transition: height 0.1s;
+}
+
+/* ── v4: Legend extras ──────────────────────────── */
+
+.legend-reach {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(68, 255, 160, 0.70);
+  box-shadow: 0 0 4px rgba(68, 255, 160, 0.4);
+}
+
+.legend-territory {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: hsla(200, 65%, 58%, 0.65);
+}
