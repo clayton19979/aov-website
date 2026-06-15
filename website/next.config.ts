@@ -14,9 +14,11 @@ const securityHeaders = [
       // Theme init script in layout.tsx requires unsafe-inline; migrate to nonce to remove this
       "script-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
-      // EVE Frontier World API (star map, overlays) + Sui RPC endpoints — update if endpoints change
-      "connect-src 'self' https://*.evefrontier.com https://*.mystenlabs.com https://*.sui.io wss://*.sui.io",
-      "frame-src 'self'",
+      // EVE Frontier World API (star map, overlays) + Sui RPC/GraphQL + MVR
+      // (mystenlabs) + Slush wallet (BaseOps wallet connect). Update if endpoints change.
+      "connect-src 'self' https://*.evefrontier.com https://*.mystenlabs.com https://*.sui.io wss://*.sui.io https://*.slush.app wss://*.slush.app",
+      // Slush web wallet may open in a frame for connect/sign flows
+      "frame-src 'self' https://*.slush.app",
       "font-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
