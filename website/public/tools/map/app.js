@@ -1,4 +1,4 @@
-const API_BASE = "https://world-api-stillness.live.tech.evefrontier.com/v2";
+const API_BASE = "https://world-api-stillness.live.pub.evefrontier.com/v2";
 const GATE_NETWORK_URL = "./data/gates.json";
 const SUI_GRAPHQL_URL = "https://graphql.testnet.sui.io/graphql";
 const SUI_RPC_URL = "https://fullnode.testnet.sui.io:443";
@@ -69,24 +69,9 @@ const state = {
   showKillTrend: true,
   killHeatmap: false,
   showSystemLabels: false,
-  // New features
-  showHotPanel: false,
-  showContested: false,
-  showOfflinePanel: false,
-  killTimeOffset: 0,       // hours to shift the kill window back from "now"
   showKillHeatmap: false,
-  showAssemblyLabels: false,
-  avoidContested: false,
-  showRegionStats: false,
-  // v4 features
-  showReachability: false,
-  reachabilityMaxHops: 1,
-  showTerritory: false,
-  showHubPanel: false,
-  // v5 features
-  showBattles: false,
-  showRegionShading: false,
-  walletFilterAddress: "",
+  showRecentKillsFeed: false,
+  avoidPlayerBases: false,
 };
 
 const els = {
@@ -152,44 +137,12 @@ const els = {
   showSystemLabelsToggle: document.getElementById("showSystemLabels"),
   asmTypePanel: document.getElementById("asmTypePanel"),
   asmTypeChecks: document.querySelectorAll(".asm-type-check"),
-  // New feature elements
-  showHotPanelToggle: document.getElementById("showHotPanel"),
-  showContestedToggle: document.getElementById("showContested"),
-  showOfflinePanelToggle: document.getElementById("showOfflinePanelToggle"),
-  timeOffsetRow: document.getElementById("timeOffsetRow"),
-  killTimeOffsetSlider: document.getElementById("killTimeOffset"),
-  killOffsetLabel: document.getElementById("killOffsetLabel"),
-  hotPanel: document.getElementById("hotPanel"),
-  hotList: document.getElementById("hotList"),
-  hotPanelWindowLabel: document.getElementById("hotPanelWindowLabel"),
-  contestedPanel: document.getElementById("contestedPanel"),
-  contestedList: document.getElementById("contestedList"),
-  offlinePanel: document.getElementById("offlinePanel"),
-  offlineList: document.getElementById("offlineList"),
-  offlinePanelClose: document.getElementById("offlinePanelClose"),
-  showKillHeatmapToggle: document.getElementById("showKillHeatmap"),
-  showAssemblyLabelsToggle: document.getElementById("showAssemblyLabels"),
-  avoidContestedToggle: document.getElementById("avoidContested"),
-  showRegionStatsToggle: document.getElementById("showRegionStats"),
-  regionStatsPanel: document.getElementById("regionStatsPanel"),
-  regionStatsList: document.getElementById("regionStatsList"),
-  regionStatsPanelLabel: document.getElementById("regionStatsPanelLabel"),
-  // v4 elements
-  reachabilityToggle: document.getElementById("reachabilityToggle"),
-  reachabilityPanel: document.getElementById("reachabilityPanel"),
-  reachabilityHopBtns: document.querySelectorAll(".reach-hop-btn"),
-  territoryToggle: document.getElementById("territoryToggle"),
-  hubPanelToggle: document.getElementById("showHubPanel"),
-  hubPanel: document.getElementById("hubPanel"),
-  hubList: document.getElementById("hubList"),
-  // v5 elements
-  battlesToggle: document.getElementById("battlesToggle"),
-  battlesPanel: document.getElementById("battlesPanel"),
-  battlesList: document.getElementById("battlesList"),
-  regionShadingToggle: document.getElementById("regionShadingToggle"),
-  walletFilterRow: document.getElementById("walletFilterRow"),
-  walletFilterInput: document.getElementById("walletFilterInput"),
-  walletFilterClear: document.getElementById("walletFilterClear"),
+  killHeatmapToggle: document.getElementById("killHeatmapToggle"),
+  recentKillsFeedToggle: document.getElementById("recentKillsFeedToggle"),
+  avoidPlayerBasesToggle: document.getElementById("avoidPlayerBases"),
+  killsFeedPanel: document.getElementById("killsFeedPanel"),
+  killsFeedList: document.getElementById("killsFeedList"),
+  killsFeedCount: document.getElementById("killsFeedCount"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -1581,21 +1534,13 @@ function routeShareUrl() {
   if (state.overlayKillsTimeWindow !== 24) params.set("ov_kh", String(state.overlayKillsTimeWindow));
   if (state.showKillLabels) params.set("ov_kl", "1");
   if (state.showKillShipsOnly) params.set("ov_ks", "1");
-  if (!state.showKillTrend) params.set("ov_kt", "0");
+  if (state.showKillHeatmap) params.set("ov_km", "1");
+  if (state.showRecentKillsFeed) params.set("ov_kf", "1");
   if (state.showAssemblies) params.set("ov_a", "1");
   if (state.overlayAssembliesOnlineOnly) params.set("ov_ao", "1");
   if (state.showPlayerBases) params.set("ov_b", "1");
-  if (state.killHeatmap) params.set("ov_km", "1");
-  if (state.showRegionColors) params.set("ov_rc", "1");
-  if (state.showConstellationColors) params.set("ov_cc", "1");
-  if (state.showDangerRadius) params.set("ov_dr", "1");
-  if (state.showConstellationKills) params.set("ov_ck", "1");
-  if (state.showSmartGateHubs) params.set("ov_sh", "1");
-  if (state.killMinCount > 1) params.set("ov_kmin", String(state.killMinCount));
-  if (state.killPlayerFilter) params.set("ov_kpf", state.killPlayerFilter);
-  if (state.showRecentKills) params.set("ov_rk", "1");
-  if (state.showRegionKills) params.set("ov_rgk", "1");
-  if (state.showKillEscalating) params.set("ov_ke", "1");
+  if (state.avoidPlayerBases) params.set("rt_ab", "1");
+  if (state.avoidKills) params.set("rt_ak", "1");
   const url = new URL(location.href);
   url.search = params.toString();
   return url.toString();
@@ -1662,9 +1607,14 @@ function loadUrlParams() {
     els.killShipsOnlyToggle && (els.killShipsOnlyToggle.checked = true);
     state.showKillShipsOnly = true;
   }
-  if (params.get("ov_kt") === "0") {
-    els.showKillTrendToggle && (els.showKillTrendToggle.checked = false);
-    state.showKillTrend = false;
+  if (params.get("ov_km") === "1") {
+    els.killHeatmapToggle && (els.killHeatmapToggle.checked = true);
+    state.showKillHeatmap = true;
+  }
+  if (params.get("ov_kf") === "1") {
+    els.recentKillsFeedToggle && (els.recentKillsFeedToggle.checked = true);
+    state.showRecentKillsFeed = true;
+    updateKillsFeedPanel();
   }
   if (params.get("ov_a") === "1") {
     els.assembliesToggle.checked = true;
@@ -1679,53 +1629,13 @@ function loadUrlParams() {
     els.playerBasesToggle.checked = true;
     state.showPlayerBases = true;
   }
-  if (params.get("ov_km") === "1") {
-    state.killHeatmap = true;
-    els.killHeatmapToggle && (els.killHeatmapToggle.checked = true);
+  if (params.get("rt_ak") === "1") {
+    els.avoidKillsToggle && (els.avoidKillsToggle.checked = true);
+    state.avoidKills = true;
   }
-  if (params.get("ov_rc") === "1") {
-    state.showRegionColors = true;
-    els.regionColorsToggle && (els.regionColorsToggle.checked = true);
-  }
-  if (params.get("ov_cc") === "1") {
-    state.showConstellationColors = true;
-    els.constellationColorsToggle && (els.constellationColorsToggle.checked = true);
-  }
-  if (params.get("ov_dr") === "1") {
-    state.showDangerRadius = true;
-    els.showDangerRadiusToggle && (els.showDangerRadiusToggle.checked = true);
-  }
-  if (params.get("ov_ck") === "1") {
-    state.showConstellationKills = true;
-    els.constellationKillsToggle && (els.constellationKillsToggle.checked = true);
-  }
-  if (params.get("ov_sh") === "1") {
-    state.showSmartGateHubs = true;
-    els.smartGateHubsToggle && (els.smartGateHubsToggle.checked = true);
-    updateHubPanel();
-  }
-  if (params.has("ov_kmin")) {
-    const min = Number(params.get("ov_kmin"));
-    if (min >= 1 && min <= 999) {
-      state.killMinCount = min;
-      els.killMinCountInput && (els.killMinCountInput.value = String(min));
-    }
-  }
-  if (params.has("ov_kpf")) {
-    state.killPlayerFilter = params.get("ov_kpf");
-    els.killPlayerFilterInput && (els.killPlayerFilterInput.value = state.killPlayerFilter);
-  }
-  if (params.get("ov_rk") === "1") {
-    state.showRecentKills = true;
-    els.showRecentKillsToggle && (els.showRecentKillsToggle.checked = true);
-  }
-  if (params.get("ov_rgk") === "1") {
-    state.showRegionKills = true;
-    els.showRegionKillsToggle && (els.showRegionKillsToggle.checked = true);
-  }
-  if (params.get("ov_ke") === "1") {
-    state.showKillEscalating = true;
-    els.showKillEscalatingToggle && (els.showKillEscalatingToggle.checked = true);
+  if (params.get("rt_ab") === "1") {
+    els.avoidPlayerBasesToggle && (els.avoidPlayerBasesToggle.checked = true);
+    state.avoidPlayerBases = true;
   }
   updateOverlayLegend();
 }
@@ -1794,16 +1704,15 @@ function hydrateWorkerRouteResult(result) {
 
 function getAvoidSystemIds() {
   const ids = new Set();
-  if (state.overlayKillsLoaded) {
-    const { start: ks, end: ke } = killWindowBounds();
-    if (state.avoidKills) {
-      for (const kill of state.overlayKills) {
-        if (kill.timestamp >= ks && kill.timestamp <= ke) ids.add(kill.systemId);
-      }
+  if (state.avoidKills && state.overlayKillsLoaded) {
+    const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+    for (const kill of state.overlayKills) {
+      if (kill.timestamp >= cutoff) ids.add(kill.systemId);
     }
-    if (state.avoidContested) {
-      const contested = buildContestedMap(3);
-      for (const id of contested.keys()) ids.add(id);
+  }
+  if (state.avoidPlayerBases && state.overlayPlayerBases.length) {
+    for (const base of state.overlayPlayerBases) {
+      ids.add(base.systemId);
     }
   }
   return ids;
@@ -1894,6 +1803,16 @@ async function calculate() {
   resolveRouteFieldsToNames();
   selectSystem(origin);
   setStatus("Calculating route");
+  if (state.avoidKills && !state.overlayKillsLoaded) {
+    await ensureKillFeed();
+  }
+  if (state.avoidPlayerBases && !state.overlayAssembliesLoaded) {
+    await ensureAssemblyOverlay();
+  }
+  if (token !== state.routeToken) {
+    setCalculating(false);
+    return;
+  }
   renderRouteState(
     waypoint.system ? "Calculating multi-leg route" : "Calculating route",
     waypoint.system ? "Checking both route legs and available gates." : "Checking jump range and available gates.",
@@ -1993,7 +1912,35 @@ function bindEvents() {
   });
   els.killShipsOnlyToggle?.addEventListener("change", () => {
     state.showKillShipsOnly = els.killShipsOnlyToggle.checked;
+    updateKillsFeedPanel();
     draw();
+  });
+  els.killHeatmapToggle?.addEventListener("change", () => {
+    state.showKillHeatmap = els.killHeatmapToggle.checked;
+    if (state.showKillHeatmap && !state.showKills) {
+      els.killsToggle.checked = true;
+      toggleOverlay("kills", true);
+      return;
+    }
+    draw();
+  });
+  els.recentKillsFeedToggle?.addEventListener("change", async () => {
+    state.showRecentKillsFeed = els.recentKillsFeedToggle.checked;
+    if (state.showRecentKillsFeed && !state.showKills) {
+      els.killsToggle.checked = true;
+      await toggleOverlay("kills", true);
+    }
+    if (state.showRecentKillsFeed && !state.overlayKillsLoaded) {
+      await ensureKillFeed();
+    }
+    updateKillsFeedPanel();
+  });
+  els.avoidPlayerBasesToggle?.addEventListener("change", async () => {
+    state.avoidPlayerBases = els.avoidPlayerBasesToggle.checked;
+    if (state.avoidPlayerBases && !state.overlayAssembliesLoaded) {
+      await ensureAssemblyOverlay();
+    }
+    if (parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
   });
   els.showSystemLabelsToggle?.addEventListener("change", () => {
     state.showSystemLabels = els.showSystemLabelsToggle.checked;
@@ -2171,7 +2118,8 @@ function buildKillSystemMap() {
   const { start, end } = killWindowBounds();
   const map = new Map();
   for (const kill of state.overlayKills) {
-    if (kill.timestamp < start || kill.timestamp > end) continue;
+    if (kill.timestamp < cutoff) continue;
+    if (state.showKillShipsOnly && !isShipKill(kill)) continue;
     if (!map.has(kill.systemId)) map.set(kill.systemId, []);
     map.get(kill.systemId).push(kill);
   }
@@ -2394,95 +2342,73 @@ function isShipKill(kill) {
   return true; // default to ship if type is unknown
 }
 
-// Returns a 10-character Unicode sparkline showing kill distribution across the
-// selected time window, oldest (left) to newest (right). Returns "" if no data.
-function killSparklineStr(systemId) {
-  if (!state.overlayKillsLoaded) return "";
-  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
-  const now = Date.now();
-  const BUCKETS = 10;
-  const buckets = new Array(BUCKETS).fill(0);
-  for (const kill of state.overlayKills) {
-    if (kill.systemId !== systemId) continue;
-    const age = now - kill.timestamp;
-    if (age < 0 || age > windowMs) continue;
-    const idx = Math.min(BUCKETS - 1, Math.floor((age / windowMs) * BUCKETS));
-    buckets[BUCKETS - 1 - idx]++;
+function drawKillHeatmap() {
+  const killsBySystem = buildKillSystemMap();
+  if (!killsBySystem.size) return;
+  const maxKills = Math.max(...[...killsBySystem.values()].map((kills) => kills.length), 1);
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (const [systemId, kills] of killsBySystem) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -120 || p.y < -120 || p.x > rect.width + 120 || p.y > rect.height + 120) continue;
+    const intensity = kills.length / maxKills;
+    const radius = Math.min(90, 22 + Math.log2(kills.length + 1) * 18);
+    const alpha = 0.14 + intensity * 0.28;
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+    grd.addColorStop(0, `rgba(255, 76, 44, ${alpha})`);
+    grd.addColorStop(0.45, `rgba(255, 130, 48, ${alpha * 0.45})`);
+    grd.addColorStop(1, "rgba(255, 76, 44, 0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
-  if (!buckets.some((b) => b > 0)) return "";
-  const maxB = Math.max(1, ...buckets);
-  const chars = "▁▂▃▄▅▆▇█";
-  return buckets.map((b) => (b === 0 ? "·" : chars[Math.min(7, Math.round((b / maxB) * 7))])).join("");
+  ctx.restore();
 }
 
-// Returns up to `limit` systems within the current jump range of `system`
-// that have kills in the active time window, sorted by kill count desc.
-function getDangerNeighbors(system, limit = 5) {
-  if (!state.overlayKillsLoaded || !state.showKills || !state.overlayKills.length) return [];
-  const range = Number(els.jumpRange.value || 120);
+function updateKillsFeedPanel() {
+  if (!els.killsFeedPanel || !els.killsFeedList) return;
+  const show = state.showRecentKillsFeed && state.showKills;
+  els.killsFeedPanel.style.display = show ? "" : "none";
+  if (!show) return;
+
   const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
-  const killMap = new Map();
-  for (const kill of state.overlayKills) {
-    if (kill.timestamp < cutoff) continue;
-    if (state.showKillShipsOnly && !isShipKill(kill)) continue;
-    killMap.set(kill.systemId, (killMap.get(kill.systemId) || 0) + 1);
-  }
-  if (!killMap.size) return [];
-  const results = [];
-  for (const [systemId, count] of killMap) {
-    if (systemId === system.id) continue;
-    const other = state.systemsById.get(systemId);
-    if (!other) continue;
-    const dist = RouteCore.distance(other, system);
-    if (dist <= range) results.push({ system: other, count, dist });
-  }
-  return results.sort((a, b) => b.count - a.count || a.dist - b.dist).slice(0, limit);
-}
+  const kills = state.overlayKills
+    .filter((kill) => kill.timestamp >= cutoff)
+    .filter((kill) => !state.showKillShipsOnly || isShipKill(kill))
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 8);
 
-// Renders the danger-neighbors panel in the system card.
-function updateDangerNeighborsPanel(system) {
-  if (!els.dangerNeighborsPanel) return;
-  const neighbors = system ? getDangerNeighbors(system) : [];
-  if (!neighbors.length) {
-    els.dangerNeighborsPanel.style.display = "none";
+  els.killsFeedCount.textContent = kills.length ? `(${kills.length})` : "";
+  if (!state.overlayKillsLoaded) {
+    els.killsFeedList.innerHTML = `<li class="empty">Loading on-chain events...</li>`;
     return;
   }
-  const w = state.overlayKillsTimeWindow;
-  const wLabel = w < 1 ? `${Math.round(w * 60)}m` : w >= 24 ? `${Math.round(w / 24)}d` : `${w}h`;
-  els.dangerNeighborsPanel.style.display = "";
-  els.dangerNeighborsPanel.innerHTML = `
-    <div class="danger-neighbors-header">Hot within jump range <span class="danger-window-label">/ ${escapeHtml(wLabel)}</span></div>
-    <ol class="danger-neighbors-list">
-      ${neighbors.map(({ system: s, count, dist }) => `
-        <li class="danger-neighbor-item" data-system-id="${s.id}">
-          <span class="danger-neighbor-name">${escapeHtml(s.name)}</span>
-          <span class="danger-neighbor-meta">
-            <span class="danger-neighbor-count">${count}⚠</span>
-            <span class="danger-neighbor-dist">${dist.toFixed(0)} LY</span>
-          </span>
-        </li>`).join("")}
-    </ol>`;
-  els.dangerNeighborsPanel.querySelectorAll(".danger-neighbor-item").forEach((li) => {
-    li.addEventListener("click", () => {
-      const s = state.systemsById.get(Number(li.dataset.systemId));
-      if (s) { selectSystem(s); centerOnSystem(s); }
+  if (!kills.length) {
+    els.killsFeedList.innerHTML = `<li class="empty">No kills in this window</li>`;
+    return;
+  }
+
+  els.killsFeedList.innerHTML = kills.map((kill) => {
+    const system = state.systemsById.get(kill.systemId);
+    const minutes = Math.max(1, Math.round((Date.now() - kill.timestamp) / 60000));
+    const age = minutes >= 60 ? `${Math.round(minutes / 60)}h` : `${minutes}m`;
+    const type = isShipKill(kill) ? "Ship" : "Structure";
+    const name = escapeHtml(system?.name || `System ${kill.systemId}`);
+    return `<li data-system-id="${kill.systemId}"><strong>${name}</strong><span>${type} loss - ${age} ago</span></li>`;
+  }).join("");
+
+  els.killsFeedList.querySelectorAll("li[data-system-id]").forEach((item) => {
+    item.addEventListener("click", () => {
+      const system = state.systemsById.get(Number(item.dataset.systemId));
+      if (!system) return;
+      selectSystem(system);
+      centerOnSystem(system);
     });
   });
-}
-
-function getKillTrend(systemId) {
-  if (!state.overlayKillsLoaded) return null;
-  const windowMs = state.overlayKillsTimeWindow * 3_600_000;
-  const now = Date.now();
-  const cutoff = now - windowMs;
-  const mid = now - windowMs / 2;
-  const kills = state.overlayKills.filter((k) => k.systemId === systemId && k.timestamp >= cutoff);
-  if (kills.length < 3) return null;
-  const recent = kills.filter((k) => k.timestamp >= mid).length;
-  const older = kills.filter((k) => k.timestamp < mid).length;
-  if (recent >= older * 2 && recent >= 2) return "up";
-  if (older >= recent * 2 && older >= 2) return "down";
-  return null;
 }
 
 function drawKillOverlay() {
@@ -2605,9 +2531,7 @@ async function ensureKillFeed() {
     } finally {
       state.overlayKillsLoaded = true;
       state.overlayKillsLoading = null;
-      updateHotPanel();
-      updateContestedPanel();
-      updateBattlesPanel();
+      updateKillsFeedPanel();
       draw();
     }
   })();
@@ -3450,34 +3374,18 @@ function buildContestedMap(minHours = 3) {
   return result;
 }
 
-function drawContestedOverlay() {
-  if (!state.showContested || !state.overlayKillsLoaded) return;
-  const contested = buildContestedMap(3);
-  if (!contested.size) return;
-  const rect = cachedRect || els.canvas.getBoundingClientRect();
-  ctx.save();
-  const t = (Date.now() / 1800) % (Math.PI * 2); // slow pulse
-  for (const [systemId, hourCount] of contested) {
-    const system = state.systemsById.get(systemId);
-    if (!system) continue;
-    const p = project(system);
-    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
-    const r = 9 + Math.min(5, hourCount - 3);
-    const pulse = 0.55 + Math.sin(t + systemId * 0.001) * 0.25;
-    ctx.strokeStyle = `rgba(0, 225, 255, ${pulse})`;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (state.camera.zoom > 1.0 && hourCount >= 5) {
-      ctx.fillStyle = `rgba(0, 220, 255, ${pulse * 0.8})`;
-      ctx.font = "bold 8px ui-monospace, monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(`${hourCount}h`, p.x, p.y + r + 2);
-    }
+async function toggleOverlay(name, enabled) {
+  if (name === "kills") {
+    state.showKills = enabled;
+    els.killTimePanel.style.display = enabled ? "" : "none";
+    if (enabled) await ensureKillFeed();
+    updateKillsFeedPanel();
+  } else if (name === "assemblies") {
+    state.showAssemblies = enabled;
+    if (enabled) await ensureAssemblyOverlay();
+  } else if (name === "playerBases") {
+    state.showPlayerBases = enabled;
+    if (enabled && !state.overlayAssembliesLoaded) await ensureAssemblyOverlay();
   }
   ctx.restore();
 }
@@ -3512,99 +3420,32 @@ function updateContestedPanel() {
       if (sys) { selectSystem(sys); centerOnSystem(sys); }
     });
   });
-}
-
-// ── New feature: Hot systems panel ────────────────────────────────────────
-
-function updateHotPanel() {
-  if (!els.hotPanel || !els.hotList) return;
-  if (!state.showHotPanel || !state.overlayKillsLoaded) {
-    els.hotPanel.style.display = "none";
-    return;
-  }
-  const killMap = buildKillSystemMap();
-  if (!killMap.size) {
-    els.hotPanel.style.display = "none";
-    return;
-  }
-  els.hotPanel.style.display = "";
-  if (els.hotPanelWindowLabel) {
-    const wLabel = state.killTimeOffset > 0
-      ? `(${state.killTimeOffset}h–${state.killTimeOffset + state.overlayKillsTimeWindow}h ago)`
-      : `(last ${state.overlayKillsTimeWindow}h)`;
-    els.hotPanelWindowLabel.textContent = wLabel;
-  }
-  const sorted = [...killMap.entries()]
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 15);
-  els.hotList.innerHTML = sorted.map(([systemId, kills], idx) => {
-    const sys = state.systemsById.get(systemId);
-    const name = sys?.name ?? `#${systemId}`;
-    const score = computeDangerScore(systemId);
-    const scoreColor = score >= 70 ? "#ff4444" : score >= 40 ? "#ff9040" : "#ffcc44";
-    const shipN = kills.filter(isShipKill).length;
-    const structN = kills.length - shipN;
-    const detail = structN > 0 ? `${shipN}⚔ ${structN}🏗` : `${kills.length}⚠`;
-    const trend = getKillTrend(systemId);
-    const trendColor = trend === "↑" ? "rgba(255,80,80,0.9)" : trend === "↓" ? "rgba(80,200,120,0.85)" : "rgba(180,180,180,0.6)";
-    return `<li class="danger-item" data-system-id="${systemId}" style="cursor:pointer">
-      <span class="danger-rank">${idx + 1}</span>
-      <span class="danger-name">${name}</span>
-      <span class="danger-count">${detail}</span>
-      <span style="color:${trendColor};font-size:10px;flex-shrink:0">${trend}</span>
-      <span style="color:${scoreColor};font-size:9px;margin-left:2px">${score}</span>
-    </li>`;
-  }).join("");
-  els.hotList.querySelectorAll("li[data-system-id]").forEach((li) => {
-    li.addEventListener("click", () => {
-      const sys = state.systemsById.get(Number(li.dataset.systemId));
-      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+  els.timePresets.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.overlayKillsTimeWindow = Number(btn.dataset.hours);
+      updateTimePresets();
+      updateKillsFeedPanel();
+      draw();
+      if (state.avoidKills && parseSystem(els.origin.value) && parseSystem(els.destination.value)) calculate();
     });
   });
-}
-
-// ── New feature: Offline assemblies panel ─────────────────────────────────
-
-function buildOfflineAssemblyMap() {
-  const map = new Map(); // systemId → offline assembly list
-  for (const asm of state.overlayAssemblies) {
-    if (asm.online) continue;
-    if (!map.has(asm.systemId)) map.set(asm.systemId, []);
-    map.get(asm.systemId).push(asm);
-  }
-  return map;
-}
-
-function updateOfflinePanel() {
-  if (!els.offlinePanel || !els.offlineList) return;
-  if (!state.showOfflinePanel || !state.overlayAssembliesLoaded) {
-    els.offlinePanel.style.display = "none";
-    return;
-  }
-  const offlineMap = buildOfflineAssemblyMap();
-  if (!offlineMap.size) {
-    els.offlinePanel.style.display = "none";
-    setOverlayStatus("No offline assemblies found");
-    return;
-  }
-  els.offlinePanel.style.display = "";
-  const sorted = [...offlineMap.entries()]
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 20);
-  els.offlineList.innerHTML = sorted.map(([systemId, asms]) => {
-    const sys = state.systemsById.get(systemId);
-    const name = sys?.name ?? `#${systemId}`;
-    const typeLabel = [...new Set(asms.map((a) => a.label))].join(", ");
-    return `<li class="danger-item offline-item" data-system-id="${systemId}" style="cursor:pointer">
-      <span class="danger-rank" style="color:rgba(150,160,180,0.8)">${asms.length}</span>
-      <span class="danger-name">${name}</span>
-      <span class="danger-count" style="color:rgba(140,150,180,0.75);font-size:9px">${typeLabel}</span>
-    </li>`;
-  }).join("");
-  els.offlineList.querySelectorAll("li[data-system-id]").forEach((li) => {
-    li.addEventListener("click", () => {
-      const sys = state.systemsById.get(Number(li.dataset.systemId));
-      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+  els.refreshOverlays.addEventListener("click", () => {
+    state.overlayKillsLoaded = false;
+    state.overlayKillsLoading = null;
+    state.overlayAssembliesLoaded = false;
+    state.overlayAssembliesLoading = null;
+    state.overlayKills = [];
+    state.overlayAssemblies = [];
+    state.overlayPlayerBases = [];
+    updateKillsFeedPanel();
+    const reloadTasks = [];
+    if (state.showKills) reloadTasks.push(ensureKillFeed());
+    if (state.showAssemblies || state.showPlayerBases) reloadTasks.push(ensureAssemblyOverlay());
+    if (!reloadTasks.length) setOverlayStatus("Enable an overlay to load data");
+    Promise.all(reloadTasks).then(() => {
+      if ((state.avoidKills || state.avoidPlayerBases) && parseSystem(els.origin.value) && parseSystem(els.destination.value)) {
+        calculate();
+      }
     });
   });
 }
