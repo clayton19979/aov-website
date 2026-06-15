@@ -72,6 +72,46 @@ const state = {
   showKillHeatmap: false,
   showRecentKillsFeed: false,
   avoidPlayerBases: false,
+  // Recovered state fields (dropped in the same bad merge as `els`). Without
+  // initial values, reads like state.killPlayerFilter.trim() threw at runtime
+  // and toggle state silently defaulted to undefined.
+  autoRefreshKills: false,
+  avoidContested: false,
+  bookmarks: [],
+  findPanelOpen: false,
+  killMinCount: 1,
+  killPlayerFilter: "",
+  killTimeOffset: 0, // hours to shift the kill window back from "now"
+  overlayAsmNameFilter: "",
+  reachabilityMaxHops: 1,
+  showAssemblyLabels: false,
+  showBattles: false,
+  showBookmarks: true,
+  showConstellationBoundaries: false,
+  showConstellationColors: false,
+  showConstellationKills: false,
+  showContested: false,
+  showCoverageRadius: false,
+  showDangerRadius: false,
+  showGateReach: false,
+  showHotPanel: false,
+  showHubPanel: false,
+  showKillEscalating: false,
+  showKillFlash: false,
+  showKillHourly: false,
+  showMinimap: true,
+  showOfflinePanel: false,
+  showReachability: false,
+  showReachableHighlight: false,
+  showRecentKills: false,
+  showRegionKills: false,
+  showRegionShading: false,
+  showRegionStats: false,
+  showSmartGateHubs: false,
+  showTerritory: false,
+  showTerritoryOwnership: false,
+  systemNotes: {},
+  walletFilterAddress: "",
 };
 
 const els = {
@@ -107,7 +147,10 @@ const els = {
   killTimePanel: document.getElementById("killTimePanel"),
   overlayStatus: document.getElementById("overlayStatus"),
   refreshOverlays: document.getElementById("refreshOverlays"),
-  timePresets: document.querySelectorAll(".time-preset"),
+  // Only the kill-window presets carry data-hours. The `.time-preset` class is
+  // shared by the reachability hop buttons and the "Save note" button, so an
+  // unscoped selector let those clicks set overlayKillsTimeWindow = NaN.
+  timePresets: document.querySelectorAll(".time-preset[data-hours]"),
   legendKill: document.getElementById("legendKill"),
   legendAssembly: document.getElementById("legendAssembly"),
   legendBase: document.getElementById("legendBase"),
@@ -143,6 +186,90 @@ const els = {
   killsFeedPanel: document.getElementById("killsFeedPanel"),
   killsFeedList: document.getElementById("killsFeedList"),
   killsFeedCount: document.getElementById("killsFeedCount"),
+  // Recovered element refs (restored after a bad merge dropped them from `els`,
+  // which left init() crashing on els.reachabilityHopBtns.forEach and many
+  // overlay controls silently inert). Selectors recovered from feature history.
+  asmNameFilterInput: document.getElementById("asmNameFilter"),
+  avoidContestedToggle: document.getElementById("avoidContested"),
+  battlesList: document.getElementById("battlesList"),
+  battlesPanel: document.getElementById("battlesPanel"),
+  battlesToggle: document.getElementById("battlesToggle"),
+  bookmarkSystemBtn: document.getElementById("bookmarkSystem"),
+  bookmarksList: document.getElementById("bookmarksList"),
+  bookmarksPanel: document.getElementById("bookmarksPanel"),
+  clearAsmNameFilterBtn: document.getElementById("clearAsmNameFilter"),
+  clearBookmarks: document.getElementById("clearBookmarks"),
+  clearPlayerFilterBtn: document.getElementById("clearPlayerFilter"),
+  constellationBoundariesToggle: document.getElementById("constellationBoundariesToggle"),
+  constellationColorsToggle: document.getElementById("constellationColorsToggle"),
+  constellationKillsToggle: document.getElementById("constellationKillsToggle"),
+  contestedList: document.getElementById("contestedList"),
+  contestedPanel: document.getElementById("contestedPanel"),
+  copySystemIdBtn: document.getElementById("copySystemId"),
+  escalatingList: document.getElementById("escalatingList"),
+  escalatingPanel: document.getElementById("escalatingPanel"),
+  hubList: document.getElementById("hubList"),
+  hubPanel: document.getElementById("hubPanel"),
+  hubPanelToggle: document.getElementById("showHubPanel"),
+  killAutoRefreshToggle: document.getElementById("killAutoRefresh"),
+  killHourlyChart: document.getElementById("killHourlyChart"),
+  killHourlyPanel: document.getElementById("killHourlyPanel"),
+  killMinCountInput: document.getElementById("killMinCount"),
+  killOffsetLabel: document.getElementById("killOffsetLabel"),
+  killPlayerFilterInput: document.getElementById("killPlayerFilter"),
+  killTimeOffsetSlider: document.getElementById("killTimeOffset"),
+  legendConstellation: document.getElementById("legendConstellation"),
+  minimapCanvas: document.getElementById("minimap"),
+  nearbyBasesPanel: document.getElementById("nearbyBasesPanel"),
+  offlinePanelClose: document.getElementById("offlinePanelClose"),
+  reachabilityHopBtns: document.querySelectorAll(".reach-hop-btn"),
+  reachabilityPanel: document.getElementById("reachabilityPanel"),
+  reachabilityToggle: document.getElementById("reachabilityToggle"),
+  recentKillsCount: document.getElementById("recentKillsCount"),
+  recentKillsList: document.getElementById("recentKillsList"),
+  recentKillsPanel: document.getElementById("recentKillsPanel"),
+  regionKillList: document.getElementById("regionKillList"),
+  regionKillPanel: document.getElementById("regionKillPanel"),
+  regionKillWindowLabel: document.getElementById("regionKillWindowLabel"),
+  regionShadingToggle: document.getElementById("regionShadingToggle"),
+  regionStatsList: document.getElementById("regionStatsList"),
+  regionStatsPanel: document.getElementById("regionStatsPanel"),
+  regionStatsPanelLabel: document.getElementById("regionStatsPanelLabel"),
+  saveSystemNoteBtn: document.getElementById("saveSystemNote"),
+  showAssemblyLabelsToggle: document.getElementById("showAssemblyLabels"),
+  showBookmarksToggle: document.getElementById("showBookmarks"),
+  showContestedToggle: document.getElementById("showContested"),
+  showCoverageRadiusToggle: document.getElementById("showCoverageRadius"),
+  showDangerRadiusToggle: document.getElementById("showDangerRadius"),
+  showGateReachToggle: document.getElementById("showGateReach"),
+  showHotPanelToggle: document.getElementById("showHotPanel"),
+  showKillEscalatingToggle: document.getElementById("showKillEscalating"),
+  showKillFlashToggle: document.getElementById("showKillFlash"),
+  showKillHeatmapToggle: document.getElementById("showKillHeatmap"),
+  showKillHourlyToggle: document.getElementById("showKillHourly"),
+  showOfflinePanelToggle: document.getElementById("showOfflinePanelToggle"),
+  showReachableHighlightToggle: document.getElementById("showReachableHighlight"),
+  showRecentKillsToggle: document.getElementById("showRecentKills"),
+  showRegionKillsToggle: document.getElementById("showRegionKills"),
+  showRegionStatsToggle: document.getElementById("showRegionStats"),
+  showTerritoryOwnershipToggle: document.getElementById("showTerritoryOwnership"),
+  smartGateHubsToggle: document.getElementById("smartGateHubsToggle"),
+  systemNoteInput: document.getElementById("systemNote"),
+  systemNoteWrap: document.getElementById("systemNoteWrap"),
+  territoryList: document.getElementById("territoryList"),
+  territoryPanel: document.getElementById("territoryPanel"),
+  territoryToggle: document.getElementById("territoryToggle"),
+  timeOffsetRow: document.getElementById("timeOffsetRow"),
+  toggleMinimapBtn: document.getElementById("toggleMinimap"),
+  walletFilterClear: document.getElementById("walletFilterClear"),
+  walletFilterInput: document.getElementById("walletFilterInput"),
+  walletFilterRow: document.getElementById("walletFilterRow"),
+  dangerNeighborsPanel: document.getElementById("dangerNeighborsPanel"),
+  hotList: document.getElementById("hotList"),
+  hotPanel: document.getElementById("hotPanel"),
+  hotPanelWindowLabel: document.getElementById("hotPanelWindowLabel"),
+  offlineList: document.getElementById("offlineList"),
+  offlinePanel: document.getElementById("offlinePanel"),
 };
 
 const ctx = els.canvas.getContext("2d");
@@ -444,8 +571,16 @@ function drawConstellationColors() {
 }
 
 function resizeCanvas() {
-  cachedRect = els.canvas.getBoundingClientRect();
-  const rect = cachedRect;
+  let rect = els.canvas.getBoundingClientRect();
+  // During the first layout pass — and at some ResizeObserver timings — the
+  // canvas can report a near-zero box even though its container is already
+  // sized. Fall back to the parent stage so the drawing buffer never collapses
+  // to a sliver (which previously rendered the map as a blank strip).
+  if ((rect.width < 2 || rect.height < 2) && els.canvas.parentElement) {
+    const pr = els.canvas.parentElement.getBoundingClientRect();
+    if (pr.width >= 2 && pr.height >= 2) rect = pr;
+  }
+  cachedRect = rect;
   const scale = window.devicePixelRatio || 1;
   els.canvas.width = Math.max(1, Math.floor(rect.width * scale));
   els.canvas.height = Math.max(1, Math.floor(rect.height * scale));
@@ -1838,6 +1973,25 @@ async function calculate() {
 
 function bindEvents() {
   window.addEventListener("resize", resizeCanvas);
+  // The canvas height comes from a flex layout, so its real size may only be
+  // known after the first layout pass (and again when the embedding iframe is
+  // resized). A one-shot resizeCanvas() in init() can run while the canvas is
+  // still 0-height, leaving the drawing buffer a tiny sliver and the map blank.
+  // Observe the parent stage — its box is stable (unaffected by us mutating
+  // canvas.width) and reliably reports the real size once layout settles.
+  if (typeof ResizeObserver !== "undefined") {
+    const target = els.canvas.parentElement || els.canvas;
+    let lastW = 0, lastH = 0;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (!r) return;
+      const w = Math.round(r.width), h = Math.round(r.height);
+      if (w === lastW && h === lastH) return;
+      lastW = w; lastH = h;
+      if (w > 0 && h > 0) resizeCanvas();
+    });
+    ro.observe(target);
+  }
   setupSystemSearch(els.origin, els.originSuggestions);
   setupSystemSearch(els.destination, els.destinationSuggestions);
   setupSystemSearch(els.via, els.viaSuggestions);
@@ -2118,7 +2272,7 @@ function buildKillSystemMap() {
   const { start, end } = killWindowBounds();
   const map = new Map();
   for (const kill of state.overlayKills) {
-    if (kill.timestamp < cutoff) continue;
+    if (kill.timestamp < start || kill.timestamp > end) continue;
     if (state.showKillShipsOnly && !isShipKill(kill)) continue;
     if (!map.has(kill.systemId)) map.set(kill.systemId, []);
     map.get(kill.systemId).push(kill);
@@ -3422,7 +3576,9 @@ function updateContestedPanel() {
   });
   els.timePresets.forEach((btn) => {
     btn.addEventListener("click", () => {
-      state.overlayKillsTimeWindow = Number(btn.dataset.hours);
+      const hours = Number(btn.dataset.hours);
+      if (!Number.isFinite(hours)) return;
+      state.overlayKillsTimeWindow = hours;
       updateTimePresets();
       updateKillsFeedPanel();
       draw();
@@ -4155,7 +4311,9 @@ function bindOverlayEvents() {
   });
   els.timePresets.forEach((btn) => {
     btn.addEventListener("click", () => {
-      state.overlayKillsTimeWindow = Number(btn.dataset.hours);
+      const hours = Number(btn.dataset.hours);
+      if (!Number.isFinite(hours)) return;
+      state.overlayKillsTimeWindow = hours;
       updateTimePresets();
       updateKillOffsetLabel();
       updateHotPanel();
@@ -5155,6 +5313,194 @@ function bindFeatureOverlayEvents() {
   });
 }
 
+// ── Restored overlay helpers ──────────────────────────────────────────────
+// These functions are called throughout the overlay code but their definitions
+// were dropped in the same bad merge that truncated `els`. Without them,
+// selectSystem() (and therefore route calculation and star selection) threw
+// "updateDangerNeighborsPanel is not defined". Recovered from feature history.
+
+function killPassesPlayerFilter(kill) {
+  const f = state.killPlayerFilter.trim().toLowerCase();
+  if (!f) return true;
+  return String(kill.killerId ?? "").toLowerCase().includes(f) ||
+         String(kill.victimId ?? "").toLowerCase().includes(f);
+}
+
+function updateHotPanel() {
+  if (!els.hotPanel || !els.hotList) return;
+  if (!state.showHotPanel || !state.overlayKillsLoaded) {
+    els.hotPanel.style.display = "none";
+    return;
+  }
+  const killMap = buildKillSystemMap();
+  if (!killMap.size) {
+    els.hotPanel.style.display = "none";
+    return;
+  }
+  els.hotPanel.style.display = "";
+  if (els.hotPanelWindowLabel) {
+    const wLabel = state.killTimeOffset > 0
+      ? `(${state.killTimeOffset}h–${state.killTimeOffset + state.overlayKillsTimeWindow}h ago)`
+      : `(last ${state.overlayKillsTimeWindow}h)`;
+    els.hotPanelWindowLabel.textContent = wLabel;
+  }
+  const sorted = [...killMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 15);
+  els.hotList.innerHTML = sorted.map(([systemId, kills], idx) => {
+    const sys = state.systemsById.get(systemId);
+    const name = sys?.name ?? `#${systemId}`;
+    const score = computeDangerScore(systemId);
+    const scoreColor = score >= 70 ? "#ff4444" : score >= 40 ? "#ff9040" : "#ffcc44";
+    const shipN = kills.filter(isShipKill).length;
+    const structN = kills.length - shipN;
+    const detail = structN > 0 ? `${shipN}⚔ ${structN}🏗` : `${kills.length}⚠`;
+    const trend = getKillTrend(systemId);
+    const trendColor = trend === "↑" ? "rgba(255,80,80,0.9)" : trend === "↓" ? "rgba(80,200,120,0.85)" : "rgba(180,180,180,0.6)";
+    return `<li class="danger-item" data-system-id="${systemId}" style="cursor:pointer">
+      <span class="danger-rank">${idx + 1}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count">${detail}</span>
+      <span style="color:${trendColor};font-size:10px;flex-shrink:0">${trend}</span>
+      <span style="color:${scoreColor};font-size:9px;margin-left:2px">${score}</span>
+    </li>`;
+  }).join("");
+  els.hotList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
+function buildOfflineAssemblyMap() {
+  const map = new Map(); // systemId → offline assembly list
+  for (const asm of state.overlayAssemblies) {
+    if (asm.online) continue;
+    if (!map.has(asm.systemId)) map.set(asm.systemId, []);
+    map.get(asm.systemId).push(asm);
+  }
+  return map;
+}
+
+function updateOfflinePanel() {
+  if (!els.offlinePanel || !els.offlineList) return;
+  if (!state.showOfflinePanel || !state.overlayAssembliesLoaded) {
+    els.offlinePanel.style.display = "none";
+    return;
+  }
+  const offlineMap = buildOfflineAssemblyMap();
+  if (!offlineMap.size) {
+    els.offlinePanel.style.display = "none";
+    setOverlayStatus("No offline assemblies found");
+    return;
+  }
+  els.offlinePanel.style.display = "";
+  const sorted = [...offlineMap.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 20);
+  els.offlineList.innerHTML = sorted.map(([systemId, asms]) => {
+    const sys = state.systemsById.get(systemId);
+    const name = sys?.name ?? `#${systemId}`;
+    const typeLabel = [...new Set(asms.map((a) => a.label))].join(", ");
+    return `<li class="danger-item offline-item" data-system-id="${systemId}" style="cursor:pointer">
+      <span class="danger-rank" style="color:rgba(150,160,180,0.8)">${asms.length}</span>
+      <span class="danger-name">${name}</span>
+      <span class="danger-count" style="color:rgba(140,150,180,0.75);font-size:9px">${typeLabel}</span>
+    </li>`;
+  }).join("");
+  els.offlineList.querySelectorAll("li[data-system-id]").forEach((li) => {
+    li.addEventListener("click", () => {
+      const sys = state.systemsById.get(Number(li.dataset.systemId));
+      if (sys) { selectSystem(sys); centerOnSystem(sys); }
+    });
+  });
+}
+
+function getDangerNeighbors(system, limit = 5) {
+  if (!state.overlayKillsLoaded || !state.showKills || !state.overlayKills.length) return [];
+  const range = Number(els.jumpRange.value || 120);
+  const cutoff = Date.now() - state.overlayKillsTimeWindow * 3_600_000;
+  const killMap = new Map();
+  for (const kill of state.overlayKills) {
+    if (kill.timestamp < cutoff) continue;
+    if (state.showKillShipsOnly && !isShipKill(kill)) continue;
+    killMap.set(kill.systemId, (killMap.get(kill.systemId) || 0) + 1);
+  }
+  if (!killMap.size) return [];
+  const results = [];
+  for (const [systemId, count] of killMap) {
+    if (systemId === system.id) continue;
+    const other = state.systemsById.get(systemId);
+    if (!other) continue;
+    const dist = RouteCore.distance(other, system);
+    if (dist <= range) results.push({ system: other, count, dist });
+  }
+  return results.sort((a, b) => b.count - a.count || a.dist - b.dist).slice(0, limit);
+}
+
+function updateDangerNeighborsPanel(system) {
+  if (!els.dangerNeighborsPanel) return;
+  const neighbors = system ? getDangerNeighbors(system) : [];
+  if (!neighbors.length) {
+    els.dangerNeighborsPanel.style.display = "none";
+    return;
+  }
+  const w = state.overlayKillsTimeWindow;
+  const wLabel = w < 1 ? `${Math.round(w * 60)}m` : w >= 24 ? `${Math.round(w / 24)}d` : `${w}h`;
+  els.dangerNeighborsPanel.style.display = "";
+  els.dangerNeighborsPanel.innerHTML = `
+    <div class="danger-neighbors-header">Hot within jump range <span class="danger-window-label">/ ${escapeHtml(wLabel)}</span></div>
+    <ol class="danger-neighbors-list">
+      ${neighbors.map(({ system: s, count, dist }) => `
+        <li class="danger-neighbor-item" data-system-id="${s.id}">
+          <span class="danger-neighbor-name">${escapeHtml(s.name)}</span>
+          <span class="danger-neighbor-meta">
+            <span class="danger-neighbor-count">${count}⚠</span>
+            <span class="danger-neighbor-dist">${dist.toFixed(0)} LY</span>
+          </span>
+        </li>`).join("")}
+    </ol>`;
+  els.dangerNeighborsPanel.querySelectorAll(".danger-neighbor-item").forEach((li) => {
+    li.addEventListener("click", () => {
+      const s = state.systemsById.get(Number(li.dataset.systemId));
+      if (s) { selectSystem(s); centerOnSystem(s); }
+    });
+  });
+}
+
+function drawContestedOverlay() {
+  if (!state.showContested || !state.overlayKillsLoaded) return;
+  const contested = buildContestedMap(3);
+  if (!contested.size) return;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
+  ctx.save();
+  const t = (Date.now() / 1800) % (Math.PI * 2); // slow pulse
+  for (const [systemId, hourCount] of contested) {
+    const system = state.systemsById.get(systemId);
+    if (!system) continue;
+    const p = project(system);
+    if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
+    const r = 9 + Math.min(5, hourCount - 3);
+    const pulse = 0.55 + Math.sin(t + systemId * 0.001) * 0.25;
+    ctx.strokeStyle = `rgba(0, 225, 255, ${pulse})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (state.camera.zoom > 1.0 && hourCount >= 5) {
+      ctx.fillStyle = `rgba(0, 220, 255, ${pulse * 0.8})`;
+      ctx.font = "bold 8px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(`${hourCount}h`, p.x, p.y + r + 2);
+    }
+  }
+  ctx.restore();
+}
+
 async function init() {
   loadBookmarks();
   loadSystemNotes();
@@ -5169,6 +5515,9 @@ async function init() {
   updateSystemActions();
   renderRouteState("Pick an origin and destination", "Use search or click stars on the map.", "", "Pick");
   resizeCanvas();
+  // Re-measure after the browser has flushed layout: the initial call above can
+  // run before the flex layout gives the canvas its height.
+  requestAnimationFrame(() => requestAnimationFrame(resizeCanvas));
   try {
     const systems = await fetchAllSystems();
     indexSystems(systems);
