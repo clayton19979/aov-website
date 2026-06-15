@@ -2303,6 +2303,9 @@ function buildKillTrendMap() {
 }
 
 function updateDangerPanel() {
+  // Superseded by the Hot Systems panel (updateHotPanel); its markup was
+  // intentionally not restored. Guard so the legacy callers are safe no-ops.
+  if (!els.dangerPanel || !els.dangerList) return;
   if (!state.showKills || !state.overlayKillsLoaded) {
     els.dangerPanel.style.display = "none";
     return;

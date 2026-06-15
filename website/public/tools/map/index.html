@@ -115,6 +115,13 @@
                 <button type="button" id="walletFilterClear" title="Clear filter">×</button>
               </div>
             </div>
+            <div id="asmNameFilterRow" class="asm-name-filter-row" style="display:none">
+              <span class="overlay-sublabel">Filter assemblies by name</span>
+              <div class="player-filter-input-row">
+                <input type="text" id="asmNameFilter" placeholder="Name…" class="player-filter-input" autocomplete="off" spellcheck="false" />
+                <button type="button" id="clearAsmNameFilter" class="time-preset" title="Clear filter">×</button>
+              </div>
+            </div>
             <div id="asmTypePanel" class="asm-type-panel" style="display:none">
               <label class="overlay-sublabel" style="margin-left:20px">Types shown</label>
               <div class="asm-type-toggles">
@@ -182,6 +189,31 @@
                 <button type="button" class="time-preset reach-hop-btn" data-hops="3">3 hops</button>
               </div>
             </div>
+            <label class="overlay-toggle" id="smartGateHubsToggleLabel">
+              <input type="checkbox" id="smartGateHubsToggle" />
+              <span class="overlay-dot hubs-dot"></span>
+              Smart Gate Hubs
+            </label>
+            <label class="overlay-toggle" id="constellationBoundariesToggleLabel">
+              <input type="checkbox" id="constellationBoundariesToggle" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:transparent;border:1.5px solid rgba(130,200,255,0.7);border-radius:2px;"></span>
+              Constellation Bounds
+            </label>
+            <label class="overlay-toggle" id="showGateReachToggleLabel">
+              <input type="checkbox" id="showGateReach" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(0,220,255,0.5);border-radius:50%;"></span>
+              Smart Gate Reach (from selected)
+            </label>
+            <label class="overlay-toggle" id="showTerritoryOwnershipToggleLabel">
+              <input type="checkbox" id="showTerritoryOwnership" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:linear-gradient(135deg,hsl(200,75%,58%),hsl(30,75%,58%),hsl(150,75%,58%));border-radius:50%;"></span>
+              Territory (by owner)
+            </label>
+            <label class="overlay-toggle overlay-toggle--sub" id="showCoverageRadiusToggleLabel">
+              <input type="checkbox" id="showCoverageRadius" />
+              <span class="overlay-dot" style="width:8px;height:8px;background:rgba(241,184,75,0.4);border:1px dashed rgba(241,184,75,0.7);border-radius:50%;"></span>
+              Base coverage radius
+            </label>
           </div>
           <div id="killTimePanel" class="kill-time-panel" style="display:none">
             <label class="overlay-sublabel">Time window</label>
@@ -231,6 +263,62 @@
               <span class="overlay-dot" style="width:6px;height:6px;background:#00e5ff;border-radius:50%;"></span>
               Contested (kills 3h+)
             </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killTrendToggleLabel">
+              <input type="checkbox" id="showKillTrend" checked />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff9040;opacity:0.7;"></span>
+              Show activity trend (↑↓)
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showDangerRadiusLabel">
+              <input type="checkbox" id="showDangerRadius" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,60,60,0.65);border-radius:50%;"></span>
+              Danger reach radius (jump range)
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="constellationKillsLabel">
+              <input type="checkbox" id="constellationKillsToggle" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:rgba(255,120,60,0.65);border-radius:2px;"></span>
+              Constellation kill zones
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="killAutoRefreshLabel">
+              <input type="checkbox" id="killAutoRefresh" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#00ff88;border-radius:50%;"></span>
+              Auto-refresh (5m)
+            </label>
+            <div class="min-kills-row">
+              <span class="overlay-sublabel">Min kills shown</span>
+              <input type="number" id="killMinCount" min="1" max="999" value="1" class="custom-hours-input" style="text-align:center" />
+            </div>
+            <div class="player-filter-row">
+              <span class="overlay-sublabel">Filter by player (wallet)</span>
+              <div class="player-filter-input-row">
+                <input type="text" id="killPlayerFilter" placeholder="0x..." class="player-filter-input" autocomplete="off" spellcheck="false" />
+                <button type="button" id="clearPlayerFilter" class="time-preset" title="Clear filter">×</button>
+              </div>
+            </div>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showRecentKillsLabel">
+              <input type="checkbox" id="showRecentKills" />
+              <span class="overlay-dot kills-dot" style="width:6px;height:6px;background:#ff6060;"></span>
+              Show recent kills feed
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showRegionKillsLabel">
+              <input type="checkbox" id="showRegionKills" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ffaa40;border-radius:2px;"></span>
+              Region kill ranking
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showKillEscalatingLabel">
+              <input type="checkbox" id="showKillEscalating" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff4488;border-radius:50%;"></span>
+              Escalating systems
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showKillFlashLabel">
+              <input type="checkbox" id="showKillFlash" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff3232;border-radius:50%;box-shadow:0 0 4px #ff3232;"></span>
+              Live kill flashes (15m)
+            </label>
+            <label class="overlay-toggle overlay-toggle--subsub" id="showKillHourlyLabel">
+              <input type="checkbox" id="showKillHourly" />
+              <span class="overlay-dot" style="width:6px;height:6px;background:#ff9040;border-radius:2px;"></span>
+              24h kill distribution
+            </label>
             <div class="time-offset-row" style="display:none" id="timeOffsetRow">
               <span class="overlay-sublabel">View window offset: <span id="killOffsetLabel">now (live)</span></span>
               <input type="range" id="killTimeOffset" min="0" max="162" step="1" value="0" class="time-offset-slider" title="Shift the view window backward in time" />
@@ -265,6 +353,40 @@
               <h3>Assembly Hubs</h3>
             </div>
             <ol id="hubList" class="danger-list"></ol>
+          </div>
+          <div id="escalatingPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Escalating <span class="danger-window-label">(rising fast)</span></h3>
+            </div>
+            <ol id="escalatingList" class="danger-list"></ol>
+          </div>
+          <div id="killHourlyPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Kill Activity <span class="danger-window-label">(UTC hour, 7d)</span></h3>
+            </div>
+            <div id="killHourlyChart" class="kill-hourly-chart"></div>
+          </div>
+          <div id="territoryPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Territory Control <span class="danger-window-label">(by assembly count)</span></h3>
+            </div>
+            <ol id="territoryList" class="danger-list"></ol>
+          </div>
+          <div id="recentKillsPanel" class="recent-kills-panel" style="display:none">
+            <div class="section-title">
+              <h3>Recent Kills</h3>
+              <span id="recentKillsCount" class="danger-window-label"></span>
+            </div>
+            <ol id="recentKillsList" class="recent-kills-list"></ol>
+          </div>
+          <div id="regionKillPanel" class="danger-panel" style="display:none">
+            <div class="section-title">
+              <h3>Region Activity <span id="regionKillWindowLabel" class="danger-window-label"></span></h3>
+            </div>
+            <ol id="regionKillList" class="danger-list"></ol>
+          </div>
+          <div id="assemblyStats" class="assembly-stats" style="display:none">
+            <div id="assemblyStatsContent" class="assembly-stats-content"></div>
           </div>
           <div id="overlayStatus" class="overlay-status"></div>
         </section>
@@ -318,6 +440,7 @@
             <label><input id="showSmartGateLinks" type="checkbox" checked /> Show smart gate links</label>
             <label><input id="avoidKills" type="checkbox" /> Avoid hot systems (requires kills overlay)</label>
             <label><input id="avoidContested" type="checkbox" /> Avoid contested systems (3+ active hours)</label>
+            <label><input id="avoidPlayerBases" type="checkbox" /> Avoid player bases (requires assemblies overlay)</label>
             <label><input id="showJumpRange" type="checkbox" /> Show jump range circle</label>
             <label><input id="showReachableHighlight" type="checkbox" /> Highlight reachable stars (from selected)</label>
             <label><input id="showSystemLabels" type="checkbox" /> Show system names (zoom ≥ 2.5×)</label>
