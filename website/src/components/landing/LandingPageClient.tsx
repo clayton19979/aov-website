@@ -8,9 +8,11 @@ import { VoidEclipse } from '@/components/landing/VoidEclipse'
 import { DiscordCTA } from '@/components/landing/DiscordCTA'
 import { PhraseCycler } from '@/components/landing/PhraseCycler'
 import { useGlitchText } from '@/hooks/useGlitchText'
+import type { recognitionBrief } from '@/data/recognition'
 
 type LandingPageClientProps = {
   publicAxioms: readonly string[]
+  recognition: typeof recognitionBrief
 }
 
 function fadeUp(delay: number) {
@@ -31,7 +33,7 @@ const FRAME_CORNERS = [
   { key: 'br', pos: 'bottom-16 right-4 md:bottom-16 md:right-6', borders: 'border-b border-r' },
 ] as const
 
-export function LandingPageClient({ publicAxioms }: LandingPageClientProps) {
+export function LandingPageClient({ publicAxioms, recognition }: LandingPageClientProps) {
   const { displayed, isGlitching } = useGlitchText('ARCHITECTS OF THE VOID')
   const [memberHovered, setMemberHovered] = useState(false)
 
@@ -111,7 +113,41 @@ export function LandingPageClient({ publicAxioms }: LandingPageClientProps) {
           </ul>
         </motion.section>
 
-        <motion.div {...fadeUp(0.36)}>
+        <motion.section
+          {...fadeUp(0.36)}
+          aria-label={`${recognition.eyebrow}: how the order selects`}
+          className="w-full max-w-xl border border-void-teal/10 bg-white/[0.02] px-4 py-4 text-left backdrop-blur-sm"
+        >
+          <p className="mb-1 font-mono text-[10px] tracking-[0.35em] text-void-teal/55 uppercase">
+            {recognition.eyebrow}
+          </p>
+          <h2 className="mb-3 font-mono text-sm leading-snug tracking-wide text-white/70 uppercase">
+            {recognition.title}
+          </h2>
+          <ol className="grid gap-2 sm:grid-cols-3">
+            {recognition.signals.map(signal => (
+              <li
+                key={signal.step}
+                className="flex flex-col gap-1 border border-white/5 px-3 py-2"
+              >
+                <span className="font-mono text-[10px] tracking-[0.3em] text-void-teal/45 uppercase">
+                  {signal.step} · {signal.title}
+                </span>
+                <span className="font-mono text-[11px] leading-relaxed tracking-wide text-white/45">
+                  {signal.body}
+                </span>
+                <span className="mt-auto font-mono text-[10px] tracking-wide text-void-teal/50 italic">
+                  {signal.measure}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <p className="mt-3 border-t border-void-teal/10 pt-3 font-mono text-[11px] leading-relaxed tracking-wide text-white/30 italic">
+            {recognition.publicSignal}
+          </p>
+        </motion.section>
+
+        <motion.div {...fadeUp(0.42)}>
           <DiscordCTA />
         </motion.div>
 
