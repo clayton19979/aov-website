@@ -3,22 +3,13 @@ import "./globals.css"
 import { SuiProviders } from "@/components/providers/SuiProviders"
 import { PageTransition } from "@/components/providers/PageTransition"
 import { ThemeProvider } from "@/components/providers/ThemeProvider"
+import { routeMetadata, siteConfig } from "@/lib/site"
 
 export const metadata: Metadata = {
-  title: "Architects of the Void",
-  description: "A militant techno-religious order operating at the edge of civilization.",
+  metadataBase: new URL(siteConfig.url),
+  applicationName: siteConfig.name,
+  ...routeMetadata("/"),
   icons: { icon: "/favicon.ico" },
-  openGraph: {
-    title: "Architects of the Void",
-    description: "A militant techno-religious order operating at the edge of civilization. We do not recruit. We recognize.",
-    type: "website",
-    siteName: "Architects of the Void",
-  },
-  twitter: {
-    card: "summary",
-    title: "Architects of the Void",
-    description: "A militant techno-religious order operating at the edge of civilization. We do not recruit. We recognize.",
-  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

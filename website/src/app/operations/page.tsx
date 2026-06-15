@@ -3,6 +3,7 @@ import { SectionTitle } from '@/components/shared/SectionTitle'
 import { BackLink } from '@/components/shared/BackLink'
 import { OperationCard } from '@/components/operations/OperationCard'
 import { getSession } from '@/lib/session'
+import { routeMetadata } from '@/lib/site'
 
 const COMING_SOON = [
   { title: 'Fleet Tracker', description: 'Active fleet composition, readiness, and doctrine compliance.' },
@@ -13,9 +14,7 @@ const COMING_SOON = [
   { title: 'Comms Archive', description: 'AUREX transmissions and Communion transcripts.' },
 ]
 
-export const metadata = {
-  title: 'Operations — AoV',
-}
+export const metadata = routeMetadata('/operations')
 
 export default async function OperationsPage() {
   const session = await getSession()

@@ -1,10 +1,9 @@
 import { TopBar } from '@/components/shared/TopBar'
 import { HubGrid } from '@/components/hub/HubGrid'
 import { getSession } from '@/lib/session'
+import { routeMetadata } from '@/lib/site'
 
-export const metadata = {
-  title: 'Command Hub — AoV',
-}
+export const metadata = routeMetadata('/hub')
 
 export default async function HubPage() {
   const session = await getSession()
