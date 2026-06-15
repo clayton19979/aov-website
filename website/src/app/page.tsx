@@ -1,4 +1,5 @@
 import { LandingPageClient } from '@/components/landing/LandingPageClient'
+import { recognitionBrief } from '@/data/recognition'
 import { getLandingDoctrineJsonLd, landingMetadata, publicDoctrineAxioms } from '@/lib/landing-doctrine'
 
 export const metadata = landingMetadata
@@ -14,7 +15,7 @@ export default function LandingPage() {
           __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
         }}
       />
-      <LandingPageClient publicAxioms={publicDoctrineAxioms} />
+      <LandingPageClient publicAxioms={publicDoctrineAxioms} recognition={recognitionBrief} />
     </>
   )
 }
