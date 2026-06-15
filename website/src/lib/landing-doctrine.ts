@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import { doctrine } from '@/data/doctrine'
+import { absoluteUrl } from '@/lib/site'
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://aov.gg'
+// Single source of truth for the canonical host lives in site.ts. The landing
+// route is the only indexed page, so its OG/JSON-LD URL must match the sitemap
+// and metadataBase rather than carrying its own diverging default.
+const siteUrl = absoluteUrl('/')
 
 export const publicDoctrineAxioms = doctrine.coreBeliefs.axioms.slice(0, 3)
 
