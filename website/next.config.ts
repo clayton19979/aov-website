@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'X-Frame-Options', value: 'DENY' },
+  // SAMEORIGIN (not DENY) so the site can frame its own tool pages
+  // (/tools/map, /tools/baseops) while still blocking external framers.
+  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   {
@@ -19,6 +21,9 @@ const securityHeaders = [
       "connect-src 'self' https://*.evefrontier.com https://*.mystenlabs.com https://*.sui.io wss://*.sui.io https://*.slush.app wss://*.slush.app",
       // Slush web wallet may open in a frame for connect/sign flows
       "frame-src 'self' https://*.slush.app",
+      // Modern equivalent of X-Frame-Options: only same-origin pages may frame
+      // us (lets the tool pages embed /tools/map + /tools/baseops, blocks others).
+      "frame-ancestors 'self'",
       "font-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
