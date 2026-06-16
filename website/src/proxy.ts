@@ -7,11 +7,19 @@ const AUTH_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? 'aov-dev-secret-change-in-production'
 )
 
+// EVE Vault login is temporarily disabled — every page is public for now.
+// Flip this back to `true` to restore the wallet-gated experience (the
+// landing/login redirects and the internal-prefix gate below resume).
+const AUTH_ENABLED: boolean = false
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Allow static tool assets (public/ directory) without auth
   if (pathname.startsWith('/tools/map/') || pathname.startsWith('/tools/baseops/')) return NextResponse.next()
+
+  // Login disabled: let all routes through so every page is viewable.
+  if (!AUTH_ENABLED) return NextResponse.next()
 
   // Redirect authenticated users away from the landing page and /login to avoid re-auth friction
   if (pathname === '/' || pathname === '/login') {
