@@ -744,19 +744,28 @@ function draw() {
 
   // ── Region shading (drawn before stars for best layering) ────────────────
   if (state.showRegionShading) drawRegionShading();
+  if (state.showRegionColors) drawRegionColors();
+  if (state.showConstellationColors) drawConstellationColors();
+  if (state.showConstellationBoundaries) drawConstellationBoundaries();
 
   // ── Gate links ───────────────────────────────────────
   drawGateLinks();
+  if (state.showSmartGateHubs) drawSmartGateHubOverlay();
+  if (state.showGateReach) drawGateReachOverlay();
   if (state.showReachability) drawReachabilityOverlay();
   if (state.showTerritory && state.overlayAssembliesLoaded) drawTerritoryOverlay();
   if (state.showJumpRange) drawJumpRangeCircle();
   if (state.showKills && state.showKillHeatmap) drawKillHeatmap();
   if (state.showKills) drawKillOverlay();
   if (state.showKills && state.showContested && state.overlayKillsLoaded) drawContestedOverlay();
+  if (state.showKills && state.showConstellationKills && state.overlayKillsLoaded) drawConstellationKillZones();
+  if (state.showKills && state.showDangerRadius && state.overlayKillsLoaded) drawDangerRadius();
+  if (state.showKills && state.showKillFlash && state.overlayKillsLoaded) drawKillFlashOverlay();
   if (state.showKills && state.showKillLabels) drawKillLabels();
   if (state.showBattles && state.overlayKillsLoaded) drawBattleOverlay();
   if (state.showAssemblies) drawAssemblyOverlay();
   if (state.showAssemblies && state.showAssemblyLabels) drawAssemblyLabels();
+  if (state.showCoverageRadius && state.overlayPlayerBases.length) drawCoverageRadiusOverlay();
   if (state.showPlayerBases) drawPlayerBaseOverlay();
   if (state.walletFilterAddress && state.overlayAssembliesLoaded) drawWalletHighlight();
   if (state.showSystemLabels) drawSystemLabels();
@@ -2979,43 +2988,58 @@ function derivePlayerBases(assemblies) {
 
 function drawPlayerBaseOverlay() {
   if (!state.overlayPlayerBases.length) return;
+  const z = state.camera.zoom;
+  const rect = cachedRect || els.canvas.getBoundingClientRect();
   ctx.save();
   for (const base of state.overlayPlayerBases) {
     const system = state.systemsById.get(base.systemId);
     if (!system) continue;
     const p = project(system);
-    const rect = cachedRect || els.canvas.getBoundingClientRect();
     if (p.x < -30 || p.y < -30 || p.x > rect.width + 30 || p.y > rect.height + 30) continue;
-    const r = 10 + Math.min(6, base.assemblyCount);
     const active = base.onlineCount > 0;
-    // Outer ring
-    ctx.strokeStyle = active ? "rgba(241, 184, 75, 0.80)" : "rgba(241, 184, 75, 0.25)";
-    ctx.lineWidth = active ? 2 : 1;
-    ctx.setLineDash([3, 3]);
+    // Bright gold for live bases, desaturated bronze for dormant ones — kept
+    // distinct from the amber game-gate lines by the filled glowing hex marker.
+    const c = active ? "255, 198, 82" : "196, 162, 112";
+    const r = 7 + Math.min(7, base.assemblyCount);
+
+    // Glow halo so bases pop against the starfield even when zoomed out.
+    const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.6);
+    halo.addColorStop(0, `rgba(${c}, ${active ? 0.36 : 0.16})`);
+    halo.addColorStop(1, `rgba(${c}, 0)`);
+    ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-    // Inner fill
-    ctx.setLineDash([]);
-    if (active) {
-      const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-      grd.addColorStop(0, "rgba(241, 184, 75, 0.18)");
-      grd.addColorStop(1, "rgba(241, 184, 75, 0)");
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fill();
+    ctx.arc(p.x, p.y, r * 2.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Filled hexagon "base" marker with a solid bright outline.
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      const px = p.x + Math.cos(a) * r;
+      const py = p.y + Math.sin(a) * r;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
     }
-    // Base label at higher zoom
-    if (state.camera.zoom > 1.2) {
-      ctx.fillStyle = active ? "rgba(241, 184, 75, 0.90)" : "rgba(241, 184, 75, 0.40)";
-      ctx.font = "bold 8px ui-monospace, monospace";
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${c}, ${active ? 0.24 : 0.13})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${c}, ${active ? 0.95 : 0.55})`;
+    ctx.lineWidth = active ? 2 : 1.2;
+    ctx.stroke();
+
+    // Center pip.
+    ctx.fillStyle = `rgba(${c}, ${active ? 1 : 0.65})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, active ? 2.2 : 1.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Label at moderate zoom.
+    if (z > 1.0) {
+      ctx.fillStyle = `rgba(${c}, ${active ? 0.95 : 0.55})`;
+      ctx.font = "bold 9px ui-monospace, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      const label = base.maxConnected >= 4
-        ? `node+${base.maxConnected}`
-        : `${base.assemblyCount} asm`;
-      ctx.fillText(label, p.x, p.y + r + 3);
+      const detail = base.maxConnected >= 4 ? `node+${base.maxConnected}` : `${base.assemblyCount} asm`;
+      ctx.fillText(`BASE · ${detail}`, p.x, p.y + r + 4);
     }
   }
   ctx.restore();
