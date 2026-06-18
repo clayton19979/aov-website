@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AoV Fuel Calculator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">Architects of the Void</p>
+        <h1>Network Node Fuel Calculator</h1>
+        <p class="lede">
+          Paste node fuel snapshots, set an emergency floor and reserve window, and turn a limited fuel cache into an actionable dispatch brief.
+          Critical nodes are stabilized to their target floor before the planner spends remaining fuel on the broader reserve target.
+        </p>
+      </header>
+
+      <section class="workspace">
+        <form class="panel input-panel" data-fuel-form>
+          <div class="panel-heading">
+            <h2>Fuel Snapshot</h2>
+            <button type="button" class="ghost-button" data-fill-sample>Load Sample</button>
+          </div>
+
+          <label class="field">
+            <span>Critical Floor (hours)</span>
+            <input data-stability-hours type="text" inputmode="decimal" placeholder="12 or 1d 12h" />
+          </label>
+
+          <label class="field">
+            <span>Reserve Window (hours)</span>
+            <input data-reserve-hours type="text" inputmode="decimal" placeholder="24 or 36h" />
+          </label>
+
+          <label class="field">
+            <span>Default Delivery Delay (hours)</span>
+            <input data-delivery-delay-hours type="text" inputmode="decimal" placeholder="3 or 90m" />
+          </label>
+
+          <label class="field">
+            <span>Fuel On Hand for This Run</span>
+            <input data-available-fuel type="text" inputmode="decimal" placeholder="Leave blank for unlimited or use 220k / 1.5m" />
+          </label>
+
+          <label class="field">
+            <span>Trip Capacity (optional)</span>
+            <input data-trip-capacity type="text" inputmode="decimal" placeholder="Split dispatch into hauler-sized trips (for example 90k)" />
+          </label>
+
+          <label class="field">
+            <span>Trip Turnaround (hours)</span>
+            <input data-trip-turnaround-hours type="text" inputmode="decimal" placeholder="2h or 1d 6h between departures" />
+          </label>
+
+          <label class="field">
+            <span>Hauler Count</span>
+            <input data-hauler-count type="number" min="1" step="1" placeholder="Parallel ships sharing the manifest queue" />
+          </label>
+
+          <label class="field">
+            <span>CSV or TSV Rows</span>
+            <textarea
+              data-node-input
+              rows="10"
+              spellcheck="false"
+              placeholder="North Gate,90,400,10[,2h][,3][,12h][,24h] or North Gate,37.5%,400,10"
+            ></textarea>
+          </label>
+
+          <p class="hint">Format: <code>name,currentFuel,maxFuel,burnPerHour[,deliveryDelayHours][,priority][,stabilityHours][,reserveHours]</code>. Header rows with flexible column names/order, tab-separated exports, quoted CSV fields, formatted values like <code>1,200</code> and shorthand quantities like <code>220k</code> or <code>1.5m</code>, inline fuel percentages like <code>37.5%</code>, percent columns such as <code>fuelPercent</code>, runtime columns such as <code>hoursRemaining</code>, extra spreadsheet columns, and <code># comments</code> are accepted. Hour-based values can be plain numbers or duration strings like <code>36h</code>, <code>1d 12h</code>, and <code>90m</code>. If a row includes <code>deliveryDelayHours</code>, that node overrides the default delay for this run. If a row includes <code>priority</code>, higher values break ties inside the same alert band and critical-floor queue. If a row includes <code>stabilityHours</code> or <code>reserveHours</code>, that node carries its own coverage targets for this run. Trip capacity splits the dispatch order into sequential hauler manifests without changing alert-band precedence. Trip turnaround delays each later manifest departure so you can spot batching risk before launch. Hauler count lets multiple ships launch in parallel before the next turnaround wave. Each node name must appear only once per run. Unsaved edits are cached locally on this device until you clear the saved draft.</p>
+
+          <div class="actions">
+            <button type="submit" class="primary-button">Calculate Fuel Plan</button>
+            <button type="button" class="ghost-button" data-copy-report disabled>Copy Dispatch Report</button>
+            <button type="button" class="ghost-button" data-copy-node-tsv disabled>Copy Node TSV</button>
+            <button type="button" class="ghost-button" data-copy-trip-tsv disabled>Copy Trip TSV</button>
+            <button type="button" class="ghost-button" data-copy-share-link disabled>Copy Share Link</button>
+            <button type="button" class="ghost-button" data-download-pack disabled>Download Ops Pack</button>
+            <button type="button" class="ghost-button" data-clear-draft disabled>Clear Saved Draft</button>
+          </div>
+
+          <p class="feedback" data-feedback data-tone="info"></p>
+        </form>
+
+        <section class="panel output-panel">
+          <div class="panel-heading">
+            <h2>Plan Summary</h2>
+          </div>
+
+          <div class="summary-grid" data-summary></div>
+
+          <div class="dispatch-block">
+            <h3>Dispatch Priority</h3>
+            <ol class="dispatch-list" data-dispatch-list></ol>
+          </div>
+
+          <div class="dispatch-block">
+            <h3>Trip Manifests</h3>
+            <ol class="trip-list" data-trip-list></ol>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Node</th>
+                  <th>Current</th>
+                  <th>Max</th>
+                  <th>Burn / hr</th>
+                  <th>Priority</th>
+                  <th>Delay</th>
+                  <th>Floor / Reserve</th>
+                  <th>Runtime Now</th>
+                  <th>At Arrival</th>
+                  <th>Base Outage</th>
+                  <th>Last Drop</th>
+                  <th>Sched Outage</th>
+                  <th data-floor-need-label>To Floor</th>
+                  <th data-floor-gap-label>Floor Gap</th>
+                  <th>To Reserve</th>
+                  <th>Cap Gap</th>
+                  <th>Allocated</th>
+                  <th>Reserve Gap</th>
+                  <th>After Dispatch</th>
+                </tr>
+              </thead>
+              <tbody data-table-body></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
+

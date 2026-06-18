@@ -20,9 +20,10 @@ export const tools: Tool[] = [
   {
     slug: 'fuel-calculator',
     name: 'Fuel Calculator',
-    description: 'Optimize jump routes and calculate fuel cost across void corridors.',
+    description: 'Network node fuel planner — paste fuel snapshots, set emergency floors and reserve windows, and generate a prioritized dispatch brief.',
     category: 'LOGISTICS',
-    status: 'coming-soon',
+    status: 'live',
+    fullBleed: true,
   },
   {
     slug: 'ssu-trade-hub',
