@@ -26,7 +26,7 @@ function FullBleedFrame({ src, title }: { src: string; title: string }) {
 }
 
 export const toolComponents: Record<string, ComponentType> = {
-  'fuel-calculator': () => <ToolPlaceholder name="Fuel Calculator" />,
+  'fuel-calculator': () => <FullBleedFrame src="/tools/fuel-calculator/index.html" title="Fuel Calculator — Network Node Fuel Planner" />,
   'ssu-trade-hub': () => <ToolPlaceholder name="SSU Trade Hub" />,
   'void-map': () => <FullBleedFrame src="/tools/map/index.html" title="Void Map — Frontier GPS" />,
   'baseops-command-center': () => <FullBleedFrame src="/tools/baseops/index.html" title="BaseOps Command Center" />,
