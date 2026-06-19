@@ -15,6 +15,7 @@ export function MobileNavStrip() {
           <Link
             key={link.href}
             href={link.href}
+            aria-current={active ? 'page' : undefined}
             style={active ? {
               boxShadow: 'inset 0 2px 0 color-mix(in srgb, var(--accent) 65%, transparent)',
               backgroundColor: 'color-mix(in srgb, var(--accent) 7%, transparent)',
