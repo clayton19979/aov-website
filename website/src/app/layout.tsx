@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Read the nonce injected by middleware (src/middleware.ts). The middleware
+  // Read the nonce injected by proxy (src/proxy.ts). The proxy
   // sets `x-nonce` on the request so that only this stamped script tag is
   // allowed to run inline — the CSP no longer needs `'unsafe-inline'` for
   // script-src.
@@ -24,7 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className="bg-void-black">
       <head>
         {/* Prevent flash of unstyled theme on load. The nonce attribute is
-            required because the CSP (set by middleware) uses a per-request
+            required because the CSP (set by proxy) uses a per-request
             nonce instead of 'unsafe-inline' for script-src. */}
         <script
           nonce={nonce}

@@ -12,7 +12,7 @@ export default async function LandingPage() {
   return (
     <>
       {/* JSON-LD structured data. The nonce is required because the CSP
-          (set by middleware) uses a per-request nonce for script-src.
+          (set by proxy) uses a per-request nonce for script-src.
           type="application/ld+json" scripts are non-executable, but some
           browsers still enforce the nonce check on them. */}
       <script

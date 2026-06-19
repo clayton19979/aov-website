@@ -4,10 +4,10 @@ import type { NextConfig } from "next";
  * Static security headers applied to all routes.
  *
  * Content-Security-Policy is intentionally absent here — it is set
- * dynamically by src/middleware.ts, which injects a per-request nonce into
+ * dynamically by src/proxy.ts, which injects a per-request nonce into
  * script-src so that `'unsafe-inline'` is no longer required for scripts.
  *
- * Strict-Transport-Security is set here (not in middleware) because it is
+ * Strict-Transport-Security is set here (not in proxy) because it is
  * a static value that benefits from being cached at the edge/CDN level.
  */
 const securityHeaders = [
