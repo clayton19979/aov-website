@@ -31,6 +31,15 @@ describe('ToolCard', () => {
     expect(screen.getByRole('link')).toHaveAttribute('href', '/tools/fuel-calculator')
   })
 
+  it('uses the tool name as the accessible link name for live tools', () => {
+    render(<ToolCard tool={liveTool} />)
+
+    expect(screen.getByRole('link', { name: 'Fuel Calculator' })).toHaveAttribute(
+      'href',
+      '/tools/fuel-calculator',
+    )
+  })
+
   it('coming-soon tool is not a link', () => {
     render(<ToolCard tool={comingSoon} />)
     expect(screen.queryByRole('link')).toBeNull()
