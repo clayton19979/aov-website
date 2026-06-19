@@ -90,7 +90,11 @@ export function ToolCard({ tool }: Props) {
   if (!isLive) return inner
 
   return (
-    <Link href={`/tools/${tool.slug}`} className="block focus:outline-none focus:ring-1 focus:ring-void-teal/40">
+    <Link
+      href={`/tools/${tool.slug}`}
+      aria-label={tool.name}
+      className="block focus:outline-none focus:ring-1 focus:ring-void-teal/40"
+    >
       {inner}
     </Link>
   )
