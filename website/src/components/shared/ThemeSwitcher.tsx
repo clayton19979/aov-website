@@ -23,6 +23,10 @@ export function ThemeSwitcher() {
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
+        aria-label="Display preferences"
+        aria-expanded={open}
+        aria-controls="display-preferences-menu"
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-1.5 font-mono text-xs tracking-widest text-white/30 hover:text-white/60 transition-colors"
       >
@@ -39,6 +43,7 @@ export function ThemeSwitcher() {
 
       {open && (
         <div
+          id="display-preferences-menu"
           className="absolute right-0 top-full mt-1.5 z-50 min-w-[8rem] bg-void-black/95 backdrop-blur-sm"
           style={{
             border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)',
