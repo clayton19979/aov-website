@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import "./globals.css"
 import { SuiProviders } from "@/components/providers/SuiProviders"
 import { PageTransition } from "@/components/providers/PageTransition"
@@ -12,12 +13,23 @@ export const metadata: Metadata = {
   icons: { icon: "/favicon.ico" },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Read the nonce injected by proxy (src/proxy.ts). The proxy
+  // sets `x-nonce` on the request so that only this stamped script tag is
+  // allowed to run inline — the CSP no longer needs `'unsafe-inline'` for
+  // script-src.
+  const nonce = (await headers()).get('x-nonce') ?? ''
+
   return (
     <html lang="en" className="bg-void-black">
       <head>
-        {/* Prevent flash of unstyled theme on load */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('aov-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}` }} />
+        {/* Prevent flash of unstyled theme on load. The nonce attribute is
+            required because the CSP (set by proxy) uses a per-request
+            nonce instead of 'unsafe-inline' for script-src. */}
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('aov-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}` }}
+        />
       </head>
       <body className="bg-void-black text-white/90 font-mono antialiased min-h-screen">
         <ThemeProvider>

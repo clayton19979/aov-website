@@ -1,34 +1,27 @@
 import type { NextConfig } from "next";
 
+/**
+ * Static security headers applied to all routes.
+ *
+ * Content-Security-Policy is intentionally absent here — it is set
+ * dynamically by src/proxy.ts, which injects a per-request nonce into
+ * script-src so that `'unsafe-inline'` is no longer required for scripts.
+ *
+ * Strict-Transport-Security is set here (not in proxy) because it is
+ * a static value that benefits from being cached at the edge/CDN level.
+ */
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   // SAMEORIGIN (not DENY) so the site can frame its own tool pages
   // (/tools/map, /tools/baseops) while still blocking external framers.
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      // Framer Motion and inline styles need unsafe-inline; tighten once nonce support is added
-      "style-src 'self' 'unsafe-inline'",
-      // Theme init script in layout.tsx requires unsafe-inline; migrate to nonce to remove this
-      "script-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      // EVE Frontier World API (star map, overlays) + Sui RPC/GraphQL + MVR
-      // (mystenlabs) + Slush wallet (BaseOps wallet connect). Update if endpoints change.
-      "connect-src 'self' https://*.evefrontier.com https://*.mystenlabs.com https://*.sui.io wss://*.sui.io https://*.slush.app wss://*.slush.app",
-      // Slush web wallet may open in a frame for connect/sign flows
-      "frame-src 'self' https://*.slush.app",
-      // Modern equivalent of X-Frame-Options: only same-origin pages may frame
-      // us (lets the tool pages embed /tools/map + /tools/baseops, blocks others).
-      "frame-ancestors 'self'",
-      "font-src 'self'",
-      "object-src 'none'",
-      "base-uri 'self'",
-    ].join('; '),
-  },
+  // clipboard-write=(self) explicitly delegates clipboard access to same-origin
+  // contexts, covering the fuel-calculator tool iframe's Copy buttons.
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), clipboard-write=(self)' },
+  // Enforce HTTPS for 1 year, include subdomains. The site is deployed on
+  // Vercel (always HTTPS) so this is safe to enable.
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
 ]
 
 const nextConfig: NextConfig = {
