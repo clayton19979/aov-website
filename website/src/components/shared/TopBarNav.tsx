@@ -15,6 +15,7 @@ export function TopBarNav() {
           <Link
             key={link.href}
             href={link.href}
+            aria-current={active ? 'page' : undefined}
             className={`group relative pb-1 font-mono text-xs tracking-widest uppercase transition-colors duration-200 ${
               active
                 ? 'text-void-teal'
