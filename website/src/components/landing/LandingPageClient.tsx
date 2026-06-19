@@ -68,7 +68,7 @@ export function LandingPageClient({ publicAxioms, recognition }: LandingPageClie
         ))}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center gap-8 px-6 text-center">
+      <div className="relative z-10 flex flex-col items-center gap-8 px-6 pb-24 text-center">
         <motion.div {...fadeUp(0)}>
           <VoidEclipse />
         </motion.div>
@@ -92,60 +92,78 @@ export function LandingPageClient({ publicAxioms, recognition }: LandingPageClie
           We do not recruit. We recognize.
         </motion.p>
 
-        <motion.section
+        <motion.div
           {...fadeUp(0.3)}
-          aria-label="Public doctrine preview"
-          className="w-full max-w-xl border border-void-teal/10 bg-white/[0.02] px-4 py-4 text-left backdrop-blur-sm"
+          className="grid w-full max-w-5xl gap-4 text-left lg:grid-cols-[0.78fr_1.22fr]"
         >
-          <p className="mb-3 font-mono text-[10px] tracking-[0.35em] text-void-teal/55 uppercase">
-            Public Doctrine Preview
-          </p>
-          <ul className="grid gap-2 sm:grid-cols-3">
-            {publicAxioms.map((axiom, index) => (
-              <li
-                key={axiom}
-                className="border border-white/5 px-3 py-2 font-mono text-[11px] leading-relaxed tracking-wide text-white/45"
-              >
-                <span className="mr-2 text-void-teal/45">{String(index + 1).padStart(2, '0')}</span>
-                {axiom}
-              </li>
-            ))}
-          </ul>
-        </motion.section>
+          <section
+            aria-label="Public doctrine preview"
+            className="relative overflow-hidden border border-void-teal/15 bg-white/[0.025] px-4 py-4 shadow-[inset_0_0_24px_rgba(255,255,255,0.015)] backdrop-blur-sm"
+          >
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-void-teal/35 to-transparent"
+              aria-hidden="true"
+            />
+            <p className="mb-3 font-mono text-[10px] tracking-[0.35em] text-void-teal/60 uppercase">
+              Public Doctrine Preview
+            </p>
+            <ul className="grid gap-2">
+              {publicAxioms.map((axiom, index) => (
+                <li
+                  key={axiom}
+                  className="group flex items-baseline gap-3 border border-white/5 bg-black/10 px-3 py-2.5 font-mono text-[11px] leading-relaxed tracking-wide text-white/50 transition-colors duration-300 hover:border-void-teal/20 hover:bg-white/[0.035] hover:text-white/65"
+                >
+                  <span className="text-[10px] font-semibold text-void-teal/55 transition-colors duration-300 group-hover:text-void-teal/80">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span>{axiom}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        <motion.section
-          {...fadeUp(0.36)}
-          aria-label={`${recognition.eyebrow}: how the order selects`}
-          className="w-full max-w-xl border border-void-teal/10 bg-white/[0.02] px-4 py-4 text-left backdrop-blur-sm"
-        >
-          <p className="mb-1 font-mono text-[10px] tracking-[0.35em] text-void-teal/55 uppercase">
-            {recognition.eyebrow}
-          </p>
-          <h2 className="mb-3 font-mono text-sm leading-snug tracking-wide text-white/70 uppercase">
-            {recognition.title}
-          </h2>
-          <ol className="grid gap-2 sm:grid-cols-3">
-            {recognition.signals.map(signal => (
-              <li
-                key={signal.step}
-                className="flex flex-col gap-1 border border-white/5 px-3 py-2"
-              >
-                <span className="font-mono text-[10px] tracking-[0.3em] text-void-teal/45 uppercase">
-                  {signal.step} · {signal.title}
-                </span>
-                <span className="font-mono text-[11px] leading-relaxed tracking-wide text-white/45">
-                  {signal.body}
-                </span>
-                <span className="mt-auto font-mono text-[10px] tracking-wide text-void-teal/50 italic">
-                  {signal.measure}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-3 border-t border-void-teal/10 pt-3 font-mono text-[11px] leading-relaxed tracking-wide text-white/30 italic">
-            {recognition.publicSignal}
-          </p>
-        </motion.section>
+          <section
+            aria-label={`${recognition.eyebrow}: how the order selects`}
+            className="relative overflow-hidden border border-void-teal/15 bg-white/[0.025] px-4 py-4 shadow-[inset_0_0_24px_rgba(255,255,255,0.015)] backdrop-blur-sm"
+          >
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-void-teal/35 to-transparent"
+              aria-hidden="true"
+            />
+            <p className="mb-1 font-mono text-[10px] tracking-[0.35em] text-void-teal/60 uppercase">
+              {recognition.eyebrow}
+            </p>
+            <h2 className="mb-3 font-mono text-sm leading-snug tracking-wide text-white/75 uppercase">
+              {recognition.title}
+            </h2>
+            <ol className="grid gap-2 md:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+              {recognition.signals.map(signal => (
+                <li
+                  key={signal.step}
+                  className="group flex flex-col gap-2 border border-white/5 bg-black/10 px-3 py-3 transition-colors duration-300 hover:border-void-teal/20 hover:bg-white/[0.035]"
+                >
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-[10px] font-semibold tracking-[0.22em] text-void-teal/60 transition-colors duration-300 group-hover:text-void-teal/85 uppercase">
+                      {signal.step}
+                    </span>
+                    <span className="font-mono text-[10px] tracking-[0.22em] text-white/60 uppercase">
+                      {signal.title}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[11px] leading-relaxed tracking-wide text-white/48 transition-colors duration-300 group-hover:text-white/62">
+                    {signal.body}
+                  </span>
+                  <span className="mt-auto border-t border-void-teal/10 pt-2 font-mono text-[10px] tracking-wide text-void-teal/55 italic">
+                    {signal.measure}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-3 border-t border-void-teal/10 pt-3 font-mono text-[11px] leading-relaxed tracking-wide text-white/35 italic">
+              {recognition.publicSignal}
+            </p>
+          </section>
+        </motion.div>
 
         <motion.div {...fadeUp(0.42)}>
           <DiscordCTA />
