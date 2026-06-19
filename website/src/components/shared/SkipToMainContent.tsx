@@ -11,7 +11,7 @@ export function SkipToMainContent({ children }: SkipToMainContentProps) {
       >
         Skip to main content
       </a>
-      <div id="main-content">{children}</div>
+      <div id="main-content" tabIndex={-1}>{children}</div>
     </>
   )
 }

@@ -14,6 +14,9 @@ describe('SkipToMainContent', () => {
       'href',
       '#main-content',
     )
-    expect(document.getElementById('main-content')).toHaveTextContent('Command content')
+    const target = document.getElementById('main-content')
+
+    expect(target).toHaveTextContent('Command content')
+    expect(target).toHaveAttribute('tabindex', '-1')
   })
 })
