@@ -7,6 +7,10 @@
 //
 // Set NEXT_PUBLIC_EVE_PACKAGE_ID to override. Defaults to STILLNESS.
 
+// Maximum time (ms) to wait for the Sui GraphQL endpoint before aborting.
+// Keeps the login flow responsive when the RPC is slow or unreachable.
+const SUI_GRAPHQL_TIMEOUT_MS = 10_000
+
 const STILLNESS_PACKAGE_ID =
   '0x28b497559d65ab320d9da4613bf2498d5946b2c0ae3597ccfda3072ce127448c'
 
@@ -95,14 +99,23 @@ export async function checkTribeMembership(walletAddress: string): Promise<Tribe
     const packageId = process.env.NEXT_PUBLIC_EVE_PACKAGE_ID || STILLNESS_PACKAGE_ID
     const playerProfileType = `${packageId}::character::PlayerProfile`
 
-    const res = await fetch(SUI_GRAPHQL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: GET_WALLET_CHARACTERS,
-        variables: { owner: walletAddress, characterPlayerProfileType: playerProfileType },
-      }),
-    })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), SUI_GRAPHQL_TIMEOUT_MS)
+
+    let res: Response
+    try {
+      res = await fetch(SUI_GRAPHQL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: GET_WALLET_CHARACTERS,
+          variables: { owner: walletAddress, characterPlayerProfileType: playerProfileType },
+        }),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (!res.ok) throw new Error(`GraphQL request failed: ${res.status}`)
 
@@ -145,6 +158,12 @@ export async function checkTribeMembership(walletAddress: string): Promise<Tribe
       characterName,
     }
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return {
+        status: 'error',
+        message: `Verification timed out after ${SUI_GRAPHQL_TIMEOUT_MS / 1000}s — the Sui network may be slow. Please retry.`,
+      }
+    }
     return { status: 'error', message: String(err) }
   }
 }
