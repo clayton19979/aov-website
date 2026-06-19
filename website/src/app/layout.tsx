@@ -4,6 +4,7 @@ import "./globals.css"
 import { SuiProviders } from "@/components/providers/SuiProviders"
 import { PageTransition } from "@/components/providers/PageTransition"
 import { ThemeProvider } from "@/components/providers/ThemeProvider"
+import { SkipToMainContent } from "@/components/shared/SkipToMainContent"
 import { routeMetadata, siteConfig } from "@/lib/site"
 
 export const metadata: Metadata = {
@@ -34,9 +35,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="bg-void-black text-white/90 font-mono antialiased min-h-screen">
         <ThemeProvider>
           <SuiProviders>
-            <PageTransition>
-              {children}
-            </PageTransition>
+            <SkipToMainContent>
+              <PageTransition>
+                {children}
+              </PageTransition>
+            </SkipToMainContent>
           </SuiProviders>
         </ThemeProvider>
       </body>
