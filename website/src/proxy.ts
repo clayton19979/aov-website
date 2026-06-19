@@ -12,6 +12,14 @@ const AUTH_SECRET = new TextEncoder().encode(
 // landing/login redirects and the internal-prefix gate below resume).
 const AUTH_ENABLED: boolean = false
 
+export function isPublicStaticToolAssetPath(pathname: string) {
+  return (
+    pathname.startsWith('/tools/map/') ||
+    pathname.startsWith('/tools/baseops/') ||
+    pathname.startsWith('/tools/fuel-calculator/')
+  )
+}
+
 function withSecurityHeaders(request: NextRequest, response?: NextResponse) {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
 
@@ -52,7 +60,7 @@ export async function proxy(request: NextRequest) {
 
   // Allow static tool assets (public/ directory) without auth, while still
   // attaching the nonce-based Content-Security-Policy to those responses.
-  if (pathname.startsWith('/tools/map/') || pathname.startsWith('/tools/baseops/')) {
+  if (isPublicStaticToolAssetPath(pathname)) {
     return withSecurityHeaders(request)
   }
 
